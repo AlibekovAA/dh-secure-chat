@@ -1,0 +1,11 @@
+services:
+  proxy:
+    image: nginx:stable
+    volumes:
+      - ./infra/proxy/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "80:80"
+    depends_on:
+      - frontend
+      - auth
+      - chat

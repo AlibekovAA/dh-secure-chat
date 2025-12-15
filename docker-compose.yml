@@ -1,0 +1,9 @@
+include:
+  - yaml/db.yml
+  - yaml/auth.yml
+  - yaml/chat.yml
+  - yaml/frontend.yml
+  - yaml/proxy.yml
+
+volumes:
+  db-data:
