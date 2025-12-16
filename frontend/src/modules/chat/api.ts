@@ -41,3 +41,24 @@ export async function searchUsers(
 
   return (await res.json()) as UserSummary[];
 }
+
+export type IdentityKeyResponse = {
+  public_key: string;
+};
+
+export async function getIdentityKey(
+  userId: string,
+  token: string,
+): Promise<IdentityKeyResponse> {
+  const res = await fetch(`${API_BASE}/users/${userId}/identity-key`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error('Failed to get identity key');
+  }
+
+  return (await res.json()) as IdentityKeyResponse;
+}

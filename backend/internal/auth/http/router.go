@@ -2,17 +2,21 @@ package http
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
 
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/service"
+	commonhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/http"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 )
 
 type registerRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Username       string `json:"username"`
+	Password       string `json:"password"`
+	IdentityPubKey string `json:"identity_pub_key"`
 }
 
 type loginRequest struct {
@@ -24,67 +28,70 @@ type tokenResponse struct {
 	Token string `json:"token"`
 }
 
-type errorResponse struct {
-	Error string `json:"error"`
-}
-
 type Handler struct {
 	auth *service.AuthService
+	log  *logger.Logger
 }
 
-func NewHandler(auth *service.AuthService) http.Handler {
-	h := &Handler{auth: auth}
+func NewHandler(auth *service.AuthService, log *logger.Logger) http.Handler {
+	h := &Handler{auth: auth, log: log}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/health", h.health)
+	mux.HandleFunc("/health", commonhttp.HealthHandler(log))
 	mux.HandleFunc("/api/auth/register", h.register)
 	mux.HandleFunc("/api/auth/login", h.login)
 	return mux
 }
 
-func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-}
-
 func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
+		commonhttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
 	var req registerRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid json"})
+		h.log.Warnf("register failed: invalid json: %v", err)
+		commonhttp.WriteError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
+	var pubKey []byte
+	if req.IdentityPubKey != "" {
+		decoded, err := base64.StdEncoding.DecodeString(req.IdentityPubKey)
+		if err != nil {
+			h.log.Warnf("register failed: invalid identity_pub_key encoding: %v", err)
+			commonhttp.WriteError(w, http.StatusBadRequest, "invalid identity_pub_key encoding")
+			return
+		}
+		pubKey = decoded
+	}
+
 	result, err := h.auth.Register(ctx, service.RegisterInput{
-		Username: req.Username,
-		Password: req.Password,
+		Username:       req.Username,
+		Password:       req.Password,
+		IdentityPubKey: pubKey,
 	})
 	if err != nil {
 		h.writeError(w, err)
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, tokenResponse{Token: result.Token})
+	commonhttp.WriteJSON(w, http.StatusCreated, tokenResponse{Token: result.Token})
 }
 
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
+		commonhttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
 	var req loginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid json"})
+		h.log.Warnf("login failed: invalid json: %v", err)
+		commonhttp.WriteError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
 
@@ -100,27 +107,21 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, tokenResponse{Token: result.Token})
+	commonhttp.WriteJSON(w, http.StatusOK, tokenResponse{Token: result.Token})
 }
 
 func (h *Handler) writeError(w http.ResponseWriter, err error) {
 	if vErr, ok := service.AsValidationError(err); ok {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: vErr.Error()})
+		commonhttp.WriteError(w, http.StatusBadRequest, vErr.Error())
 		return
 	}
 
 	switch {
 	case errors.Is(err, service.ErrInvalidCredentials):
-		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "invalid credentials"})
+		commonhttp.WriteError(w, http.StatusUnauthorized, "invalid credentials")
 	case errors.Is(err, service.ErrUsernameTaken):
-		writeJSON(w, http.StatusConflict, errorResponse{Error: "username already taken"})
+		commonhttp.WriteError(w, http.StatusConflict, "username already taken")
 	default:
-		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "internal error"})
+		commonhttp.WriteError(w, http.StatusInternalServerError, "internal error")
 	}
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
 }

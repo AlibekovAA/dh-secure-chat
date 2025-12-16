@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/jackc/pgconn"
 	pgx "github.com/jackc/pgx/v4"
@@ -39,7 +40,7 @@ func (r *PgRepository) Create(ctx context.Context, user domain.User) error {
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			return ErrUsernameAlreadyExists
 		}
-		return err
+		return fmt.Errorf("failed to create user: %w", err)
 	}
 	return nil
 }
@@ -54,7 +55,10 @@ func (r *PgRepository) FindByUsername(ctx context.Context, username string) (dom
 	var user domain.User
 	err := row.Scan(&user.ID, &user.Username, &user.PasswordHash, &user.CreatedAt)
 	if err != nil {
-		return domain.User{}, err
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.User{}, ErrUserNotFound
+		}
+		return domain.User{}, fmt.Errorf("failed to find user by username: %w", err)
 	}
 
 	return user, nil
@@ -70,25 +74,29 @@ func (r *PgRepository) FindByID(ctx context.Context, id domain.ID) (domain.User,
 	var user domain.User
 	err := row.Scan(&user.ID, &user.Username, &user.PasswordHash, &user.CreatedAt)
 	if err != nil {
-		return domain.User{}, err
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.User{}, ErrUserNotFound
+		}
+		return domain.User{}, fmt.Errorf("failed to find user by id: %w", err)
 	}
 
 	return user, nil
 }
 
 func (r *PgRepository) SearchByUsername(ctx context.Context, query string, limit int) ([]domain.Summary, error) {
+	searchPattern := "%" + query + "%"
 	rows, err := r.pool.Query(
 		ctx,
 		`SELECT id, username, created_at
 		 FROM users
-		 WHERE username ILIKE '%' || $1 || '%'
+		 WHERE username ILIKE $1
 		 ORDER BY username ASC
 		 LIMIT $2`,
-		query,
+		searchPattern,
 		limit,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to search users: %w", err)
 	}
 	defer rows.Close()
 
@@ -96,13 +104,13 @@ func (r *PgRepository) SearchByUsername(ctx context.Context, query string, limit
 	for rows.Next() {
 		var u domain.Summary
 		if err := rows.Scan(&u.ID, &u.Username, &u.CreatedAt); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to scan user: %w", err)
 		}
 		users = append(users, u)
 	}
 
 	if rows.Err() != nil {
-		return nil, rows.Err()
+		return nil, fmt.Errorf("rows iteration error: %w", rows.Err())
 	}
 
 	return users, nil

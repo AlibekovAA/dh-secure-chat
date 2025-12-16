@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 )
 
@@ -17,18 +18,30 @@ type ChatConfig struct {
 }
 
 func LoadAuthConfig() AuthConfig {
+	jwtSecret := mustEnv("JWT_SECRET")
+	validateJWTSecret(jwtSecret)
+
 	return AuthConfig{
 		HTTPPort:    getEnv("AUTH_HTTP_PORT", "8081"),
 		DatabaseURL: mustEnv("DATABASE_URL"),
-		JWTSecret:   mustEnv("JWT_SECRET"),
+		JWTSecret:   jwtSecret,
 	}
 }
 
 func LoadChatConfig() ChatConfig {
+	jwtSecret := mustEnv("JWT_SECRET")
+	validateJWTSecret(jwtSecret)
+
 	return ChatConfig{
 		HTTPPort:    getEnv("CHAT_HTTP_PORT", "8082"),
 		DatabaseURL: mustEnv("DATABASE_URL"),
-		JWTSecret:   mustEnv("JWT_SECRET"),
+		JWTSecret:   jwtSecret,
+	}
+}
+
+func validateJWTSecret(secret string) {
+	if len(secret) < 32 {
+		panic(fmt.Sprintf("JWT_SECRET must be at least 32 bytes, got %d bytes", len(secret)))
 	}
 }
 

@@ -13,13 +13,26 @@ export type AuthError = {
 export async function register(
   username: string,
   password: string,
+  identityPubKey?: string,
 ): Promise<AuthResponse> {
+  const body: {
+    username: string;
+    password: string;
+    identity_pub_key?: string;
+  } = {
+    username,
+    password,
+  };
+  if (identityPubKey) {
+    body.identity_pub_key = identityPubKey;
+  }
+
   const res = await fetch(`${API_BASE}/register`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify(body),
   });
 
   const json = (await res.json()) as AuthResponse | AuthError;

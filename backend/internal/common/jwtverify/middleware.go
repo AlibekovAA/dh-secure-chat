@@ -8,6 +8,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
+	commonhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/http"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 )
 
@@ -27,15 +28,16 @@ func Middleware(secret string, log *logger.Logger) func(next http.Handler) http.
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			raw := r.Header.Get("Authorization")
 			if raw == "" || !strings.HasPrefix(raw, "Bearer ") {
-				http.Error(w, `{"error":"missing or invalid authorization"}`, http.StatusUnauthorized)
+				log.Warnf("jwt auth failed path=%s: missing or invalid authorization header", r.URL.Path)
+				commonhttp.WriteError(w, http.StatusUnauthorized, "missing or invalid authorization")
 				return
 			}
 
 			tokenString := strings.TrimPrefix(raw, "Bearer ")
 			claims, err := parseToken(tokenString, secretBytes)
 			if err != nil {
-				log.Warnf("jwt verification failed: %v", err)
-				http.Error(w, `{"error":"invalid token"}`, http.StatusUnauthorized)
+				log.Warnf("jwt auth failed path=%s: %v", r.URL.Path, err)
+				commonhttp.WriteError(w, http.StatusUnauthorized, "invalid token")
 				return
 			}
 

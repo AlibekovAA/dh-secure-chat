@@ -10,11 +10,16 @@ import (
 )
 
 func NewPool(log *logger.Logger, databaseURL string) *pgxpool.Pool {
-
 	cfg, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
 		log.Fatalf("failed to parse database url: %v", err)
 	}
+
+	cfg.MaxConns = 25
+	cfg.MinConns = 5
+	cfg.MaxConnLifetime = time.Hour
+	cfg.MaxConnIdleTime = 30 * time.Minute
+	cfg.HealthCheckPeriod = time.Minute
 
 	const maxAttempts = 10
 	const delay = time.Second
@@ -22,6 +27,7 @@ func NewPool(log *logger.Logger, databaseURL string) *pgxpool.Pool {
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		pool, err := pgxpool.ConnectConfig(context.Background(), cfg)
 		if err == nil {
+			log.Infof("database connection pool initialized: max=%d, min=%d", cfg.MaxConns, cfg.MinConns)
 			return pool
 		}
 
@@ -34,5 +40,5 @@ func NewPool(log *logger.Logger, databaseURL string) *pgxpool.Pool {
 		time.Sleep(delay)
 	}
 
-	return nil
+	panic("unreachable code: failed to connect to database after all attempts")
 }

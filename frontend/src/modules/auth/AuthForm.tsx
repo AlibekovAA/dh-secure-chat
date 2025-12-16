@@ -1,6 +1,11 @@
 import { FormEvent, useState } from "react";
 import { login, register } from "./api";
 import { useToast } from "../../shared/ui/ToastProvider";
+import {
+  generateIdentityKeyPair,
+  exportPublicKey,
+  saveIdentityPrivateKey,
+} from "../../shared/crypto/identity";
 
 type Mode = "login" | "register";
 
@@ -50,10 +55,24 @@ export function AuthForm({ onAuthenticated }: Props) {
         return;
       }
 
-      await register(username, password);
+      let identityPubKey: string | undefined;
+      if (mode === "register") {
+        try {
+          const keyPair = await generateIdentityKeyPair();
+          identityPubKey = await exportPublicKey(keyPair.publicKey);
+          await saveIdentityPrivateKey(keyPair.privateKey);
+        } catch (err) {
+          showToast("Ошибка генерации ключей. Попробуйте ещё раз.", "error");
+          setSubmitting(false);
+          return;
+        }
+      }
+
+      await register(username, password, identityPubKey);
       showToast("Регистрация прошла успешно. Теперь войдите.", "success");
       switchMode("login", false);
       setConfirmPassword("");
+      setSubmitting(false);
     } catch (err) {
       const raw = err instanceof Error ? err.message : "Ошибка аутентификации";
 
@@ -108,6 +127,15 @@ export function AuthForm({ onAuthenticated }: Props) {
         onSubmit={handleSubmit}
         className="space-y-4 rounded-xl bg-black/80 px-5 py-4 border border-emerald-700"
       >
+        <input
+          type="text"
+          name="username"
+          autoComplete="username"
+          value={username}
+          readOnly
+          className="sr-only"
+          tabIndex={-1}
+        />
         <div className="space-y-1">
           <label className="block text-sm text-emerald-300">Имя пользователя</label>
           <input

@@ -1,13 +1,19 @@
 package http
 
 import (
-	"encoding/json"
+	"context"
+	"encoding/base64"
+	"errors"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/service"
+	commonhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/http"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/jwtverify"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
+	identityrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/repository"
 	userdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
 )
 
@@ -26,16 +32,13 @@ type userResponse struct {
 	Username string `json:"username"`
 }
 
-type errorResponse struct {
-	Error string `json:"error"`
-}
-
 func NewHandler(chat *service.ChatService, log *logger.Logger) http.Handler {
 	h := &Handler{chat: chat, log: log}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/chat/me", h.me)
 	mux.HandleFunc("/api/chat/users", h.searchUsers)
+	mux.HandleFunc("/api/chat/users/", h.getIdentityKey)
 
 	return mux
 }
@@ -43,21 +46,21 @@ func NewHandler(chat *service.ChatService, log *logger.Logger) http.Handler {
 func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	claims, ok := jwtverify.FromContext(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "unauthorized"})
+		commonhttp.WriteError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
-	h.log.Infof("chat/me request user_id=%s", claims.UserID)
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
 
-	user, err := h.chat.GetMe(r.Context(), claims.UserID)
+	user, err := h.chat.GetMe(ctx, claims.UserID)
 	if err != nil {
 		h.log.Errorf("chat/me failed user_id=%s: %v", claims.UserID, err)
-		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to load profile"})
+		commonhttp.WriteError(w, http.StatusInternalServerError, "failed to load profile")
 		return
 	}
-
 	h.log.Infof("chat/me success user_id=%s", claims.UserID)
-	writeJSON(w, http.StatusOK, meResponse{
+	commonhttp.WriteJSON(w, http.StatusOK, meResponse{
 		ID:       string(user.ID),
 		Username: user.Username,
 	})
@@ -65,12 +68,12 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) searchUsers(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
+		commonhttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
 	if _, ok := jwtverify.FromContext(r.Context()); !ok {
-		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "unauthorized"})
+		commonhttp.WriteError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -84,18 +87,69 @@ func (h *Handler) searchUsers(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	h.log.Infof("chat/users search query=%q limit=%d", query, limit)
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
 
-	users, err := h.chat.SearchUsers(r.Context(), query, limit)
+	users, err := h.chat.SearchUsers(ctx, query, limit)
 	if err != nil {
-		h.log.Warnf("chat/users search failed query=%q: %v", query, err)
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
+		if errors.Is(err, service.ErrEmptyQuery) {
+			h.log.Warnf("chat/users search failed query=%q: empty query", query)
+			commonhttp.WriteError(w, http.StatusBadRequest, "query is empty")
+		} else {
+			h.log.Errorf("chat/users search failed query=%q limit=%d: %v", query, limit, err)
+			commonhttp.WriteError(w, http.StatusInternalServerError, "failed to search users")
+		}
 		return
 	}
 
+	h.log.Infof("chat/users search success query=%q limit=%d results=%d", query, limit, len(users))
 	resp := toUserResponses(users)
-	h.log.Infof("chat/users search success query=%q results=%d", query, len(resp))
-	writeJSON(w, http.StatusOK, resp)
+	commonhttp.WriteJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) getIdentityKey(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		commonhttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	if _, ok := jwtverify.FromContext(r.Context()); !ok {
+		commonhttp.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	urlPath := r.URL.Path
+	if !strings.HasSuffix(urlPath, "/identity-key") {
+		commonhttp.WriteError(w, http.StatusBadRequest, "invalid path")
+		return
+	}
+
+	userID := strings.TrimPrefix(urlPath, "/api/chat/users/")
+	userID = strings.TrimSuffix(userID, "/identity-key")
+	if userID == "" {
+		commonhttp.WriteError(w, http.StatusBadRequest, "user_id is required")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	pubKey, err := h.chat.GetIdentityKey(ctx, userID)
+	if err != nil {
+		if errors.Is(err, identityrepo.ErrIdentityKeyNotFound) {
+			h.log.Warnf("chat/identity-key failed user_id=%s: not found", userID)
+			commonhttp.WriteError(w, http.StatusNotFound, "identity key not found")
+		} else {
+			h.log.Errorf("chat/identity-key failed user_id=%s: %v", userID, err)
+			commonhttp.WriteError(w, http.StatusInternalServerError, "failed to get identity key")
+		}
+		return
+	}
+
+	h.log.Infof("chat/identity-key success user_id=%s", userID)
+	commonhttp.WriteJSON(w, http.StatusOK, map[string]string{
+		"public_key": base64.StdEncoding.EncodeToString(pubKey),
+	})
 }
 
 func toUserResponses(users []userdomain.Summary) []userResponse {
@@ -107,10 +161,4 @@ func toUserResponses(users []userdomain.Summary) []userResponse {
 		})
 	}
 	return result
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
 }
