@@ -10,9 +10,23 @@ type AuthConfig struct {
 	JWTSecret   string
 }
 
+type ChatConfig struct {
+	HTTPPort    string
+	DatabaseURL string
+	JWTSecret   string
+}
+
 func LoadAuthConfig() AuthConfig {
 	return AuthConfig{
 		HTTPPort:    getEnv("AUTH_HTTP_PORT", "8081"),
+		DatabaseURL: mustEnv("DATABASE_URL"),
+		JWTSecret:   mustEnv("JWT_SECRET"),
+	}
+}
+
+func LoadChatConfig() ChatConfig {
+	return ChatConfig{
+		HTTPPort:    getEnv("CHAT_HTTP_PORT", "8082"),
 		DatabaseURL: mustEnv("DATABASE_URL"),
 		JWTSecret:   mustEnv("JWT_SECRET"),
 	}

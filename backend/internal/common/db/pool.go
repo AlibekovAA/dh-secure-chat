@@ -9,8 +9,7 @@ import (
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 )
 
-func NewPool(databaseURL string) *pgxpool.Pool {
-	log := logger.GetInstance()
+func NewPool(log *logger.Logger, databaseURL string) *pgxpool.Pool {
 
 	cfg, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {

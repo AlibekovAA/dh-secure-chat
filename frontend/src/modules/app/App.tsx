@@ -1,49 +1,56 @@
-import { useState } from "react";
-import { AuthForm } from "../auth/AuthForm";
-import { ToastProvider } from "../../shared/ui/ToastProvider";
+import { useEffect, useState } from "react";
+import { useToast } from "../../shared/ui/ToastProvider";
+import { fetchMe, searchUsers, type UserSummary } from "../chat/api";
+import { AuthScreen } from "./AuthScreen";
+import { ChatScreen } from "./ChatScreen";
 
 export function App() {
   const [token, setToken] = useState<string | null>(null);
+  const [profile, setProfile] = useState<{ id: string; username: string } | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<UserSummary[]>([]);
+  const { showToast } = useToast();
 
-  return (
-    <ToastProvider>
-      {!token ? (
-        <div className="min-h-screen flex items-center justify-center bg-black text-emerald-50 px-4">
-          <div className="w-full max-w-md space-y-4">
-            <header className="text-center space-y-1">
-              <h1 className="text-2xl font-semibold text-emerald-400">dh-secure-chat</h1>
-              <p className="text-xs text-emerald-500/80">
-                End-to-end зашифрованный чат 1-на-1. Начните с регистрации или входа.
-              </p>
-            </header>
-            <AuthForm onAuthenticated={setToken} />
-          </div>
-        </div>
-      ) : (
-        <div className="min-h-screen flex items-center justify-center bg-black text-emerald-50 px-4">
-          <div className="w-full max-w-md space-y-4">
-            <header className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-semibold text-emerald-400">dh-secure-chat</h1>
-                <p className="text-xs text-emerald-500/80">
-                  Вы вошли. Далее будет реализован список собеседников и чат.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setToken(null)}
-                className="text-xs text-emerald-400 hover:text-emerald-200 underline underline-offset-4"
-              >
-                Выйти
-              </button>
-            </header>
-            <div className="rounded-xl bg-black/80 border border-emerald-700 px-5 py-4 text-sm text-emerald-200">
-              <p>JWT-токен хранится пока только в памяти этого компонента.</p>
-              <p className="mt-1">Следующий шаг: хранилище сессии и интеграция с WebSocket-чатом.</p>
-            </div>
-          </div>
-        </div>
-      )}
-    </ToastProvider>
+  useEffect(() => {
+    if (!token) {
+      setProfile(null);
+      setSearchResults([]);
+      return;
+    }
+
+    fetchMe(token)
+      .then(data => setProfile(data))
+      .catch(() => {
+        showToast("Не удалось получить профиль. Войдите снова.", "error");
+        setToken(null);
+      });
+  }, [token, showToast]);
+
+  const handleSearch = async () => {
+    if (!token || !searchQuery.trim()) {
+      return;
+    }
+    try {
+      const users = await searchUsers(searchQuery.trim(), token);
+      const filtered = profile
+        ? users.filter(user => user.id !== profile.id)
+        : users;
+      setSearchResults(filtered);
+    } catch (err) {
+      showToast("Ошибка поиска пользователей", "error");
+    }
+  };
+
+  return token ? (
+    <ChatScreen
+      profile={profile}
+      searchQuery={searchQuery}
+      onSearchQueryChange={setSearchQuery}
+      searchResults={searchResults}
+      onSearch={handleSearch}
+      onLogout={() => setToken(null)}
+    />
+  ) : (
+    <AuthScreen onAuthenticated={setToken} />
   );
 }

@@ -41,8 +41,8 @@ restart:
 	@echo "Done!"
 
 reup:
-	@echo "Stopping containers (keeping volumes)..."
-	$(DOCKER_COMPOSE) $(COMPOSE_FILES) down
+	@echo "Stopping containers and removing volumes..."
+	$(DOCKER_COMPOSE) $(COMPOSE_FILES) down -v
 	@echo "Starting containers with build..."
 	$(DOCKER_COMPOSE) $(COMPOSE_FILES) up --build
 
