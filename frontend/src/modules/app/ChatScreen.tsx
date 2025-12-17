@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type React from "react";
 import type { UserSummary } from "../chat/api";
+import { ChatWindow } from "../chat/ChatWindow";
 
 type Profile = {
   id: string;
@@ -8,6 +9,7 @@ type Profile = {
 };
 
 type Props = {
+  token: string;
   profile: Profile | null;
   searchQuery: string;
   onSearchQueryChange(value: string): void;
@@ -22,6 +24,7 @@ type Props = {
 const RESULTS_PER_PAGE = 4;
 
 export function ChatScreen({
+  token,
   profile,
   searchQuery,
   onSearchQueryChange,
@@ -33,6 +36,7 @@ export function ChatScreen({
   hasSearched = false,
 }: Props) {
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedPeer, setSelectedPeer] = useState<UserSummary | null>(null);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !isSearching && searchQuery.trim()) {
@@ -160,8 +164,11 @@ export function ChatScreen({
                         <button
                           key={user.id}
                           type="button"
-                          onClick={() => onUserSelect(user)}
-                          className="w-full text-left rounded-md border border-emerald-700 px-3 py-2 bg-black/60 hover:bg-emerald-900/40 transition-colors"
+                          onClick={() => {
+                            setSelectedPeer(user);
+                            onUserSelect(user);
+                          }}
+                          className="w-full text-left rounded-md border border-emerald-700 px-3 py-2 bg-black/60 hover:bg-emerald-900/40 transition-colors active:scale-[0.98]"
                         >
                           <p className="font-medium text-emerald-300">{user.username}</p>
                           <p className="text-[11px] text-emerald-500/80 break-all">{user.id}</p>
@@ -198,6 +205,14 @@ export function ChatScreen({
           </section>
         </div>
       </main>
+
+      {selectedPeer && (
+        <ChatWindow
+          token={token}
+          peer={selectedPeer}
+          onClose={() => setSelectedPeer(null)}
+        />
+      )}
     </div>
   );
 }

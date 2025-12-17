@@ -8,6 +8,7 @@ import (
 
 	chathttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/http"
 	chatservice "github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/service"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/websocket"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/config"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/db"
 	commonhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/http"
@@ -33,23 +34,34 @@ func main() {
 	userRepo := userrepo.NewPgRepository(pool)
 	identityRepo := identityrepo.NewPgRepository(pool)
 	chatSvc := chatservice.NewChatService(userRepo, identityRepo, log)
-	handler := chathttp.NewHandler(chatSvc, log)
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/health", commonhttp.HealthHandler(log))
-	mux.Handle("/debug/vars", expvar.Handler())
+	hub := websocket.NewHub(log)
+	go hub.Run()
+
+	handler := chathttp.NewHandler(chatSvc, hub, cfg.JWTSecret, log)
+
+	wsHandler := handler
+
+	restMux := http.NewServeMux()
+	restMux.HandleFunc("/health", commonhttp.HealthHandler(log))
+	restMux.Handle("/debug/vars", expvar.Handler())
 
 	jwtMw := jwtverify.Middleware(cfg.JWTSecret, log)
-	mux.Handle("/api/chat/me", jwtMw(handler))
-	mux.Handle("/api/chat/users", jwtMw(handler))
-	mux.Handle("/api/chat/users/", jwtMw(handler))
+	restMux.Handle("/api/chat/me", jwtMw(handler))
+	restMux.Handle("/api/chat/users", jwtMw(handler))
+	restMux.Handle("/api/chat/users/", jwtMw(handler))
 
 	metrics := httpmetrics.New("chat")
 	recovery := commonhttp.RecoveryMiddleware(log)
+	wrappedRestMux := recovery(metrics.Wrap(restMux))
+
+	mainMux := http.NewServeMux()
+	mainMux.Handle("/ws/", wsHandler)
+	mainMux.Handle("/", wrappedRestMux)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.HTTPPort,
-		Handler:           recovery(metrics.Wrap(mux)),
+		Handler:           mainMux,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,

@@ -63,6 +63,7 @@ export function App() {
 
   return token ? (
     <ChatScreen
+      token={token}
       profile={profile}
       searchQuery={searchQuery}
       onSearchQueryChange={setSearchQuery}
@@ -75,7 +76,7 @@ export function App() {
         removeToken();
       }}
       onUserSelect={(user) => {
-        console.log("Selected user:", user);
+        // Handled in ChatScreen
       }}
     />
   ) : (

@@ -53,6 +53,10 @@ func FromContext(ctx context.Context) (Claims, bool) {
 	return claims, ok
 }
 
+func ParseToken(tokenString string, secret []byte) (Claims, error) {
+	return parseToken(tokenString, secret)
+}
+
 func parseToken(tokenString string, secret []byte) (Claims, error) {
 	parsed, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
 		if token.Method != jwt.SigningMethodHS256 {

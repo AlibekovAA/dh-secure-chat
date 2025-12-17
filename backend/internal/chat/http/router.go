@@ -9,7 +9,10 @@ import (
 	"strings"
 	"time"
 
+	gorillaWS "github.com/gorilla/websocket"
+
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/service"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/websocket"
 	commonhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/http"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/jwtverify"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
@@ -18,8 +21,11 @@ import (
 )
 
 type Handler struct {
-	chat *service.ChatService
-	log  *logger.Logger
+	chat      *service.ChatService
+	hub       *websocket.Hub
+	jwtSecret string
+	upgrader  gorillaWS.Upgrader
+	log       *logger.Logger
 }
 
 type meResponse struct {
@@ -32,13 +38,34 @@ type userResponse struct {
 	Username string `json:"username"`
 }
 
-func NewHandler(chat *service.ChatService, log *logger.Logger) http.Handler {
-	h := &Handler{chat: chat, log: log}
+func NewHandler(chat *service.ChatService, hub *websocket.Hub, jwtSecret string, log *logger.Logger) http.Handler {
+	h := &Handler{
+		chat:      chat,
+		hub:       hub,
+		jwtSecret: jwtSecret,
+		upgrader: gorillaWS.Upgrader{
+			ReadBufferSize:  1024,
+			WriteBufferSize: 1024,
+			CheckOrigin: func(r *http.Request) bool {
+				origin := r.Header.Get("Origin")
+				if origin == "" {
+					return true
+				}
+				host := r.Host
+				if host == "" {
+					host = r.URL.Host
+				}
+				return origin == "http://"+host || origin == "https://"+host
+			},
+		},
+		log: log,
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/chat/me", h.me)
 	mux.HandleFunc("/api/chat/users", h.searchUsers)
 	mux.HandleFunc("/api/chat/users/", h.getIdentityKey)
+	mux.HandleFunc("/ws/", h.handleWebSocket)
 
 	return mux
 }
@@ -150,6 +177,34 @@ func (h *Handler) getIdentityKey(w http.ResponseWriter, r *http.Request) {
 	commonhttp.WriteJSON(w, http.StatusOK, map[string]string{
 		"public_key": base64.StdEncoding.EncodeToString(pubKey),
 	})
+}
+
+func (h *Handler) handleWebSocket(w http.ResponseWriter, r *http.Request) {
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		h.log.Warnf("websocket connection failed: missing token")
+		commonhttp.WriteError(w, http.StatusUnauthorized, "missing token")
+		return
+	}
+
+	claims, err := jwtverify.ParseToken(token, []byte(h.jwtSecret))
+	if err != nil {
+		h.log.Warnf("websocket connection failed: invalid token: %v", err)
+		commonhttp.WriteError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+
+	conn, err := h.upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		h.log.Errorf("websocket upgrade failed user_id=%s: %v", claims.UserID, err)
+		return
+	}
+
+	client := websocket.NewClient(h.hub, conn, claims.UserID, claims.Username, h.log)
+	h.hub.Register(client)
+	client.Start()
+
+	h.log.Infof("websocket connection established user_id=%s username=%s", claims.UserID, claims.Username)
 }
 
 func toUserResponses(users []userdomain.Summary) []userResponse {
