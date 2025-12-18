@@ -1,26 +1,37 @@
 package websocket
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
+	"time"
 
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
+	userdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
+	userrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/repository"
 )
 
+const lastSeenUpdateInterval = 1 * time.Minute
+
 type Hub struct {
-	clients    map[string]*Client
-	register   chan *Client
-	unregister chan *Client
-	mu         sync.RWMutex
-	log        *logger.Logger
+	clients         map[string]*Client
+	register        chan *Client
+	unregister      chan *Client
+	lastSeenUpdates map[string]time.Time
+	mu              sync.RWMutex
+	log             *logger.Logger
+	userRepo        userrepo.Repository
 }
 
-func NewHub(log *logger.Logger) *Hub {
+func NewHub(log *logger.Logger, userRepo userrepo.Repository) *Hub {
 	return &Hub{
-		clients:    make(map[string]*Client),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-		log:        log,
+		clients:         make(map[string]*Client),
+		register:        make(chan *Client),
+		unregister:      make(chan *Client),
+		lastSeenUpdates: make(map[string]time.Time),
+		log:             log,
+		userRepo:        userRepo,
 	}
 }
 
@@ -32,9 +43,13 @@ func (h *Hub) Unregister(client *Client) {
 	h.unregister <- client
 }
 
-func (h *Hub) Run() {
+func (h *Hub) Run(ctx context.Context) {
 	for {
 		select {
+		case <-ctx.Done():
+			h.shutdown()
+			return
+
 		case client := <-h.register:
 			h.mu.Lock()
 			if existing, ok := h.clients[client.userID]; ok {
@@ -45,29 +60,24 @@ func (h *Hub) Run() {
 			h.clients[client.userID] = client
 			h.mu.Unlock()
 			h.log.Infof("websocket client registered user_id=%s username=%s total=%d", client.userID, client.username, len(h.clients))
+			h.updateLastSeenDebounced(client.userID)
 
 		case client := <-h.unregister:
-			h.mu.Lock()
-			if _, ok := h.clients[client.userID]; ok {
-				delete(h.clients, client.userID)
-				close(client.send)
-				h.log.Infof("websocket client unregistered user_id=%s username=%s total=%d", client.userID, client.username, len(h.clients))
-
-				disconnectedMsg := &WSMessage{
-					Type:    TypePeerDisconnected,
-					Payload: mustMarshal(PeerDisconnectedPayload{PeerID: client.userID}),
-				}
-
-				for _, otherClient := range h.clients {
-					select {
-					case otherClient.send <- mustMarshalJSON(disconnectedMsg):
-					default:
-					}
-				}
-			}
-			h.mu.Unlock()
+			h.handleUnregister(client)
 		}
 	}
+}
+
+func (h *Hub) shutdown() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	for id, client := range h.clients {
+		close(client.send)
+		delete(h.clients, id)
+	}
+
+	h.log.Infof("websocket hub shutdown completed")
 }
 
 func (h *Hub) SendToUser(userID string, message *WSMessage) bool {
@@ -101,6 +111,48 @@ func (h *Hub) IsUserOnline(userID string) bool {
 	return ok
 }
 
+type payloadWithTo interface {
+	GetTo() string
+}
+
+func (p EphemeralKeyPayload) GetTo() string       { return p.To }
+func (p MessagePayload) GetTo() string            { return p.To }
+func (p SessionEstablishedPayload) GetTo() string { return p.To }
+func (p FileStartPayload) GetTo() string          { return p.To }
+func (p FileChunkPayload) GetTo() string          { return p.To }
+func (p FileCompletePayload) GetTo() string       { return p.To }
+
+func (h *Hub) forwardMessage(client *Client, msg *WSMessage, payload payloadWithTo, requireOnline bool) bool {
+	to := payload.GetTo()
+	if to == "" {
+		h.log.Warnf("websocket message missing 'to' field user_id=%s type=%s", client.userID, msg.Type)
+		return false
+	}
+
+	if to == client.userID {
+		h.log.Warnf("websocket message to self user_id=%s type=%s", client.userID, msg.Type)
+		return false
+	}
+
+	if requireOnline && !h.IsUserOnline(to) {
+		if err := h.sendPeerOffline(client.userID, to); err != nil {
+			h.log.Errorf("websocket failed to send peer_offline from=%s to=%s: %v", client.userID, to, err)
+		}
+		h.log.Infof("websocket message to offline user from=%s to=%s type=%s", client.userID, to, msg.Type)
+		return false
+	}
+
+	forwardMsg := &WSMessage{
+		Type:    msg.Type,
+		Payload: msg.Payload,
+	}
+	if h.SendToUser(to, forwardMsg) {
+		h.log.Debugf("websocket message forwarded from=%s to=%s type=%s", client.userID, to, msg.Type)
+		return true
+	}
+	return false
+}
+
 func (h *Hub) HandleMessage(client *Client, msg *WSMessage) {
 	switch msg.Type {
 	case TypeEphemeralKey:
@@ -109,34 +161,7 @@ func (h *Hub) HandleMessage(client *Client, msg *WSMessage) {
 			h.log.Warnf("websocket invalid ephemeral_key payload user_id=%s: %v", client.userID, err)
 			return
 		}
-
-		if payload.To == "" {
-			h.log.Warnf("websocket ephemeral_key missing 'to' field user_id=%s", client.userID)
-			return
-		}
-
-		if payload.To == client.userID {
-			h.log.Warnf("websocket ephemeral_key to self user_id=%s", client.userID)
-			return
-		}
-
-		if !h.IsUserOnline(payload.To) {
-			offlineMsg := &WSMessage{
-				Type:    TypePeerOffline,
-				Payload: mustMarshal(PeerOfflinePayload{PeerID: payload.To}),
-			}
-			h.SendToUser(client.userID, offlineMsg)
-			h.log.Infof("websocket ephemeral_key to offline user from=%s to=%s", client.userID, payload.To)
-			return
-		}
-
-		forwardMsg := &WSMessage{
-			Type:    TypeEphemeralKey,
-			Payload: msg.Payload,
-		}
-		if h.SendToUser(payload.To, forwardMsg) {
-			h.log.Debugf("websocket ephemeral_key forwarded from=%s to=%s", client.userID, payload.To)
-		}
+		h.forwardMessage(client, msg, payload, true)
 
 	case TypeMessage:
 		var payload MessagePayload
@@ -144,34 +169,7 @@ func (h *Hub) HandleMessage(client *Client, msg *WSMessage) {
 			h.log.Warnf("websocket invalid message payload user_id=%s: %v", client.userID, err)
 			return
 		}
-
-		if payload.To == "" {
-			h.log.Warnf("websocket message missing 'to' field user_id=%s", client.userID)
-			return
-		}
-
-		if payload.To == client.userID {
-			h.log.Warnf("websocket message to self user_id=%s", client.userID)
-			return
-		}
-
-		if !h.IsUserOnline(payload.To) {
-			offlineMsg := &WSMessage{
-				Type:    TypePeerOffline,
-				Payload: mustMarshal(PeerOfflinePayload{PeerID: payload.To}),
-			}
-			h.SendToUser(client.userID, offlineMsg)
-			h.log.Infof("websocket message to offline user from=%s to=%s", client.userID, payload.To)
-			return
-		}
-
-		forwardMsg := &WSMessage{
-			Type:    TypeMessage,
-			Payload: msg.Payload,
-		}
-		if h.SendToUser(payload.To, forwardMsg) {
-			h.log.Debugf("websocket message forwarded from=%s to=%s", client.userID, payload.To)
-		}
+		h.forwardMessage(client, msg, payload, true)
 
 	case TypeSessionEstablished:
 		var payload SessionEstablishedPayload
@@ -179,47 +177,113 @@ func (h *Hub) HandleMessage(client *Client, msg *WSMessage) {
 			h.log.Warnf("websocket invalid session_established payload user_id=%s: %v", client.userID, err)
 			return
 		}
+		h.forwardMessage(client, msg, payload, false)
 
-		if payload.To == "" {
-			h.log.Warnf("websocket session_established missing 'to' field user_id=%s", client.userID)
+	case TypeFileStart:
+		var payload FileStartPayload
+		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+			h.log.Warnf("websocket invalid file_start payload user_id=%s: %v", client.userID, err)
 			return
 		}
+		h.forwardMessage(client, msg, payload, true)
 
-		if payload.To == client.userID {
-			h.log.Warnf("websocket session_established to self user_id=%s", client.userID)
+	case TypeFileChunk:
+		var payload FileChunkPayload
+		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+			h.log.Warnf("websocket invalid file_chunk payload user_id=%s: %v", client.userID, err)
 			return
 		}
+		h.forwardMessage(client, msg, payload, true)
 
-		if !h.IsUserOnline(payload.To) {
-			h.log.Infof("websocket session_established to offline user from=%s to=%s", client.userID, payload.To)
+	case TypeFileComplete:
+		var payload FileCompletePayload
+		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+			h.log.Warnf("websocket invalid file_complete payload user_id=%s: %v", client.userID, err)
 			return
 		}
-
-		forwardMsg := &WSMessage{
-			Type:    TypeSessionEstablished,
-			Payload: msg.Payload,
-		}
-		if h.SendToUser(payload.To, forwardMsg) {
-			h.log.Debugf("websocket session_established forwarded from=%s to=%s", client.userID, payload.To)
-		}
+		h.forwardMessage(client, msg, payload, true)
 
 	default:
 		h.log.Warnf("websocket unknown message type user_id=%s type=%s", client.userID, msg.Type)
 	}
 }
 
-func mustMarshal(v interface{}) json.RawMessage {
-	data, err := json.Marshal(v)
-	if err != nil {
-		return json.RawMessage("{}")
+func (h *Hub) handleUnregister(client *Client) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if _, ok := h.clients[client.userID]; !ok {
+		return
 	}
-	return data
+
+	delete(h.clients, client.userID)
+	close(client.send)
+	h.log.Infof("websocket client unregistered user_id=%s username=%s total=%d", client.userID, client.username, len(h.clients))
+
+	disconnectedMsg := &WSMessage{
+		Type:    TypePeerDisconnected,
+		Payload: json.RawMessage{},
+	}
+
+	payload, err := json.Marshal(PeerDisconnectedPayload{PeerID: client.userID})
+	if err != nil {
+		h.log.Errorf("websocket marshal peer_disconnected payload failed user_id=%s: %v", client.userID, err)
+		return
+	}
+	disconnectedMsg.Payload = payload
+
+	messageBytes, err := json.Marshal(disconnectedMsg)
+	if err != nil {
+		h.log.Errorf("websocket marshal peer_disconnected message failed user_id=%s: %v", client.userID, err)
+		return
+	}
+
+	for _, otherClient := range h.clients {
+		select {
+		case otherClient.send <- messageBytes:
+		default:
+		}
+	}
 }
 
-func mustMarshalJSON(v interface{}) []byte {
-	data, err := json.Marshal(v)
+func (h *Hub) sendPeerOffline(fromUserID, peerID string) error {
+	payload, err := json.Marshal(PeerOfflinePayload{PeerID: peerID})
 	if err != nil {
-		return []byte("{}")
+		return err
 	}
-	return data
+
+	msg := &WSMessage{
+		Type:    TypePeerOffline,
+		Payload: payload,
+	}
+
+	if ok := h.SendToUser(fromUserID, msg); !ok {
+		return fmt.Errorf("user %s is not connected", fromUserID)
+	}
+
+	return nil
+}
+
+func (h *Hub) updateLastSeenDebounced(userID string) {
+	h.mu.RLock()
+	lastUpdate, exists := h.lastSeenUpdates[userID]
+	h.mu.RUnlock()
+
+	now := time.Now()
+	if exists && now.Sub(lastUpdate) < lastSeenUpdateInterval {
+		return
+	}
+
+	h.mu.Lock()
+	h.lastSeenUpdates[userID] = now
+	h.mu.Unlock()
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := h.userRepo.UpdateLastSeen(ctx, userdomain.ID(userID)); err != nil {
+			h.log.Warnf("websocket failed to update last_seen user_id=%s: %v", userID, err)
+		}
+	}()
 }

@@ -10,6 +10,9 @@ export type UserSummary = {
   username: string;
 };
 
+export const UNAUTHORIZED_MESSAGE = 'unauthorized';
+export const SESSION_EXPIRED_ERROR = 'session_expired';
+
 export async function fetchMe(token: string): Promise<MeResponse> {
   const res = await fetch(`${API_BASE}/me`, {
     headers: {
@@ -18,6 +21,9 @@ export async function fetchMe(token: string): Promise<MeResponse> {
   });
 
   if (!res.ok) {
+    if (res.status === 401) {
+      throw new Error(UNAUTHORIZED_MESSAGE);
+    }
     throw new Error('Failed to load profile');
   }
 
@@ -36,6 +42,9 @@ export async function searchUsers(
   });
 
   if (!res.ok) {
+    if (res.status === 401) {
+      throw new Error(UNAUTHORIZED_MESSAGE);
+    }
     throw new Error('Search failed');
   }
 
@@ -57,8 +66,52 @@ export async function getIdentityKey(
   });
 
   if (!res.ok) {
+    if (res.status === 401) {
+      throw new Error(UNAUTHORIZED_MESSAGE);
+    }
     throw new Error('Failed to get identity key');
   }
 
   return (await res.json()) as IdentityKeyResponse;
+}
+
+export type FingerprintResponse = {
+  fingerprint: string;
+};
+
+export async function getFingerprint(
+  userId: string,
+  token: string,
+): Promise<FingerprintResponse> {
+  const res = await fetch(`/api/identity/users/${userId}/fingerprint`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    credentials: 'include',
+  });
+
+  if (!res.ok) {
+    if (res.status === 401) {
+      throw new Error(UNAUTHORIZED_MESSAGE);
+    }
+    const contentType = res.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      const error = await res.json().catch(() => ({}));
+      throw new Error(
+        typeof error === 'object' && 'error' in error
+          ? String(error.error)
+          : 'Failed to get fingerprint',
+      );
+    }
+    throw new Error(
+      `Failed to get fingerprint: ${res.status} ${res.statusText}`,
+    );
+  }
+
+  const contentType = res.headers.get('content-type');
+  if (!contentType || !contentType.includes('application/json')) {
+    throw new Error('Invalid response format from server');
+  }
+
+  return (await res.json()) as FingerprintResponse;
 }

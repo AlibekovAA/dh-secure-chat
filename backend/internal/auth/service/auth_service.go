@@ -2,38 +2,53 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
-	"golang.org/x/crypto/bcrypt"
 
+	authdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/domain"
+	authrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/repository"
+	commoncrypto "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/crypto"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
+	identityservice "github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/service"
 	userdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
 	userrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/repository"
 )
 
-type IdentityRepo interface {
-	Create(ctx context.Context, userID string, publicKey []byte) error
-}
-
 type AuthService struct {
-	repo         userrepo.Repository
-	identityRepo IdentityRepo
-	jwtSecret    []byte
-	now          func() time.Time
-	log          *logger.Logger
+	repo             userrepo.Repository
+	identityService  *identityservice.IdentityService
+	refreshTokenRepo authrepo.RefreshTokenRepository
+	hasher           commoncrypto.PasswordHasher
+	idGenerator      commoncrypto.IDGenerator
+	jwtSecret        []byte
+	now              func() time.Time
+	log              *logger.Logger
 }
 
-func NewAuthService(repo userrepo.Repository, identityRepo IdentityRepo, jwtSecret string, log *logger.Logger) *AuthService {
+func NewAuthService(
+	repo userrepo.Repository,
+	identityService *identityservice.IdentityService,
+	refreshTokenRepo authrepo.RefreshTokenRepository,
+	hasher commoncrypto.PasswordHasher,
+	idGenerator commoncrypto.IDGenerator,
+	jwtSecret string,
+	log *logger.Logger,
+) *AuthService {
 	return &AuthService{
-		repo:         repo,
-		identityRepo: identityRepo,
-		jwtSecret:    []byte(jwtSecret),
-		now:          time.Now,
-		log:          log,
+		repo:             repo,
+		identityService:  identityService,
+		refreshTokenRepo: refreshTokenRepo,
+		hasher:           hasher,
+		idGenerator:      idGenerator,
+		jwtSecret:        []byte(jwtSecret),
+		now:              time.Now,
+		log:              log,
 	}
 }
 
@@ -49,7 +64,9 @@ type LoginInput struct {
 }
 
 type AuthResult struct {
-	Token string
+	AccessToken      string
+	RefreshToken     string
+	RefreshExpiresAt time.Time
 }
 
 func (s *AuthService) Register(ctx context.Context, input RegisterInput) (AuthResult, error) {
@@ -60,16 +77,22 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (AuthRe
 		return AuthResult{}, err
 	}
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
+	hash, err := s.hasher.Hash(input.Password)
 	if err != nil {
 		s.log.Errorf("register failed username=%s: password hash error: %v", input.Username, err)
 		return AuthResult{}, err
 	}
 
+	id, err := s.idGenerator.NewID()
+	if err != nil {
+		s.log.Errorf("register failed username=%s: id generation error: %v", input.Username, err)
+		return AuthResult{}, err
+	}
+
 	user := userdomain.User{
-		ID:           userdomain.ID(uuid.NewString()),
+		ID:           userdomain.ID(id),
 		Username:     input.Username,
-		PasswordHash: string(hash),
+		PasswordHash: hash,
 		CreatedAt:    s.now(),
 	}
 
@@ -84,13 +107,19 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (AuthRe
 	}
 
 	if len(input.IdentityPubKey) > 0 {
-		if err := s.identityRepo.Create(ctx, string(user.ID), input.IdentityPubKey); err != nil {
+		if err := s.identityService.CreateIdentityKey(ctx, string(user.ID), input.IdentityPubKey); err != nil {
+			if delErr := s.repo.Delete(ctx, user.ID); delErr != nil {
+				s.log.Errorf("register failed username=%s: failed to delete user after identity key error: %v", input.Username, delErr)
+			}
+			if errors.Is(err, identityservice.ErrInvalidPublicKey) {
+				return AuthResult{}, err
+			}
 			s.log.Errorf("register failed username=%s: failed to save identity key: %v", input.Username, err)
 			return AuthResult{}, fmt.Errorf("failed to save identity key: %w", err)
 		}
 	}
 
-	token, err := s.issueToken(user)
+	accessToken, refresh, err := s.issueTokens(ctx, user)
 	if err != nil {
 		s.log.Errorf("register failed username=%s: token issue error: %v", input.Username, err)
 		return AuthResult{}, err
@@ -98,7 +127,11 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (AuthRe
 
 	s.log.Infof("register success username=%s user_id=%s", user.Username, user.ID)
 
-	return AuthResult{Token: token}, nil
+	return AuthResult{
+		AccessToken:      accessToken,
+		RefreshToken:     refresh.RawToken,
+		RefreshExpiresAt: refresh.ExpiresAt,
+	}, nil
 }
 
 func (s *AuthService) Login(ctx context.Context, input LoginInput) (AuthResult, error) {
@@ -119,13 +152,12 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (AuthResult, 
 		return AuthResult{}, err
 	}
 
-	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(input.Password))
-	if err != nil {
+	if err := s.hasher.Compare(user.PasswordHash, input.Password); err != nil {
 		s.log.Warnf("login failed username=%s: invalid password", input.Username)
 		return AuthResult{}, ErrInvalidCredentials
 	}
 
-	token, err := s.issueToken(user)
+	accessToken, refresh, err := s.issueTokens(ctx, user)
 	if err != nil {
 		s.log.Errorf("login failed username=%s: token issue error: %v", input.Username, err)
 		return AuthResult{}, err
@@ -133,17 +165,209 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (AuthResult, 
 
 	s.log.Infof("login success username=%s user_id=%s", user.Username, user.ID)
 
-	return AuthResult{Token: token}, nil
+	return AuthResult{
+		AccessToken:      accessToken,
+		RefreshToken:     refresh.RawToken,
+		RefreshExpiresAt: refresh.ExpiresAt,
+	}, nil
 }
 
-func (s *AuthService) issueToken(user userdomain.User) (string, error) {
+func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken string) (AuthResult, error) {
+	s.log.Infof("refresh token attempt")
+
+	if refreshToken == "" {
+		return AuthResult{}, ErrInvalidRefreshToken
+	}
+
+	hash := hashRefreshToken(refreshToken)
+
+	tx, err := s.refreshTokenRepo.BeginTx(ctx)
+	if err != nil {
+		s.log.Errorf("refresh token failed to begin tx: %v", err)
+		return AuthResult{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	stored, err := tx.FindByTokenHashForUpdate(ctx, hash)
+	if err != nil {
+		if errors.Is(err, authrepo.ErrRefreshTokenNotFound) {
+			s.log.Warnf("refresh token failed: not found")
+			return AuthResult{}, ErrInvalidRefreshToken
+		}
+		s.log.Errorf("refresh token lookup failed: %v", err)
+		return AuthResult{}, err
+	}
+
+	if s.now().After(stored.ExpiresAt) {
+		s.log.Warnf("refresh token expired user_id=%s", stored.UserID)
+		refreshTokensExpired.Add(1)
+		if err := tx.DeleteByTokenHash(ctx, hash); err != nil {
+			s.log.Errorf("refresh token failed to delete expired token user_id=%s: %v", stored.UserID, err)
+			return AuthResult{}, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			s.log.Errorf("refresh token failed to commit delete expired user_id=%s: %v", stored.UserID, err)
+			return AuthResult{}, err
+		}
+		return AuthResult{}, ErrRefreshTokenExpired
+	}
+
+	user, err := s.repo.FindByID(ctx, userdomain.ID(stored.UserID))
+	if err != nil {
+		s.log.Errorf("refresh token failed: user lookup error user_id=%s: %v", stored.UserID, err)
+		return AuthResult{}, err
+	}
+
+	if err := tx.DeleteByTokenHash(ctx, hash); err != nil {
+		s.log.Errorf("refresh token failed to delete old token user_id=%s: %v", stored.UserID, err)
+		return AuthResult{}, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		s.log.Errorf("refresh token failed to commit delete old token user_id=%s: %v", stored.UserID, err)
+		return AuthResult{}, err
+	}
+
+	accessToken, refresh, err := s.issueTokens(ctx, user)
+	if err != nil {
+		s.log.Errorf("refresh token failed to issue new tokens user_id=%s: %v", stored.UserID, err)
+		return AuthResult{}, err
+	}
+
+	s.log.Infof("refresh token used user_id=%s", stored.UserID)
+	s.log.Infof("refresh token success user_id=%s", stored.UserID)
+
+	refreshTokensUsed.Add(1)
+
+	return AuthResult{
+		AccessToken:      accessToken,
+		RefreshToken:     refresh.RawToken,
+		RefreshExpiresAt: refresh.ExpiresAt,
+	}, nil
+}
+
+func (s *AuthService) RevokeRefreshToken(ctx context.Context, refreshToken string) error {
+	if refreshToken == "" {
+		return nil
+	}
+
+	hash := hashRefreshToken(refreshToken)
+
+	stored, err := s.refreshTokenRepo.FindByTokenHash(ctx, hash)
+	if err != nil {
+		if errors.Is(err, authrepo.ErrRefreshTokenNotFound) {
+			return nil
+		}
+		s.log.Errorf("revoke refresh token lookup failed: %v", err)
+		return err
+	}
+
+	if err := s.refreshTokenRepo.DeleteByTokenHash(ctx, hash); err != nil {
+		if errors.Is(err, authrepo.ErrRefreshTokenNotFound) {
+			return nil
+		}
+		s.log.Errorf("revoke refresh token failed: %v", err)
+		return err
+	}
+
+	s.log.Infof("refresh token revoked user_id=%s", stored.UserID)
+
+	refreshTokensRevoked.Add(1)
+
+	return nil
+}
+
+func (s *AuthService) issueTokens(ctx context.Context, user userdomain.User) (string, authdomain.RefreshToken, error) {
+	accessToken, err := s.issueAccessToken(user)
+	if err != nil {
+		return "", authdomain.RefreshToken{}, err
+	}
+
+	refresh, err := s.issueRefreshToken(ctx, user)
+	if err != nil {
+		return "", authdomain.RefreshToken{}, err
+	}
+
+	return accessToken, refresh, nil
+}
+
+func (s *AuthService) issueAccessToken(user userdomain.User) (string, error) {
 	claims := jwt.MapClaims{
 		"sub": string(user.ID),
 		"usr": user.Username,
-		"exp": s.now().Add(24 * time.Hour).Unix(),
+		"exp": s.now().Add(15 * time.Minute).Unix(),
 		"iat": s.now().Unix(),
 	}
 
 	t := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return t.SignedString(s.jwtSecret)
+}
+
+func (s *AuthService) issueRefreshToken(ctx context.Context, user userdomain.User) (authdomain.RefreshToken, error) {
+	const maxRefreshTokensPerUser = 5
+
+	count, err := s.refreshTokenRepo.CountByUserID(ctx, string(user.ID))
+	if err != nil {
+		s.log.Errorf("failed to count refresh tokens user_id=%s: %v", user.ID, err)
+		return authdomain.RefreshToken{}, err
+	}
+
+	if count >= maxRefreshTokensPerUser {
+		if err := s.refreshTokenRepo.DeleteOldestByUserID(ctx, string(user.ID)); err != nil {
+			s.log.Warnf("failed to delete oldest refresh token user_id=%s: %v", user.ID, err)
+		}
+	}
+
+	rawToken, err := generateRefreshToken()
+	if err != nil {
+		return authdomain.RefreshToken{}, err
+	}
+
+	hash := hashRefreshToken(rawToken)
+
+	id, err := s.idGenerator.NewID()
+	if err != nil {
+		return authdomain.RefreshToken{}, err
+	}
+
+	expiresAt := s.now().Add(7 * 24 * time.Hour)
+
+	stored := authdomain.RefreshToken{
+		ID:        id,
+		TokenHash: hash,
+		UserID:    string(user.ID),
+		ExpiresAt: expiresAt,
+		CreatedAt: s.now(),
+	}
+
+	if err := s.refreshTokenRepo.Create(ctx, stored); err != nil {
+		return authdomain.RefreshToken{}, err
+	}
+
+	refreshTokensIssued.Add(1)
+
+	return authdomain.RefreshToken{
+		ID:        stored.ID,
+		TokenHash: stored.TokenHash,
+		UserID:    stored.UserID,
+		ExpiresAt: stored.ExpiresAt,
+		CreatedAt: stored.CreatedAt,
+		RawToken:  rawToken,
+	}, nil
+}
+
+func generateRefreshToken() (string, error) {
+	const size = 32
+
+	b := make([]byte, size)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+
+	return hex.EncodeToString(b), nil
+}
+
+func hashRefreshToken(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
 }

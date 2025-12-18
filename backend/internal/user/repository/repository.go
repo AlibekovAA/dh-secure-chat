@@ -17,6 +17,8 @@ type Repository interface {
 	FindByUsername(ctx context.Context, username string) (domain.User, error)
 	FindByID(ctx context.Context, id domain.ID) (domain.User, error)
 	SearchByUsername(ctx context.Context, query string, limit int) ([]domain.Summary, error)
+	UpdateLastSeen(ctx context.Context, userID domain.ID) error
+	Delete(ctx context.Context, id domain.ID) error
 }
 
 type PgRepository struct {
@@ -48,12 +50,12 @@ func (r *PgRepository) Create(ctx context.Context, user domain.User) error {
 func (r *PgRepository) FindByUsername(ctx context.Context, username string) (domain.User, error) {
 	row := r.pool.QueryRow(
 		ctx,
-		`SELECT id, username, password_hash, created_at FROM users WHERE username = $1`,
+		`SELECT id, username, password_hash, created_at, last_seen_at FROM users WHERE username = $1`,
 		username,
 	)
 
 	var user domain.User
-	err := row.Scan(&user.ID, &user.Username, &user.PasswordHash, &user.CreatedAt)
+	err := row.Scan(&user.ID, &user.Username, &user.PasswordHash, &user.CreatedAt, &user.LastSeenAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.User{}, ErrUserNotFound
@@ -67,12 +69,12 @@ func (r *PgRepository) FindByUsername(ctx context.Context, username string) (dom
 func (r *PgRepository) FindByID(ctx context.Context, id domain.ID) (domain.User, error) {
 	row := r.pool.QueryRow(
 		ctx,
-		`SELECT id, username, password_hash, created_at FROM users WHERE id = $1`,
+		`SELECT id, username, password_hash, created_at, last_seen_at FROM users WHERE id = $1`,
 		string(id),
 	)
 
 	var user domain.User
-	err := row.Scan(&user.ID, &user.Username, &user.PasswordHash, &user.CreatedAt)
+	err := row.Scan(&user.ID, &user.Username, &user.PasswordHash, &user.CreatedAt, &user.LastSeenAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.User{}, ErrUserNotFound
@@ -114,6 +116,30 @@ func (r *PgRepository) SearchByUsername(ctx context.Context, query string, limit
 	}
 
 	return users, nil
+}
+
+func (r *PgRepository) UpdateLastSeen(ctx context.Context, userID domain.ID) error {
+	_, err := r.pool.Exec(
+		ctx,
+		`UPDATE users SET last_seen_at = NOW() WHERE id = $1`,
+		string(userID),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update last_seen_at: %w", err)
+	}
+	return nil
+}
+
+func (r *PgRepository) Delete(ctx context.Context, id domain.ID) error {
+	_, err := r.pool.Exec(
+		ctx,
+		`DELETE FROM users WHERE id = $1`,
+		string(id),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to delete user: %w", err)
+	}
+	return nil
 }
 
 var ErrUserNotFound = pgx.ErrNoRows

@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -90,6 +91,10 @@ func (l *Logger) SetLevel(level LogLevel) {
 }
 
 func (l *Logger) log(level LogLevel, msg string) {
+	l.logWithContext(level, nil, msg)
+}
+
+func (l *Logger) logWithContext(level LogLevel, ctx context.Context, msg string) {
 	l.mu.RLock()
 	currentLevel := l.level
 	service := l.serviceName
@@ -104,6 +109,12 @@ func (l *Logger) log(level LogLevel, msg string) {
 		prefix = fmt.Sprintf("[%s] [%s]", prefix, service)
 	} else {
 		prefix = fmt.Sprintf("[%s]", prefix)
+	}
+
+	if ctx != nil {
+		if traceID, ok := ctx.Value("trace_id").(string); ok && traceID != "" {
+			prefix = fmt.Sprintf("%s [trace_id=%s]", prefix, traceID)
+		}
 	}
 
 	l.out.Output(3, fmt.Sprintf("%s %s", prefix, msg))
@@ -133,6 +144,26 @@ func (l *Logger) Errorf(format string, args ...any) {
 
 func (l *Logger) Criticalf(format string, args ...any) {
 	l.log(CRITICAL, fmt.Sprintf(format, args...))
+}
+
+func (l *Logger) DebugfCtx(ctx context.Context, format string, args ...any) {
+	l.logWithContext(DEBUG, ctx, fmt.Sprintf(format, args...))
+}
+
+func (l *Logger) InfofCtx(ctx context.Context, format string, args ...any) {
+	l.logWithContext(INFO, ctx, fmt.Sprintf(format, args...))
+}
+
+func (l *Logger) WarnfCtx(ctx context.Context, format string, args ...any) {
+	l.logWithContext(WARNING, ctx, fmt.Sprintf(format, args...))
+}
+
+func (l *Logger) ErrorfCtx(ctx context.Context, format string, args ...any) {
+	l.logWithContext(ERROR, ctx, fmt.Sprintf(format, args...))
+}
+
+func (l *Logger) CriticalfCtx(ctx context.Context, format string, args ...any) {
+	l.logWithContext(CRITICAL, ctx, fmt.Sprintf(format, args...))
 }
 
 func (l *Logger) Fatal(msg string) {

@@ -54,11 +54,23 @@ rebuild:
 
 clean:
 	@echo "Stopping all containers..."
-	-docker stop $$(docker ps -a -q) 2>/dev/null || true
+ifeq ($(OS),Windows_NT)
+	@powershell -Command "docker ps -a -q | ForEach-Object { if ($$_) { docker stop $$_ } }" 2>nul
+else
+	@docker ps -aq | xargs -r docker stop 2>/dev/null || true
+endif
 	@echo "Removing all containers..."
-	-docker rm $$(docker ps -a -q) 2>/dev/null || true
+ifeq ($(OS),Windows_NT)
+	@powershell -Command "docker ps -a -q | ForEach-Object { if ($$_) { docker rm $$_ } }" 2>nul
+else
+	@docker ps -aq | xargs -r docker rm 2>/dev/null || true
+endif
 	@echo "Removing all images..."
-	-docker rmi $$(docker images -q) 2>/dev/null || true
+ifeq ($(OS),Windows_NT)
+	@powershell -Command "docker images -q | ForEach-Object { if ($$_) { docker rmi -f $$_ } }" 2>nul
+else
+	@docker images -q | xargs -r docker rmi -f 2>/dev/null || true
+endif
 	@echo "Pruning Docker system..."
 	docker system prune -a --volumes -f
 	@echo "Docker cleanup complete!"

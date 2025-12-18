@@ -62,7 +62,9 @@ export function AuthForm({ onAuthenticated }: Props) {
           identityPubKey = await exportPublicKey(keyPair.publicKey);
           await saveIdentityPrivateKey(keyPair.privateKey);
         } catch (err) {
-          showToast("Ошибка генерации ключей. Попробуйте ещё раз.", "error");
+          const errorMessage = err instanceof Error ? err.message : "Ошибка генерации ключей. Попробуйте ещё раз.";
+          showToast(errorMessage, "error");
+          console.error("Key generation error:", err);
           setSubmitting(false);
           return;
         }

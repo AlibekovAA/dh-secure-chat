@@ -39,6 +39,8 @@ func NewHandler(auth *service.AuthService, log *logger.Logger) http.Handler {
 	mux.HandleFunc("/health", commonhttp.HealthHandler(log))
 	mux.HandleFunc("/api/auth/register", h.register)
 	mux.HandleFunc("/api/auth/login", h.login)
+	mux.HandleFunc("/api/auth/refresh", h.refresh)
+	mux.HandleFunc("/api/auth/logout", h.logout)
 	return mux
 }
 
@@ -79,7 +81,8 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	commonhttp.WriteJSON(w, http.StatusCreated, tokenResponse{Token: result.Token})
+	setRefreshCookie(w, r, result.RefreshToken, result.RefreshExpiresAt)
+	commonhttp.WriteJSON(w, http.StatusCreated, tokenResponse{Token: result.AccessToken})
 }
 
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
@@ -107,7 +110,90 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	commonhttp.WriteJSON(w, http.StatusOK, tokenResponse{Token: result.Token})
+	setRefreshCookie(w, r, result.RefreshToken, result.RefreshExpiresAt)
+	commonhttp.WriteJSON(w, http.StatusOK, tokenResponse{Token: result.AccessToken})
+}
+
+func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		commonhttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	cookie, err := r.Cookie("refresh_token")
+	if err != nil || cookie.Value == "" {
+		commonhttp.WriteError(w, http.StatusUnauthorized, "missing refresh token")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	result, err := h.auth.RefreshAccessToken(ctx, cookie.Value)
+	if err != nil {
+		if errors.Is(err, service.ErrInvalidRefreshToken) || errors.Is(err, service.ErrRefreshTokenExpired) {
+			commonhttp.WriteError(w, http.StatusUnauthorized, "invalid refresh token")
+			return
+		}
+		h.log.Errorf("refresh failed: %v", err)
+		commonhttp.WriteError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	setRefreshCookie(w, r, result.RefreshToken, result.RefreshExpiresAt)
+	commonhttp.WriteJSON(w, http.StatusOK, tokenResponse{Token: result.AccessToken})
+}
+
+func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		commonhttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	cookie, err := r.Cookie("refresh_token")
+	if err == nil && cookie.Value != "" {
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+		if err := h.auth.RevokeRefreshToken(ctx, cookie.Value); err != nil {
+			h.log.Errorf("logout revoke failed: %v", err)
+		}
+	}
+
+	clearRefreshCookie(w, r)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func setRefreshCookie(w http.ResponseWriter, r *http.Request, token string, expiresAt time.Time) {
+	if token == "" {
+		return
+	}
+
+	cookie := &http.Cookie{
+		Name:     "refresh_token",
+		Value:    token,
+		Path:     "/api/auth",
+		Expires:  expiresAt,
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+		Secure:   r.TLS != nil,
+	}
+
+	http.SetCookie(w, cookie)
+}
+
+func clearRefreshCookie(w http.ResponseWriter, r *http.Request) {
+	cookie := &http.Cookie{
+		Name:     "refresh_token",
+		Value:    "",
+		Path:     "/api/auth",
+		Expires:  time.Unix(0, 0),
+		MaxAge:   -1,
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+		Secure:   r.TLS != nil,
+	}
+
+	http.SetCookie(w, cookie)
 }
 
 func (h *Handler) writeError(w http.ResponseWriter, err error) {

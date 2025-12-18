@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
-	identityrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/repository"
+	identityservice "github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/service"
 	userdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
 	userrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/repository"
 )
@@ -14,16 +14,16 @@ import (
 var ErrEmptyQuery = errors.New("query is empty")
 
 type ChatService struct {
-	repo         userrepo.Repository
-	identityRepo identityrepo.Repository
-	log          *logger.Logger
+	repo            userrepo.Repository
+	identityService *identityservice.IdentityService
+	log             *logger.Logger
 }
 
-func NewChatService(repo userrepo.Repository, identityRepo identityrepo.Repository, log *logger.Logger) *ChatService {
+func NewChatService(repo userrepo.Repository, identityService *identityservice.IdentityService, log *logger.Logger) *ChatService {
 	return &ChatService{
-		repo:         repo,
-		identityRepo: identityRepo,
-		log:          log,
+		repo:            repo,
+		identityService: identityService,
+		log:             log,
 	}
 }
 
@@ -52,10 +52,5 @@ func (s *ChatService) SearchUsers(ctx context.Context, query string, limit int) 
 }
 
 func (s *ChatService) GetIdentityKey(ctx context.Context, userID string) ([]byte, error) {
-	key, err := s.identityRepo.FindByUserID(ctx, userID)
-	if err != nil {
-		s.log.Errorf("get identity key failed user_id=%s: %v", userID, err)
-		return nil, err
-	}
-	return key.PublicKey, nil
+	return s.identityService.GetPublicKey(ctx, userID)
 }

@@ -206,10 +206,11 @@ export function ChatScreen({
         </div>
       </main>
 
-      {selectedPeer && (
+      {selectedPeer && profile && (
         <ChatWindow
           token={token}
           peer={selectedPeer}
+          myUserId={profile.id}
           onClose={() => setSelectedPeer(null)}
         />
       )}

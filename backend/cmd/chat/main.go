@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"expvar"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	chathttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/http"
@@ -16,7 +18,9 @@ import (
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/jwtverify"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 	srv "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/server"
+	identityhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/http"
 	identityrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/repository"
+	identityservice "github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/service"
 	userrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/repository"
 )
 
@@ -33,10 +37,17 @@ func main() {
 
 	userRepo := userrepo.NewPgRepository(pool)
 	identityRepo := identityrepo.NewPgRepository(pool)
-	chatSvc := chatservice.NewChatService(userRepo, identityRepo, log)
+	identityService := identityservice.NewIdentityService(identityRepo, log)
+	chatSvc := chatservice.NewChatService(userRepo, identityService, log)
 
-	hub := websocket.NewHub(log)
-	go hub.Run()
+	hub := websocket.NewHub(log, userRepo)
+	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		hub.Run(ctx)
+	}()
 
 	handler := chathttp.NewHandler(chatSvc, hub, cfg.JWTSecret, log)
 
@@ -46,14 +57,18 @@ func main() {
 	restMux.HandleFunc("/health", commonhttp.HealthHandler(log))
 	restMux.Handle("/debug/vars", expvar.Handler())
 
+	identityHandler := identityhttp.NewHandler(identityService, log)
+
 	jwtMw := jwtverify.Middleware(cfg.JWTSecret, log)
 	restMux.Handle("/api/chat/me", jwtMw(handler))
 	restMux.Handle("/api/chat/users", jwtMw(handler))
 	restMux.Handle("/api/chat/users/", jwtMw(handler))
+	restMux.Handle("/api/identity/", jwtMw(identityHandler))
 
 	metrics := httpmetrics.New("chat")
 	recovery := commonhttp.RecoveryMiddleware(log)
-	wrappedRestMux := recovery(metrics.Wrap(restMux))
+	traceID := commonhttp.TraceIDMiddleware
+	wrappedRestMux := recovery(traceID(metrics.Wrap(restMux)))
 
 	mainMux := http.NewServeMux()
 	mainMux.Handle("/ws/", wsHandler)
@@ -69,4 +84,7 @@ func main() {
 	}
 
 	srv.StartWithGracefulShutdown(server, log, "chat")
+
+	cancel()
+	wg.Wait()
 }

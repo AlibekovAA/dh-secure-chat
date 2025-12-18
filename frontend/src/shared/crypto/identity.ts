@@ -3,20 +3,45 @@ export type IdentityKeyPair = {
   privateKey: CryptoKey;
 };
 
-export async function generateIdentityKeyPair(): Promise<IdentityKeyPair> {
-  const keyPair = await crypto.subtle.generateKey(
-    {
-      name: 'ECDH',
-      namedCurve: 'P-256',
-    },
-    true,
-    ['deriveKey', 'deriveBits'],
-  );
+function checkWebCryptoSupport(): void {
+  if (!crypto || !crypto.subtle) {
+    throw new Error(
+      'Web Crypto API не поддерживается в этом браузере. Используйте современный браузер (Chrome, Firefox, Safari, Edge).',
+    );
+  }
+}
 
-  return {
-    publicKey: keyPair.publicKey,
-    privateKey: keyPair.privateKey,
-  };
+export async function generateIdentityKeyPair(): Promise<IdentityKeyPair> {
+  checkWebCryptoSupport();
+
+  try {
+    const keyPair = await crypto.subtle.generateKey(
+      {
+        name: 'ECDH',
+        namedCurve: 'P-256',
+      },
+      true,
+      ['deriveKey', 'deriveBits'],
+    );
+
+    return {
+      publicKey: keyPair.publicKey,
+      privateKey: keyPair.privateKey,
+    };
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    if (error.includes('not supported') || error.includes('not implemented')) {
+      throw new Error(
+        'Генерация ключей не поддерживается. Используйте современный браузер (Chrome, Firefox, Safari, Edge).',
+      );
+    }
+    if (error.includes('secure context') || error.includes('HTTPS')) {
+      throw new Error(
+        'Для генерации ключей требуется безопасное соединение (HTTPS).',
+      );
+    }
+    throw new Error(`Ошибка генерации ключей: ${error}`);
+  }
 }
 
 export async function exportPublicKey(publicKey: CryptoKey): Promise<string> {
