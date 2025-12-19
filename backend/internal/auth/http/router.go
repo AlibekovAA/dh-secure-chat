@@ -224,29 +224,39 @@ func setRefreshCookie(w http.ResponseWriter, r *http.Request, token string, expi
 		return
 	}
 
+	isSecure := r.TLS != nil
+	if forwardedProto := r.Header.Get("X-Forwarded-Proto"); forwardedProto == "https" {
+		isSecure = true
+	}
+
 	cookie := &http.Cookie{
 		Name:     "refresh_token",
 		Value:    token,
-		Path:     "/api/auth",
+		Path:     "/",
 		Expires:  expiresAt,
 		HttpOnly: true,
-		SameSite: http.SameSiteStrictMode,
-		Secure:   r.TLS != nil,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   isSecure,
 	}
 
 	http.SetCookie(w, cookie)
 }
 
 func clearRefreshCookie(w http.ResponseWriter, r *http.Request) {
+	isSecure := r.TLS != nil
+	if forwardedProto := r.Header.Get("X-Forwarded-Proto"); forwardedProto == "https" {
+		isSecure = true
+	}
+
 	cookie := &http.Cookie{
 		Name:     "refresh_token",
 		Value:    "",
-		Path:     "/api/auth",
+		Path:     "/",
 		Expires:  time.Unix(0, 0),
 		MaxAge:   -1,
 		HttpOnly: true,
-		SameSite: http.SameSiteStrictMode,
-		Secure:   r.TLS != nil,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   isSecure,
 	}
 
 	http.SetCookie(w, cookie)
