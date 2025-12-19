@@ -5,7 +5,7 @@ import "encoding/json"
 type MessageType string
 
 const (
-	TypeAuth                MessageType = "auth"
+	TypeAuth               MessageType = "auth"
 	TypeEphemeralKey       MessageType = "ephemeral_key"
 	TypeMessage            MessageType = "message"
 	TypeSessionEstablished MessageType = "session_established"
@@ -57,6 +57,7 @@ type PeerDisconnectedPayload struct {
 
 type FileStartPayload struct {
 	To          string `json:"to"`
+	From        string `json:"from,omitempty"`
 	FileID      string `json:"file_id"`
 	Filename    string `json:"filename"`
 	MimeType    string `json:"mime_type"`
@@ -67,6 +68,7 @@ type FileStartPayload struct {
 
 type FileChunkPayload struct {
 	To          string `json:"to"`
+	From        string `json:"from,omitempty"`
 	FileID      string `json:"file_id"`
 	ChunkIndex  int    `json:"chunk_index"`
 	TotalChunks int    `json:"total_chunks"`
@@ -76,6 +78,7 @@ type FileChunkPayload struct {
 
 type FileCompletePayload struct {
 	To     string `json:"to"`
+	From   string `json:"from,omitempty"`
 	FileID string `json:"file_id"`
 }
 

@@ -11,6 +11,7 @@ import {
   saveVerifiedPeerFingerprint,
 } from '../../shared/crypto/fingerprint';
 import { useToast } from '../../shared/ui/ToastProvider';
+import { MAX_FILE_SIZE } from './constants';
 
 type Props = {
   token: string;
@@ -129,7 +130,6 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
       const file = e.target.files?.[0];
       if (!file || isSendingFile || !isSessionActive || isChatBlocked) return;
 
-      const MAX_FILE_SIZE = 50 * 1024 * 1024;
       if (file.size > MAX_FILE_SIZE) {
         showToast('Файл слишком большой (максимум 50MB)', 'error');
         return;

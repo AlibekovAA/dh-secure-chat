@@ -13,26 +13,26 @@ import (
 	userrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/repository"
 )
 
-const lastSeenUpdateInterval = 1 * time.Minute
-
 type Hub struct {
-	clients         map[string]*Client
-	register        chan *Client
-	unregister      chan *Client
-	lastSeenUpdates map[string]time.Time
-	mu              sync.RWMutex
-	log             *logger.Logger
-	userRepo        userrepo.Repository
+	clients                map[string]*Client
+	register               chan *Client
+	unregister             chan *Client
+	lastSeenUpdates        map[string]time.Time
+	mu                     sync.RWMutex
+	log                    *logger.Logger
+	userRepo               userrepo.Repository
+	lastSeenUpdateInterval time.Duration
 }
 
-func NewHub(log *logger.Logger, userRepo userrepo.Repository) *Hub {
+func NewHub(log *logger.Logger, userRepo userrepo.Repository, lastSeenUpdateInterval time.Duration) *Hub {
 	return &Hub{
-		clients:         make(map[string]*Client),
-		register:        make(chan *Client),
-		unregister:      make(chan *Client),
-		lastSeenUpdates: make(map[string]time.Time),
-		log:             log,
-		userRepo:        userRepo,
+		clients:                make(map[string]*Client),
+		register:               make(chan *Client),
+		unregister:             make(chan *Client),
+		lastSeenUpdates:        make(map[string]time.Time),
+		log:                    log,
+		userRepo:               userRepo,
+		lastSeenUpdateInterval: lastSeenUpdateInterval,
 	}
 }
 
@@ -74,24 +74,38 @@ func (h *Hub) Run(ctx context.Context) {
 
 func (h *Hub) shutdown() {
 	h.mu.Lock()
-	defer h.mu.Unlock()
+	clients := make([]*Client, 0, len(h.clients))
+	for _, client := range h.clients {
+		clients = append(clients, client)
+	}
+	h.mu.Unlock()
 
-	for id, client := range h.clients {
+	for _, client := range clients {
+		select {
+		case client.send <- []byte(`{"type":"shutdown"}`):
+		default:
+		}
 		close(client.send)
-		delete(h.clients, id)
 	}
 
-	h.log.Infof("websocket hub shutdown completed")
+	h.mu.Lock()
+	for id := range h.clients {
+		delete(h.clients, id)
+	}
+	h.mu.Unlock()
+
+	h.log.Infof("websocket hub shutdown completed clients=%d", len(clients))
 }
 
 func (h *Hub) SendToUser(userID string, message *WSMessage) bool {
 	h.mu.RLock()
 	client, ok := h.clients[userID]
-	h.mu.RUnlock()
-
 	if !ok {
+		h.mu.RUnlock()
 		return false
 	}
+	sendChan := client.send
+	h.mu.RUnlock()
 
 	messageBytes, err := json.Marshal(message)
 	if err != nil {
@@ -100,7 +114,7 @@ func (h *Hub) SendToUser(userID string, message *WSMessage) bool {
 	}
 
 	select {
-	case client.send <- messageBytes:
+	case sendChan <- messageBytes:
 		return true
 	default:
 		h.log.Warnf("websocket send buffer full user_id=%s", userID)
@@ -147,11 +161,7 @@ func (h *Hub) forwardMessage(client *Client, msg *WSMessage, payload payloadWith
 		return false
 	}
 
-	forwardMsg := &WSMessage{
-		Type:    msg.Type,
-		Payload: msg.Payload,
-	}
-	if h.SendToUser(to, forwardMsg) {
+	if h.SendToUser(to, msg) {
 		h.log.Debugf("websocket message forwarded from=%s to=%s type=%s", client.userID, to, msg.Type)
 		return true
 	}
@@ -222,25 +232,61 @@ func (h *Hub) HandleMessage(client *Client, msg *WSMessage) {
 		var payload FileStartPayload
 		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
 			h.log.Warnf("websocket invalid file_start payload user_id=%s: %v", client.userID, err)
+			metrics.IncrementWebSocketError("invalid_file_start_payload")
 			return
 		}
-		h.forwardMessage(client, msg, payload, true)
+		payload.From = client.userID
+		payloadBytes, err := json.Marshal(payload)
+		if err != nil {
+			h.log.Warnf("websocket failed to marshal file_start payload user_id=%s: %v", client.userID, err)
+			return
+		}
+		forwardMsg := &WSMessage{
+			Type:    msg.Type,
+			Payload: payloadBytes,
+		}
+		h.log.Debugf("websocket file_start from=%s to=%s file_id=%s filename=%s", client.userID, payload.To, payload.FileID, payload.Filename)
+		h.forwardMessageWithModifiedPayload(forwardMsg, payload, true, client.userID)
 
 	case TypeFileChunk:
 		var payload FileChunkPayload
 		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
 			h.log.Warnf("websocket invalid file_chunk payload user_id=%s: %v", client.userID, err)
+			metrics.IncrementWebSocketError("invalid_file_chunk_payload")
 			return
 		}
-		h.forwardMessage(client, msg, payload, true)
+		payload.From = client.userID
+		payloadBytes, err := json.Marshal(payload)
+		if err != nil {
+			h.log.Warnf("websocket failed to marshal file_chunk payload user_id=%s: %v", client.userID, err)
+			return
+		}
+		forwardMsg := &WSMessage{
+			Type:    msg.Type,
+			Payload: payloadBytes,
+		}
+		h.log.Debugf("websocket file_chunk from=%s to=%s file_id=%s chunk_index=%d/%d", client.userID, payload.To, payload.FileID, payload.ChunkIndex, payload.TotalChunks)
+		h.forwardMessageWithModifiedPayload(forwardMsg, payload, true, client.userID)
 
 	case TypeFileComplete:
 		var payload FileCompletePayload
 		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
 			h.log.Warnf("websocket invalid file_complete payload user_id=%s: %v", client.userID, err)
+			metrics.IncrementWebSocketError("invalid_file_complete_payload")
 			return
 		}
-		h.forwardMessage(client, msg, payload, true)
+		payload.From = client.userID
+		payloadBytes, err := json.Marshal(payload)
+		if err != nil {
+			h.log.Warnf("websocket failed to marshal file_complete payload user_id=%s: %v", client.userID, err)
+			return
+		}
+		forwardMsg := &WSMessage{
+			Type:    msg.Type,
+			Payload: payloadBytes,
+		}
+		h.log.Debugf("websocket file_complete from=%s to=%s file_id=%s", client.userID, payload.To, payload.FileID)
+		h.forwardMessageWithModifiedPayload(forwardMsg, payload, true, client.userID)
 
 	case TypeAck:
 		var payload AckPayload
@@ -258,29 +304,34 @@ func (h *Hub) HandleMessage(client *Client, msg *WSMessage) {
 
 func (h *Hub) handleUnregister(client *Client) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 
 	if _, ok := h.clients[client.userID]; !ok {
+		h.mu.Unlock()
 		return
 	}
 
 	delete(h.clients, client.userID)
 	totalClients := len(h.clients)
+	clients := make([]*Client, 0, len(h.clients))
+	for _, c := range h.clients {
+		clients = append(clients, c)
+	}
+	h.mu.Unlock()
+
 	close(client.send)
 	metrics.DecrementActiveWebSocketConnections()
 	h.log.Infof("websocket client unregistered user_id=%s username=%s total=%d", client.userID, client.username, totalClients)
 
-	disconnectedMsg := &WSMessage{
-		Type:    TypePeerDisconnected,
-		Payload: json.RawMessage{},
-	}
-
-	payload, err := json.Marshal(PeerDisconnectedPayload{PeerID: client.userID})
+	payloadBytes, err := json.Marshal(PeerDisconnectedPayload{PeerID: client.userID})
 	if err != nil {
 		h.log.Errorf("websocket marshal peer_disconnected payload failed user_id=%s: %v", client.userID, err)
 		return
 	}
-	disconnectedMsg.Payload = payload
+
+	disconnectedMsg := &WSMessage{
+		Type:    TypePeerDisconnected,
+		Payload: payloadBytes,
+	}
 
 	messageBytes, err := json.Marshal(disconnectedMsg)
 	if err != nil {
@@ -288,7 +339,7 @@ func (h *Hub) handleUnregister(client *Client) {
 		return
 	}
 
-	for _, otherClient := range h.clients {
+	for _, otherClient := range clients {
 		select {
 		case otherClient.send <- messageBytes:
 		default:
@@ -297,14 +348,14 @@ func (h *Hub) handleUnregister(client *Client) {
 }
 
 func (h *Hub) sendPeerOffline(fromUserID, peerID string) error {
-	payload, err := json.Marshal(PeerOfflinePayload{PeerID: peerID})
+	payloadBytes, err := json.Marshal(PeerOfflinePayload{PeerID: peerID})
 	if err != nil {
 		return err
 	}
 
 	msg := &WSMessage{
 		Type:    TypePeerOffline,
-		Payload: payload,
+		Payload: payloadBytes,
 	}
 
 	if ok := h.SendToUser(fromUserID, msg); !ok {
@@ -315,16 +366,13 @@ func (h *Hub) sendPeerOffline(fromUserID, peerID string) error {
 }
 
 func (h *Hub) updateLastSeenDebounced(userID string) {
-	h.mu.RLock()
-	lastUpdate, exists := h.lastSeenUpdates[userID]
-	h.mu.RUnlock()
-
 	now := time.Now()
-	if exists && now.Sub(lastUpdate) < lastSeenUpdateInterval {
+	h.mu.Lock()
+	lastUpdate, exists := h.lastSeenUpdates[userID]
+	if exists && now.Sub(lastUpdate) < h.lastSeenUpdateInterval {
+		h.mu.Unlock()
 		return
 	}
-
-	h.mu.Lock()
 	h.lastSeenUpdates[userID] = now
 	h.mu.Unlock()
 

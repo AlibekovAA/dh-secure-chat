@@ -148,14 +148,6 @@ export class WebSocketClient {
     }
   }
 
-  getState(): ConnectionState {
-    return this.state;
-  }
-
-  isConnected(): boolean {
-    return this.state === 'connected' && this.ws?.readyState === WebSocket.OPEN;
-  }
-
   private setState(state: ConnectionState): void {
     if (this.state !== state) {
       this.state = state;

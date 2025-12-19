@@ -10,45 +10,35 @@ import (
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 )
 
-const (
-	writeWait      = 10 * time.Second
-	pongWait       = 60 * time.Second
-	pingPeriod     = (pongWait * 9) / 10
-	maxMessageSize = 20 * 1024 * 1024
-	chunkSize      = 1024 * 1024
-)
-
 type Client struct {
-	hub        *Hub
-	conn       *gorillaWS.Conn
-	userID     string
-	username   string
-	send       chan []byte
-	log        *logger.Logger
+	hub           *Hub
+	conn          *gorillaWS.Conn
+	userID        string
+	username      string
+	send          chan []byte
+	log           *logger.Logger
 	authenticated bool
-	jwtSecret  []byte
+	jwtSecret     []byte
+	writeWait     time.Duration
+	pongWait      time.Duration
+	pingPeriod    time.Duration
+	maxMsgSize    int64
+	authTimeout   time.Duration
 }
 
-func NewClient(hub *Hub, conn *gorillaWS.Conn, userID, username string, log *logger.Logger) *Client {
+func NewUnauthenticatedClient(hub *Hub, conn *gorillaWS.Conn, jwtSecret string, log *logger.Logger, writeWait, pongWait, pingPeriod time.Duration, maxMsgSize int64, authTimeout time.Duration, sendBufSize int) *Client {
 	return &Client{
-		hub:          hub,
-		conn:         conn,
-		userID:       userID,
-		username:     username,
-		send:         make(chan []byte, 256),
-		log:          log,
-		authenticated: true,
-	}
-}
-
-func NewUnauthenticatedClient(hub *Hub, conn *gorillaWS.Conn, jwtSecret string, log *logger.Logger) *Client {
-	return &Client{
-		hub:          hub,
-		conn:         conn,
-		send:         make(chan []byte, 256),
-		log:          log,
+		hub:           hub,
+		conn:          conn,
+		send:          make(chan []byte, sendBufSize),
+		log:           log,
 		authenticated: false,
-		jwtSecret:    []byte(jwtSecret),
+		jwtSecret:     []byte(jwtSecret),
+		writeWait:     writeWait,
+		pongWait:      pongWait,
+		pingPeriod:    pingPeriod,
+		maxMsgSize:    maxMsgSize,
+		authTimeout:   authTimeout,
 	}
 }
 
@@ -65,15 +55,14 @@ func (c *Client) readPump() {
 		c.conn.Close()
 	}()
 
-	authTimeout := 10 * time.Second
 	if !c.authenticated {
-		c.conn.SetReadDeadline(time.Now().Add(authTimeout))
+		c.conn.SetReadDeadline(time.Now().Add(c.authTimeout))
 	} else {
-		c.conn.SetReadDeadline(time.Now().Add(pongWait))
+		c.conn.SetReadDeadline(time.Now().Add(c.pongWait))
 	}
-	c.conn.SetReadLimit(maxMessageSize)
+	c.conn.SetReadLimit(c.maxMsgSize)
 	c.conn.SetPongHandler(func(string) error {
-		c.conn.SetReadDeadline(time.Now().Add(pongWait))
+		c.conn.SetReadDeadline(time.Now().Add(c.pongWait))
 		return nil
 	})
 
@@ -124,10 +113,10 @@ func (c *Client) readPump() {
 			c.userID = claims.UserID
 			c.username = claims.Username
 			c.authenticated = true
-			c.conn.SetReadDeadline(time.Now().Add(pongWait))
+			c.conn.SetReadDeadline(time.Now().Add(c.pongWait))
 
 			authResponse := WSMessage{
-				Type: TypeAuth,
+				Type:    TypeAuth,
 				Payload: json.RawMessage(`{"authenticated":true}`),
 			}
 			authResponseBytes, err := json.Marshal(authResponse)
@@ -149,7 +138,7 @@ func (c *Client) readPump() {
 }
 
 func (c *Client) writePump() {
-	ticker := time.NewTicker(pingPeriod)
+	ticker := time.NewTicker(c.pingPeriod)
 	defer func() {
 		ticker.Stop()
 		c.conn.Close()
@@ -158,7 +147,7 @@ func (c *Client) writePump() {
 	for {
 		select {
 		case message, ok := <-c.send:
-			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			c.conn.SetWriteDeadline(time.Now().Add(c.writeWait))
 			if !ok {
 				c.conn.WriteMessage(gorillaWS.CloseMessage, []byte{})
 				return
@@ -181,7 +170,7 @@ func (c *Client) writePump() {
 			}
 
 		case <-ticker.C:
-			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			c.conn.SetWriteDeadline(time.Now().Add(c.writeWait))
 			if err := c.conn.WriteMessage(gorillaWS.PingMessage, nil); err != nil {
 				return
 			}

@@ -40,7 +40,7 @@ func main() {
 	identityService := identityservice.NewIdentityService(identityRepo, log)
 	chatSvc := chatservice.NewChatService(userRepo, identityService, log)
 
-	hub := websocket.NewHub(log, userRepo)
+	hub := websocket.NewHub(log, userRepo, cfg.LastSeenUpdateInterval)
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -49,9 +49,7 @@ func main() {
 		hub.Run(ctx)
 	}()
 
-	handler := chathttp.NewHandler(chatSvc, hub, cfg.JWTSecret, log)
-
-	wsHandler := handler
+	handler := chathttp.NewHandler(chatSvc, hub, cfg, log)
 
 	restMux := http.NewServeMux()
 	restMux.HandleFunc("/health", commonhttp.HealthHandler(log))
@@ -71,7 +69,7 @@ func main() {
 	wrappedRestMux := recovery(traceID(metrics.Wrap(restMux)))
 
 	mainMux := http.NewServeMux()
-	mainMux.Handle("/ws/", wsHandler)
+	mainMux.Handle("/ws/", handler)
 	mainMux.Handle("/", wrappedRestMux)
 
 	server := &http.Server{

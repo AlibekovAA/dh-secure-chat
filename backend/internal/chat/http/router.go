@@ -7,12 +7,12 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	gorillaWS "github.com/gorilla/websocket"
 
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/service"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/websocket"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/config"
 	commonhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/http"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/jwtverify"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
@@ -26,6 +26,7 @@ type Handler struct {
 	jwtSecret string
 	upgrader  gorillaWS.Upgrader
 	log       *logger.Logger
+	cfg       config.ChatConfig
 }
 
 type meResponse struct {
@@ -38,11 +39,12 @@ type userResponse struct {
 	Username string `json:"username"`
 }
 
-func NewHandler(chat *service.ChatService, hub *websocket.Hub, jwtSecret string, log *logger.Logger) http.Handler {
+func NewHandler(chat *service.ChatService, hub *websocket.Hub, cfg config.ChatConfig, log *logger.Logger) http.Handler {
 	h := &Handler{
 		chat:      chat,
 		hub:       hub,
-		jwtSecret: jwtSecret,
+		jwtSecret: cfg.JWTSecret,
+		cfg:       cfg,
 		upgrader: gorillaWS.Upgrader{
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
@@ -77,7 +79,7 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), h.cfg.RequestTimeout)
 	defer cancel()
 
 	user, err := h.chat.GetMe(ctx, claims.UserID)
@@ -114,7 +116,7 @@ func (h *Handler) searchUsers(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), h.cfg.SearchTimeout)
 	defer cancel()
 
 	users, err := h.chat.SearchUsers(ctx, query, limit)
@@ -158,7 +160,7 @@ func (h *Handler) getIdentityKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), h.cfg.RequestTimeout)
 	defer cancel()
 
 	pubKey, err := h.chat.GetIdentityKey(ctx, userID)
@@ -186,7 +188,18 @@ func (h *Handler) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client := websocket.NewUnauthenticatedClient(h.hub, conn, h.jwtSecret, h.log)
+	client := websocket.NewUnauthenticatedClient(
+		h.hub,
+		conn,
+		h.jwtSecret,
+		h.log,
+		h.cfg.WebSocketWriteWait,
+		h.cfg.WebSocketPongWait,
+		h.cfg.WebSocketPingPeriod,
+		h.cfg.WebSocketMaxMsgSize,
+		h.cfg.WebSocketAuthTimeout,
+		h.cfg.WebSocketSendBufSize,
+	)
 	client.Start()
 }
 

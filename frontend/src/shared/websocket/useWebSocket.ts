@@ -61,22 +61,9 @@ export function useWebSocket({
     clientRef.current?.send(message);
   }, []);
 
-  const disconnect = useCallback(() => {
-    clientRef.current?.disconnect();
-  }, []);
-
-  const reconnect = useCallback(() => {
-    if (clientRef.current) {
-      clientRef.current.disconnect();
-      clientRef.current.connect();
-    }
-  }, []);
-
   return {
     state,
     isConnected: state === 'connected',
     send,
-    disconnect,
-    reconnect,
   };
 }

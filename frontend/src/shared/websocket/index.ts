@@ -9,5 +9,4 @@ export type {
   SessionEstablishedPayload,
   PeerOfflinePayload,
   PeerDisconnectedPayload,
-  WSMessageWithPayload,
 } from './types';

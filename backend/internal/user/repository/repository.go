@@ -102,7 +102,7 @@ func (r *PgRepository) SearchByUsername(ctx context.Context, query string, limit
 	}
 	defer rows.Close()
 
-	var users []domain.Summary
+	users := make([]domain.Summary, 0, limit)
 	for rows.Next() {
 		var u domain.Summary
 		if err := rows.Scan(&u.ID, &u.Username, &u.CreatedAt); err != nil {

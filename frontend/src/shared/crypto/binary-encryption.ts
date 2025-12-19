@@ -17,9 +17,14 @@ export async function encryptBinary(
   );
 
   const ciphertextArray = new Uint8Array(ciphertext);
-  const ciphertextBase64 = btoa(
-    String.fromCharCode.apply(null, Array.from(ciphertextArray)),
-  );
+  const chunkSize = 8192;
+  let ciphertextString = '';
+  for (let i = 0; i < ciphertextArray.length; i += chunkSize) {
+    const chunk = ciphertextArray.slice(i, i + chunkSize);
+    ciphertextString += String.fromCharCode.apply(null, Array.from(chunk));
+  }
+  const ciphertextBase64 = btoa(ciphertextString);
+
   const nonceBase64 = btoa(String.fromCharCode.apply(null, Array.from(nonce)));
 
   return {

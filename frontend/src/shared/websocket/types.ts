@@ -56,6 +56,7 @@ export type PeerDisconnectedPayload = {
 
 export type FileStartPayload = {
   to: string;
+  from?: string;
   file_id: string;
   filename: string;
   mime_type: string;
@@ -66,6 +67,7 @@ export type FileStartPayload = {
 
 export type FileChunkPayload = {
   to: string;
+  from?: string;
   file_id: string;
   chunk_index: number;
   total_chunks: number;
@@ -75,6 +77,7 @@ export type FileChunkPayload = {
 
 export type FileCompletePayload = {
   to: string;
+  from?: string;
   file_id: string;
 };
 
