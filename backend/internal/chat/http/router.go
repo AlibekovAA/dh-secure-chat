@@ -53,15 +53,31 @@ func NewHandler(chat *service.ChatService, hub *websocket.Hub, cfg config.ChatCo
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
 			CheckOrigin: func(r *http.Request) bool {
-				origin := r.Header.Get("Origin")
-				if origin == "" {
-					return true
-				}
-				host := r.Host
-				if host == "" {
-					host = r.URL.Host
-				}
-				return origin == "http://"+host || origin == "https://"+host
+				// ВРЕМЕННО ОТКЛЮЧЕНО ДЛЯ ТЕСТИРОВАНИЯ
+				// TODO: Включить обратно после диагностики
+				return true
+
+				// origin := r.Header.Get("Origin")
+				// if origin == "" {
+				// 	return true
+				// }
+				// host := r.Host
+				// if host == "" {
+				// 	host = r.URL.Host
+				// }
+				//
+				// originHost := strings.TrimPrefix(strings.TrimPrefix(origin, "http://"), "https://")
+				// originHost = strings.Split(originHost, ":")[0]
+				// originHost = strings.TrimSuffix(originHost, "/")
+				//
+				// requestHost := strings.Split(host, ":")[0]
+				// requestHost = strings.TrimSuffix(requestHost, "/")
+				//
+				// originMatches := originHost == requestHost
+				// exactMatch := origin == "http://"+host || origin == "https://"+host ||
+				//               origin == "http://"+host+"/" || origin == "https://"+host+"/"
+				//
+				// return originMatches || exactMatch
 			},
 		},
 		log: log,

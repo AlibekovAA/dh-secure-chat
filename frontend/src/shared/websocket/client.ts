@@ -27,6 +27,11 @@ export class WebSocketClient {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
     this.url = `${protocol}//${host}/ws/`;
+    console.log('WebSocket: URL constructed', {
+      protocol: window.location.protocol,
+      host,
+      wsUrl: this.url,
+    });
     this.handlers = handlers;
     this.sequenceManager = new SequenceManager({
       onMissingSequence: handlers.onMissingSequence,
@@ -45,9 +50,11 @@ export class WebSocketClient {
     this.setState('connecting');
 
     try {
+      console.log('WebSocket: attempting to connect to', this.url);
       this.ws = new WebSocket(this.url);
 
       this.ws.onopen = () => {
+        console.log('WebSocket: connection opened');
         this.ws?.send(
           JSON.stringify({
             type: 'auth',
@@ -119,12 +126,18 @@ export class WebSocketClient {
         }
       };
 
-      this.ws.onerror = () => {
+      this.ws.onerror = (error) => {
+        console.error('WebSocket: connection error', error);
         this.setState('error');
         this.handlers.onError?.(new Error('WebSocket connection error'));
       };
 
-      this.ws.onclose = () => {
+      this.ws.onclose = (event) => {
+        console.log('WebSocket: connection closed', {
+          code: event.code,
+          reason: event.reason,
+          wasClean: event.wasClean,
+        });
         this.setState('disconnected');
         this.ws = null;
         this.sequenceManager.reset();

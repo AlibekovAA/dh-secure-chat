@@ -23,6 +23,7 @@ type Props = {
 };
 
 export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
+  console.log('ChatWindow: rendering', { peer: peer.id, myUserId });
   const [messageText, setMessageText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isSendingFile, setIsSendingFile] = useState(false);
@@ -42,6 +43,10 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
       peerId: peer.id,
       enabled: true,
     });
+
+  useEffect(() => {
+    console.log('ChatWindow: useChatSession state changed', { state, isSessionActive, error });
+  }, [state, isSessionActive, error]);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
