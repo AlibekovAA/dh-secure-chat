@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/service"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/config"
 	commonhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/http"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 )
@@ -29,18 +31,24 @@ type tokenResponse struct {
 }
 
 type Handler struct {
-	auth *service.AuthService
-	log  *logger.Logger
+	auth           *service.AuthService
+	log            *logger.Logger
+	requestTimeout time.Duration
 }
 
-func NewHandler(auth *service.AuthService, log *logger.Logger) http.Handler {
-	h := &Handler{auth: auth, log: log}
+func NewHandler(auth *service.AuthService, cfg config.AuthConfig, log *logger.Logger) http.Handler {
+	h := &Handler{
+		auth:           auth,
+		log:            log,
+		requestTimeout: cfg.RequestTimeout,
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", commonhttp.HealthHandler(log))
 	mux.HandleFunc("/api/auth/register", h.register)
 	mux.HandleFunc("/api/auth/login", h.login)
 	mux.HandleFunc("/api/auth/refresh", h.refresh)
 	mux.HandleFunc("/api/auth/logout", h.logout)
+	mux.HandleFunc("/api/auth/revoke", h.revoke)
 	return mux
 }
 
@@ -57,7 +65,7 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), h.requestTimeout)
 	defer cancel()
 
 	var pubKey []byte
@@ -98,7 +106,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), h.requestTimeout)
 	defer cancel()
 
 	result, err := h.auth.Login(ctx, service.LoginInput{
@@ -126,7 +134,7 @@ func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), h.requestTimeout)
 	defer cancel()
 
 	result, err := h.auth.RefreshAccessToken(ctx, cookie.Value)
@@ -150,16 +158,64 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx, cancel := context.WithTimeout(r.Context(), h.requestTimeout)
+	defer cancel()
+
+	raw := r.Header.Get("Authorization")
+	if raw != "" && strings.HasPrefix(raw, "Bearer ") {
+		tokenString := strings.TrimPrefix(raw, "Bearer ")
+		claims, err := h.auth.ParseTokenForRevoke(ctx, tokenString)
+		if err == nil && claims.JTI != "" {
+			if err := h.auth.RevokeAccessToken(ctx, claims.JTI, claims.UserID); err != nil {
+				h.log.Errorf("logout revoke access token failed: %v", err)
+			}
+		}
+	}
+
 	cookie, err := r.Cookie("refresh_token")
 	if err == nil && cookie.Value != "" {
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-		defer cancel()
 		if err := h.auth.RevokeRefreshToken(ctx, cookie.Value); err != nil {
-			h.log.Errorf("logout revoke failed: %v", err)
+			h.log.Errorf("logout revoke refresh token failed: %v", err)
 		}
 	}
 
 	clearRefreshCookie(w, r)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) revoke(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		commonhttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	raw := r.Header.Get("Authorization")
+	if raw == "" || !strings.HasPrefix(raw, "Bearer ") {
+		commonhttp.WriteError(w, http.StatusUnauthorized, "missing authorization")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), h.requestTimeout)
+	defer cancel()
+
+	tokenString := strings.TrimPrefix(raw, "Bearer ")
+	claims, err := h.auth.ParseTokenForRevoke(ctx, tokenString)
+	if err != nil {
+		commonhttp.WriteError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+
+	if claims.JTI == "" {
+		commonhttp.WriteError(w, http.StatusBadRequest, "token does not have jti")
+		return
+	}
+
+	if err := h.auth.RevokeAccessToken(ctx, claims.JTI, claims.UserID); err != nil {
+		h.log.Errorf("revoke access token failed: %v", err)
+		commonhttp.WriteError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
 	w.WriteHeader(http.StatusNoContent)
 }
 

@@ -690,6 +690,20 @@ export function useChatSession({
     }
   }, [enabled, peerId, isConnected, state, startSession]);
 
+  useEffect(() => {
+    return () => {
+      for (const [, pending] of pendingAcksRef.current) {
+        clearTimeout(pending.timeout);
+      }
+      pendingAcksRef.current.clear();
+      fileBuffersRef.current.clear();
+      sessionKeyRef.current = null;
+      myEphemeralKeyRef.current = null;
+      peerEphemeralKeyRef.current = null;
+      peerIdentityPublicKeyRef.current = null;
+    };
+  }, []);
+
   return {
     state,
     messages,

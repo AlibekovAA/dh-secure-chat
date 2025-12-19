@@ -14,6 +14,7 @@ import (
 	authdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/domain"
 	authrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/repository"
 	commoncrypto "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/crypto"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/jwtverify"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 	identityservice "github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/service"
 	userdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
@@ -24,6 +25,7 @@ type AuthService struct {
 	repo             userrepo.Repository
 	identityService  *identityservice.IdentityService
 	refreshTokenRepo authrepo.RefreshTokenRepository
+	revokedTokenRepo authrepo.RevokedTokenRepository
 	hasher           commoncrypto.PasswordHasher
 	idGenerator      commoncrypto.IDGenerator
 	jwtSecret        []byte
@@ -35,6 +37,7 @@ func NewAuthService(
 	repo userrepo.Repository,
 	identityService *identityservice.IdentityService,
 	refreshTokenRepo authrepo.RefreshTokenRepository,
+	revokedTokenRepo authrepo.RevokedTokenRepository,
 	hasher commoncrypto.PasswordHasher,
 	idGenerator commoncrypto.IDGenerator,
 	jwtSecret string,
@@ -44,6 +47,7 @@ func NewAuthService(
 		repo:             repo,
 		identityService:  identityService,
 		refreshTokenRepo: refreshTokenRepo,
+		revokedTokenRepo: revokedTokenRepo,
 		hasher:           hasher,
 		idGenerator:      idGenerator,
 		jwtSecret:        []byte(jwtSecret),
@@ -277,8 +281,28 @@ func (s *AuthService) RevokeRefreshToken(ctx context.Context, refreshToken strin
 	return nil
 }
 
+func (s *AuthService) RevokeAccessToken(ctx context.Context, jti string, userID string) error {
+	if jti == "" {
+		return nil
+	}
+
+	expiresAt := s.now().Add(15 * time.Minute)
+	if err := s.revokedTokenRepo.Revoke(ctx, jti, userID, expiresAt); err != nil {
+		s.log.Errorf("revoke access token failed jti=%s user_id=%s: %v", jti, userID, err)
+		return err
+	}
+
+	accessTokensRevoked.Add(1)
+	s.log.Infof("access token revoked jti=%s user_id=%s", jti, userID)
+	return nil
+}
+
+func (s *AuthService) ParseTokenForRevoke(ctx context.Context, tokenString string) (jwtverify.Claims, error) {
+	return jwtverify.ParseToken(tokenString, s.jwtSecret)
+}
+
 func (s *AuthService) issueTokens(ctx context.Context, user userdomain.User) (string, authdomain.RefreshToken, error) {
-	accessToken, err := s.issueAccessToken(user)
+	accessToken, _, err := s.issueAccessToken(user)
 	if err != nil {
 		return "", authdomain.RefreshToken{}, err
 	}
@@ -291,16 +315,29 @@ func (s *AuthService) issueTokens(ctx context.Context, user userdomain.User) (st
 	return accessToken, refresh, nil
 }
 
-func (s *AuthService) issueAccessToken(user userdomain.User) (string, error) {
+func (s *AuthService) issueAccessToken(user userdomain.User) (string, string, error) {
+	jti, err := s.idGenerator.NewID()
+	if err != nil {
+		return "", "", err
+	}
+
+	expiresAt := s.now().Add(15 * time.Minute)
 	claims := jwt.MapClaims{
 		"sub": string(user.ID),
 		"usr": user.Username,
-		"exp": s.now().Add(15 * time.Minute).Unix(),
+		"jti": jti,
+		"exp": expiresAt.Unix(),
 		"iat": s.now().Unix(),
 	}
 
 	t := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return t.SignedString(s.jwtSecret)
+	tokenString, err := t.SignedString(s.jwtSecret)
+	if err != nil {
+		return "", "", err
+	}
+
+	accessTokensIssued.Add(1)
+	return tokenString, jti, nil
 }
 
 func (s *AuthService) issueRefreshToken(ctx context.Context, user userdomain.User) (authdomain.RefreshToken, error) {

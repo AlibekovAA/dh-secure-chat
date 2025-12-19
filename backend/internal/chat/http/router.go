@@ -9,7 +9,9 @@ import (
 	"strings"
 
 	gorillaWS "github.com/gorilla/websocket"
+	"github.com/jackc/pgx/v4/pgxpool"
 
+	authrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/repository"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/service"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/websocket"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/config"
@@ -27,6 +29,7 @@ type Handler struct {
 	upgrader  gorillaWS.Upgrader
 	log       *logger.Logger
 	cfg       config.ChatConfig
+	pool      *pgxpool.Pool
 }
 
 type meResponse struct {
@@ -39,12 +42,13 @@ type userResponse struct {
 	Username string `json:"username"`
 }
 
-func NewHandler(chat *service.ChatService, hub *websocket.Hub, cfg config.ChatConfig, log *logger.Logger) http.Handler {
+func NewHandler(chat *service.ChatService, hub *websocket.Hub, cfg config.ChatConfig, log *logger.Logger, pool *pgxpool.Pool) http.Handler {
 	h := &Handler{
 		chat:      chat,
 		hub:       hub,
 		jwtSecret: cfg.JWTSecret,
 		cfg:       cfg,
+		pool:      pool,
 		upgrader: gorillaWS.Upgrader{
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
@@ -153,10 +157,16 @@ func (h *Handler) getIdentityKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID := strings.TrimPrefix(urlPath, "/api/chat/users/")
-	userID = strings.TrimSuffix(userID, "/identity-key")
-	if userID == "" {
+	userID, ok := commonhttp.ExtractUserIDFromPath(urlPath)
+	if !ok || userID == "" {
 		commonhttp.WriteError(w, http.StatusBadRequest, "user_id is required")
+		return
+	}
+
+	userID = strings.TrimSuffix(userID, "/identity-key")
+	if err := commonhttp.ValidateUUID(userID); err != nil {
+		h.log.Warnf("chat/identity-key failed: invalid user_id format user_id=%s", userID)
+		commonhttp.WriteError(w, http.StatusBadRequest, "invalid user_id format (must be UUID)")
 		return
 	}
 
@@ -188,11 +198,13 @@ func (h *Handler) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	revokedTokenRepo := authrepo.NewPgRevokedTokenRepository(h.pool)
 	client := websocket.NewUnauthenticatedClient(
 		h.hub,
 		conn,
 		h.jwtSecret,
 		h.log,
+		revokedTokenRepo,
 		h.cfg.WebSocketWriteWait,
 		h.cfg.WebSocketPongWait,
 		h.cfg.WebSocketPingPeriod,

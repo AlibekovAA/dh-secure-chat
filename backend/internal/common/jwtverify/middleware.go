@@ -3,6 +3,7 @@ package jwtverify
 import (
 	"context"
 	"errors"
+	"expvar"
 	"net/http"
 	"strings"
 
@@ -12,33 +13,65 @@ import (
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 )
 
+var (
+	jwtValidationsTotal   = expvar.NewInt("jwt_validations_total")
+	jwtValidationsFailed  = expvar.NewInt("jwt_validations_failed")
+	jwtRevokedChecksTotal = expvar.NewInt("jwt_revoked_checks_total")
+)
+
+type RevokedTokenChecker interface {
+	IsRevoked(ctx context.Context, jti string) (bool, error)
+}
+
 type Claims struct {
 	UserID   string
 	Username string
+	JTI      string
 }
 
 type contextKey string
 
 const claimsKey contextKey = "jwt_claims"
 
-func Middleware(secret string, log *logger.Logger) func(next http.Handler) http.Handler {
+func Middleware(secret string, log *logger.Logger, checker RevokedTokenChecker) func(next http.Handler) http.Handler {
 	secretBytes := []byte(secret)
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			raw := r.Header.Get("Authorization")
 			if raw == "" || !strings.HasPrefix(raw, "Bearer ") {
+				jwtValidationsTotal.Add(1)
+				jwtValidationsFailed.Add(1)
 				log.Warnf("jwt auth failed path=%s: missing or invalid authorization header", r.URL.Path)
 				commonhttp.WriteError(w, http.StatusUnauthorized, "missing or invalid authorization")
 				return
 			}
 
 			tokenString := strings.TrimPrefix(raw, "Bearer ")
+			jwtValidationsTotal.Add(1)
 			claims, err := parseToken(tokenString, secretBytes)
 			if err != nil {
+				jwtValidationsFailed.Add(1)
 				log.Warnf("jwt auth failed path=%s: %v", r.URL.Path, err)
 				commonhttp.WriteError(w, http.StatusUnauthorized, "invalid token")
 				return
+			}
+
+			if checker != nil && claims.JTI != "" {
+				jwtRevokedChecksTotal.Add(1)
+				revoked, err := checker.IsRevoked(r.Context(), claims.JTI)
+				if err != nil {
+					jwtValidationsFailed.Add(1)
+					log.Errorf("jwt auth failed path=%s: failed to check revoked token jti=%s: %v", r.URL.Path, claims.JTI, err)
+					commonhttp.WriteError(w, http.StatusInternalServerError, "internal error")
+					return
+				}
+				if revoked {
+					jwtValidationsFailed.Add(1)
+					log.Warnf("jwt auth failed path=%s: token revoked jti=%s", r.URL.Path, claims.JTI)
+					commonhttp.WriteError(w, http.StatusUnauthorized, "token revoked")
+					return
+				}
 			}
 
 			ctx := context.WithValue(r.Context(), claimsKey, claims)
@@ -78,6 +111,7 @@ func parseToken(tokenString string, secret []byte) (Claims, error) {
 
 	sub, _ := mapClaims["sub"].(string)
 	username, _ := mapClaims["usr"].(string)
+	jti, _ := mapClaims["jti"].(string)
 	if sub == "" || username == "" {
 		return Claims{}, errors.New("missing sub or usr claims")
 	}
@@ -85,5 +119,6 @@ func parseToken(tokenString string, secret []byte) (Claims, error) {
 	return Claims{
 		UserID:   sub,
 		Username: username,
+		JTI:      jti,
 	}, nil
 }

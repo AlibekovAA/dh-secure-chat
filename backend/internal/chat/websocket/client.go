@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"context"
 	"encoding/json"
 	"time"
 
@@ -11,34 +12,41 @@ import (
 )
 
 type Client struct {
-	hub           *Hub
-	conn          *gorillaWS.Conn
-	userID        string
-	username      string
-	send          chan []byte
-	log           *logger.Logger
-	authenticated bool
-	jwtSecret     []byte
-	writeWait     time.Duration
-	pongWait      time.Duration
-	pingPeriod    time.Duration
-	maxMsgSize    int64
-	authTimeout   time.Duration
+	hub                 *Hub
+	conn                *gorillaWS.Conn
+	userID              string
+	username            string
+	send                chan []byte
+	log                 *logger.Logger
+	authenticated       bool
+	jwtSecret           []byte
+	revokedTokenChecker jwtverify.RevokedTokenChecker
+	writeWait           time.Duration
+	pongWait            time.Duration
+	pingPeriod          time.Duration
+	maxMsgSize          int64
+	authTimeout         time.Duration
+	ctx                 context.Context
+	cancel              context.CancelFunc
 }
 
-func NewUnauthenticatedClient(hub *Hub, conn *gorillaWS.Conn, jwtSecret string, log *logger.Logger, writeWait, pongWait, pingPeriod time.Duration, maxMsgSize int64, authTimeout time.Duration, sendBufSize int) *Client {
+func NewUnauthenticatedClient(hub *Hub, conn *gorillaWS.Conn, jwtSecret string, log *logger.Logger, revokedTokenChecker jwtverify.RevokedTokenChecker, writeWait, pongWait, pingPeriod time.Duration, maxMsgSize int64, authTimeout time.Duration, sendBufSize int) *Client {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &Client{
-		hub:           hub,
-		conn:          conn,
-		send:          make(chan []byte, sendBufSize),
-		log:           log,
-		authenticated: false,
-		jwtSecret:     []byte(jwtSecret),
-		writeWait:     writeWait,
-		pongWait:      pongWait,
-		pingPeriod:    pingPeriod,
-		maxMsgSize:    maxMsgSize,
-		authTimeout:   authTimeout,
+		hub:                 hub,
+		conn:                conn,
+		send:                make(chan []byte, sendBufSize),
+		log:                 log,
+		authenticated:       false,
+		jwtSecret:           []byte(jwtSecret),
+		revokedTokenChecker: revokedTokenChecker,
+		writeWait:           writeWait,
+		pongWait:            pongWait,
+		pingPeriod:          pingPeriod,
+		maxMsgSize:          maxMsgSize,
+		authTimeout:         authTimeout,
+		ctx:                 ctx,
+		cancel:              cancel,
 	}
 }
 
@@ -47,12 +55,17 @@ func (c *Client) Start() {
 	go c.readPump()
 }
 
+func (c *Client) Stop() {
+	c.cancel()
+}
+
 func (c *Client) readPump() {
 	defer func() {
 		if c.authenticated {
 			c.hub.Unregister(c)
 		}
 		c.conn.Close()
+		c.cancel()
 	}()
 
 	if !c.authenticated {
@@ -67,6 +80,12 @@ func (c *Client) readPump() {
 	})
 
 	for {
+		select {
+		case <-c.ctx.Done():
+			return
+		default:
+		}
+
 		_, messageBytes, err := c.conn.ReadMessage()
 		if err != nil {
 			if gorillaWS.IsUnexpectedCloseError(err, gorillaWS.CloseGoingAway, gorillaWS.CloseAbnormalClosure) {
@@ -76,7 +95,7 @@ func (c *Client) readPump() {
 					c.log.Warnf("websocket read error (unauthenticated): %v", err)
 				}
 			}
-			break
+			return
 		}
 
 		var msg WSMessage
@@ -108,6 +127,20 @@ func (c *Client) readPump() {
 				c.log.Warnf("websocket authentication failed: %v", err)
 				c.conn.WriteMessage(gorillaWS.CloseMessage, gorillaWS.FormatCloseMessage(gorillaWS.ClosePolicyViolation, "invalid token"))
 				break
+			}
+
+			if c.revokedTokenChecker != nil && claims.JTI != "" {
+				revoked, err := c.revokedTokenChecker.IsRevoked(c.ctx, claims.JTI)
+				if err != nil {
+					c.log.Errorf("websocket authentication failed: failed to check revoked token jti=%s: %v", claims.JTI, err)
+					c.conn.WriteMessage(gorillaWS.CloseMessage, gorillaWS.FormatCloseMessage(gorillaWS.CloseInternalServerErr, "internal error"))
+					break
+				}
+				if revoked {
+					c.log.Warnf("websocket authentication failed: token revoked jti=%s", claims.JTI)
+					c.conn.WriteMessage(gorillaWS.CloseMessage, gorillaWS.FormatCloseMessage(gorillaWS.ClosePolicyViolation, "token revoked"))
+					break
+				}
 			}
 
 			c.userID = claims.UserID
@@ -146,6 +179,10 @@ func (c *Client) writePump() {
 
 	for {
 		select {
+		case <-c.ctx.Done():
+			c.conn.WriteMessage(gorillaWS.CloseMessage, []byte{})
+			return
+
 		case message, ok := <-c.send:
 			c.conn.SetWriteDeadline(time.Now().Add(c.writeWait))
 			if !ok {
@@ -161,8 +198,14 @@ func (c *Client) writePump() {
 
 			n := len(c.send)
 			for i := 0; i < n; i++ {
-				w.Write([]byte{'\n'})
-				w.Write(<-c.send)
+				select {
+				case <-c.ctx.Done():
+					w.Close()
+					return
+				case msg := <-c.send:
+					w.Write([]byte{'\n'})
+					w.Write(msg)
+				}
 			}
 
 			if err := w.Close(); err != nil {

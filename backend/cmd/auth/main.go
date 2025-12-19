@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	authcleanup "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/cleanup"
 	authhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/http"
 	authrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/repository"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/service"
@@ -23,7 +24,14 @@ import (
 )
 
 func main() {
-	cfg := config.LoadAuthConfig()
+	cfg, err := config.LoadAuthConfig()
+	if err != nil {
+		log := logger.GetInstance()
+		if initErr := log.Initialize(os.Getenv("LOG_DIR"), "auth", os.Getenv("LOG_LEVEL")); initErr != nil {
+			os.Exit(1)
+		}
+		log.Fatalf("failed to load config: %v", err)
+	}
 
 	log := logger.GetInstance()
 	if err := log.Initialize(os.Getenv("LOG_DIR"), "auth", os.Getenv("LOG_LEVEL")); err != nil {
@@ -37,16 +45,18 @@ func main() {
 	identityRepo := identityrepo.NewPgRepository(pool)
 	identityService := identityservice.NewIdentityService(identityRepo, log)
 	refreshTokenRepo := authrepo.NewPgRefreshTokenRepository(pool)
+	revokedTokenRepo := authrepo.NewPgRevokedTokenRepository(pool)
 	hasher := &commoncrypto.BcryptHasher{}
 	idGenerator := &commoncrypto.UUIDGenerator{}
-	authService := service.NewAuthService(userRepo, identityService, refreshTokenRepo, hasher, idGenerator, cfg.JWTSecret, log)
+	authService := service.NewAuthService(userRepo, identityService, refreshTokenRepo, revokedTokenRepo, hasher, idGenerator, cfg.JWTSecret, log)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go startRefreshTokenCleanup(ctx, refreshTokenRepo, log)
+	go authcleanup.StartRefreshTokenCleanup(ctx, refreshTokenRepo, log)
+	go authcleanup.StartRevokedTokenCleanup(ctx, revokedTokenRepo, log)
 
-	handler := authhttp.NewHandler(authService, log)
+	handler := authhttp.NewHandler(authService, cfg, log)
 
 	mux := http.NewServeMux()
 	mux.Handle("/", handler)
@@ -55,10 +65,11 @@ func main() {
 	metrics := httpmetrics.New("auth")
 	recovery := commonhttp.RecoveryMiddleware(log)
 	traceID := commonhttp.TraceIDMiddleware
+	maxRequestSize := commonhttp.MaxRequestSizeMiddleware(commonhttp.DefaultMaxRequestSize)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.HTTPPort,
-		Handler:           recovery(traceID(metrics.Wrap(mux))),
+		Handler:           recovery(traceID(maxRequestSize(metrics.Wrap(mux)))),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,
@@ -68,25 +79,4 @@ func main() {
 	srv.StartWithGracefulShutdown(server, log, "auth")
 
 	cancel()
-}
-
-func startRefreshTokenCleanup(ctx context.Context, repo authrepo.RefreshTokenRepository, log *logger.Logger) {
-	ticker := time.NewTicker(time.Hour)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			deleted, err := repo.DeleteExpired(ctx)
-			if err != nil {
-				log.Errorf("refresh token cleanup failed: %v", err)
-				continue
-			}
-			if deleted > 0 {
-				log.Infof("refresh token cleanup: deleted %d expired tokens", deleted)
-			}
-		}
-	}
 }

@@ -1,16 +1,23 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
 	"time"
 )
 
+var (
+	ErrMissingRequiredEnv = errors.New("missing required environment variable")
+	ErrInvalidJWTSecret   = errors.New("JWT_SECRET must be at least 32 bytes")
+)
+
 type AuthConfig struct {
-	HTTPPort    string
-	DatabaseURL string
-	JWTSecret   string
+	HTTPPort       string
+	DatabaseURL    string
+	JWTSecret      string
+	RequestTimeout time.Duration
 }
 
 type ChatConfig struct {
@@ -28,24 +35,47 @@ type ChatConfig struct {
 	SearchTimeout          time.Duration
 }
 
-func LoadAuthConfig() AuthConfig {
-	jwtSecret := mustEnv("JWT_SECRET")
-	validateJWTSecret(jwtSecret)
+func LoadAuthConfig() (AuthConfig, error) {
+	jwtSecret, err := mustEnv("JWT_SECRET")
+	if err != nil {
+		return AuthConfig{}, err
+	}
+
+	if err := validateJWTSecret(jwtSecret); err != nil {
+		return AuthConfig{}, err
+	}
+
+	databaseURL, err := mustEnv("DATABASE_URL")
+	if err != nil {
+		return AuthConfig{}, err
+	}
 
 	return AuthConfig{
-		HTTPPort:    getEnv("AUTH_HTTP_PORT", "8081"),
-		DatabaseURL: mustEnv("DATABASE_URL"),
-		JWTSecret:   jwtSecret,
-	}
+		HTTPPort:       getEnv("AUTH_HTTP_PORT", "8081"),
+		DatabaseURL:    databaseURL,
+		JWTSecret:      jwtSecret,
+		RequestTimeout: getDurationEnv("AUTH_REQUEST_TIMEOUT", 5*time.Second),
+	}, nil
 }
 
-func LoadChatConfig() ChatConfig {
-	jwtSecret := mustEnv("JWT_SECRET")
-	validateJWTSecret(jwtSecret)
+func LoadChatConfig() (ChatConfig, error) {
+	jwtSecret, err := mustEnv("JWT_SECRET")
+	if err != nil {
+		return ChatConfig{}, err
+	}
+
+	if err := validateJWTSecret(jwtSecret); err != nil {
+		return ChatConfig{}, err
+	}
+
+	databaseURL, err := mustEnv("DATABASE_URL")
+	if err != nil {
+		return ChatConfig{}, err
+	}
 
 	return ChatConfig{
 		HTTPPort:               getEnv("CHAT_HTTP_PORT", "8082"),
-		DatabaseURL:            mustEnv("DATABASE_URL"),
+		DatabaseURL:            databaseURL,
 		JWTSecret:              jwtSecret,
 		WebSocketWriteWait:     getDurationEnv("CHAT_WS_WRITE_WAIT", 10*time.Second),
 		WebSocketPongWait:      getDurationEnv("CHAT_WS_PONG_WAIT", 60*time.Second),
@@ -56,13 +86,14 @@ func LoadChatConfig() ChatConfig {
 		LastSeenUpdateInterval: getDurationEnv("CHAT_LAST_SEEN_INTERVAL", 1*time.Minute),
 		RequestTimeout:         getDurationEnv("CHAT_REQUEST_TIMEOUT", 5*time.Second),
 		SearchTimeout:          getDurationEnv("CHAT_SEARCH_TIMEOUT", 10*time.Second),
-	}
+	}, nil
 }
 
-func validateJWTSecret(secret string) {
+func validateJWTSecret(secret string) error {
 	if len(secret) < 32 {
-		panic(fmt.Sprintf("JWT_SECRET must be at least 32 bytes, got %d bytes", len(secret)))
+		return fmt.Errorf("%w: got %d bytes", ErrInvalidJWTSecret, len(secret))
 	}
+	return nil
 }
 
 func getEnv(key, fallback string) string {
@@ -72,12 +103,12 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
-func mustEnv(key string) string {
+func mustEnv(key string) (string, error) {
 	v, ok := os.LookupEnv(key)
 	if !ok || v == "" {
-		panic("missing required env: " + key)
+		return "", fmt.Errorf("%w: %s", ErrMissingRequiredEnv, key)
 	}
-	return v
+	return v, nil
 }
 
 func getDurationEnv(key string, fallback time.Duration) time.Duration {

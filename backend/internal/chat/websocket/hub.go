@@ -55,6 +55,7 @@ func (h *Hub) Run(ctx context.Context) {
 			h.mu.Lock()
 			if existing, ok := h.clients[client.userID]; ok {
 				h.log.Infof("websocket closing existing connection user_id=%s username=%s", existing.userID, existing.username)
+				existing.Stop()
 				close(existing.send)
 				delete(h.clients, existing.userID)
 				metrics.DecrementActiveWebSocketConnections()
@@ -81,6 +82,7 @@ func (h *Hub) shutdown() {
 	h.mu.Unlock()
 
 	for _, client := range clients {
+		client.Stop()
 		select {
 		case client.send <- []byte(`{"type":"shutdown"}`):
 		default:
@@ -113,13 +115,52 @@ func (h *Hub) SendToUser(userID string, message *WSMessage) bool {
 		return false
 	}
 
+	return h.sendWithRetry(sendChan, messageBytes, userID, string(message.Type))
+}
+
+func (h *Hub) sendWithRetry(sendChan chan []byte, messageBytes []byte, userID, messageType string) bool {
+	const maxRetries = 3
+	const baseDelay = 10 * time.Millisecond
+	const maxDelay = 100 * time.Millisecond
+
 	select {
 	case sendChan <- messageBytes:
 		return true
 	default:
-		h.log.Warnf("websocket send buffer full user_id=%s", userID)
-		return false
+		h.log.Warnf("websocket send buffer full user_id=%s type=%s, attempting retry", userID, messageType)
 	}
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		select {
+		case <-sendChan:
+			select {
+			case sendChan <- messageBytes:
+				return true
+			default:
+				delay := baseDelay * (1 << attempt)
+				if delay > maxDelay {
+					delay = maxDelay
+				}
+				time.Sleep(delay)
+			}
+		default:
+			delay := baseDelay * (1 << attempt)
+			if delay > maxDelay {
+				delay = maxDelay
+			}
+			time.Sleep(delay)
+
+			select {
+			case sendChan <- messageBytes:
+				return true
+			default:
+				continue
+			}
+		}
+	}
+
+	h.log.Warnf("websocket failed to send after %d retries user_id=%s type=%s", maxRetries, userID, messageType)
+	return false
 }
 
 func (h *Hub) IsUserOnline(userID string) bool {
@@ -210,7 +251,9 @@ func (h *Hub) HandleMessage(client *Client, msg *WSMessage) {
 			Type:    msg.Type,
 			Payload: payloadBytes,
 		}
-		h.forwardMessageWithModifiedPayload(forwardMsg, payload, true, client.userID)
+		if h.forwardMessageWithModifiedPayload(forwardMsg, payload, true, client.userID) {
+			metrics.IncrementWebSocketMessage("ephemeral_key")
+		}
 
 	case TypeMessage:
 		var payload MessagePayload
@@ -218,7 +261,9 @@ func (h *Hub) HandleMessage(client *Client, msg *WSMessage) {
 			h.log.Warnf("websocket invalid message payload user_id=%s: %v", client.userID, err)
 			return
 		}
-		h.forwardMessage(client, msg, payload, true)
+		if h.forwardMessage(client, msg, payload, true) {
+			metrics.IncrementWebSocketMessage("message")
+		}
 
 	case TypeSessionEstablished:
 		var payload SessionEstablishedPayload
@@ -226,7 +271,9 @@ func (h *Hub) HandleMessage(client *Client, msg *WSMessage) {
 			h.log.Warnf("websocket invalid session_established payload user_id=%s: %v", client.userID, err)
 			return
 		}
-		h.forwardMessage(client, msg, payload, false)
+		if h.forwardMessage(client, msg, payload, false) {
+			metrics.IncrementWebSocketMessage("session_established")
+		}
 
 	case TypeFileStart:
 		var payload FileStartPayload
@@ -246,7 +293,10 @@ func (h *Hub) HandleMessage(client *Client, msg *WSMessage) {
 			Payload: payloadBytes,
 		}
 		h.log.Debugf("websocket file_start from=%s to=%s file_id=%s filename=%s", client.userID, payload.To, payload.FileID, payload.Filename)
-		h.forwardMessageWithModifiedPayload(forwardMsg, payload, true, client.userID)
+		if h.forwardMessageWithModifiedPayload(forwardMsg, payload, true, client.userID) {
+			metrics.IncrementWebSocketFile()
+			metrics.IncrementWebSocketMessage("file_start")
+		}
 
 	case TypeFileChunk:
 		var payload FileChunkPayload
@@ -266,7 +316,10 @@ func (h *Hub) HandleMessage(client *Client, msg *WSMessage) {
 			Payload: payloadBytes,
 		}
 		h.log.Debugf("websocket file_chunk from=%s to=%s file_id=%s chunk_index=%d/%d", client.userID, payload.To, payload.FileID, payload.ChunkIndex, payload.TotalChunks)
-		h.forwardMessageWithModifiedPayload(forwardMsg, payload, true, client.userID)
+		if h.forwardMessageWithModifiedPayload(forwardMsg, payload, true, client.userID) {
+			metrics.IncrementWebSocketFileChunk()
+			metrics.IncrementWebSocketMessage("file_chunk")
+		}
 
 	case TypeFileComplete:
 		var payload FileCompletePayload
@@ -286,7 +339,9 @@ func (h *Hub) HandleMessage(client *Client, msg *WSMessage) {
 			Payload: payloadBytes,
 		}
 		h.log.Debugf("websocket file_complete from=%s to=%s file_id=%s", client.userID, payload.To, payload.FileID)
-		h.forwardMessageWithModifiedPayload(forwardMsg, payload, true, client.userID)
+		if h.forwardMessageWithModifiedPayload(forwardMsg, payload, true, client.userID) {
+			metrics.IncrementWebSocketMessage("file_complete")
+		}
 
 	case TypeAck:
 		var payload AckPayload
@@ -294,7 +349,9 @@ func (h *Hub) HandleMessage(client *Client, msg *WSMessage) {
 			h.log.Warnf("websocket invalid ack payload user_id=%s: %v", client.userID, err)
 			return
 		}
-		h.forwardMessage(client, msg, payload, false)
+		if h.forwardMessage(client, msg, payload, false) {
+			metrics.IncrementWebSocketMessage("ack")
+		}
 
 	default:
 		h.log.Warnf("websocket unknown message type user_id=%s type=%s", client.userID, msg.Type)
@@ -318,6 +375,7 @@ func (h *Hub) handleUnregister(client *Client) {
 	}
 	h.mu.Unlock()
 
+	client.Stop()
 	close(client.send)
 	metrics.DecrementActiveWebSocketConnections()
 	h.log.Infof("websocket client unregistered user_id=%s username=%s total=%d", client.userID, client.username, totalClients)

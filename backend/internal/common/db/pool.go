@@ -28,6 +28,7 @@ func NewPool(log *logger.Logger, databaseURL string) *pgxpool.Pool {
 		pool, err := pgxpool.ConnectConfig(context.Background(), cfg)
 		if err == nil {
 			log.Infof("database connection pool initialized: max=%d, min=%d", cfg.MaxConns, cfg.MinConns)
+			StartPoolMetrics(pool, 30*time.Second)
 			return pool
 		}
 
@@ -35,10 +36,12 @@ func NewPool(log *logger.Logger, databaseURL string) *pgxpool.Pool {
 
 		if attempt == maxAttempts {
 			log.Fatalf("failed to connect to database after %d attempts: %v", maxAttempts, err)
+			return nil
 		}
 
 		time.Sleep(delay)
 	}
 
-	panic("unreachable code: failed to connect to database after all attempts")
+	log.Fatalf("failed to connect to database after %d attempts", maxAttempts)
+	return nil
 }
