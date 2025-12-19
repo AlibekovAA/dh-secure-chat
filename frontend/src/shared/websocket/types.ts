@@ -1,4 +1,5 @@
 export type MessageType =
+  | 'auth'
   | 'ephemeral_key'
   | 'message'
   | 'session_established'
@@ -6,7 +7,8 @@ export type MessageType =
   | 'peer_disconnected'
   | 'file_start'
   | 'file_chunk'
-  | 'file_complete';
+  | 'file_complete'
+  | 'ack';
 
 export type ConnectionState =
   | 'connecting'
@@ -21,7 +23,16 @@ export type WSMessage = {
 
 export type EphemeralKeyPayload = {
   to: string;
+  from?: string;
   public_key: string;
+  signature: string;
+  message_id: string;
+  requires_ack: true;
+};
+
+export type AckPayload = {
+  to: string;
+  message_id: string;
 };
 
 export type MessagePayload = {

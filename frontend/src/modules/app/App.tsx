@@ -98,6 +98,22 @@ export function App() {
   }, [refreshAccessToken]);
 
   useEffect(() => {
+    const handleBeforeUnload = () => {
+      try {
+        import("../../shared/storage/indexeddb").then(({ clearAllKeys }) => {
+          clearAllKeys().catch(() => {});
+        });
+      } catch {
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!token) {
       setProfile(null);
       setSearchResults([]);
@@ -169,6 +185,15 @@ export function App() {
       setSearchResults([]);
       setSearchQuery("");
       setHasSearched(false);
+
+      try {
+        const { removeToken } = await import("../../shared/storage/token");
+        removeToken();
+
+        const { clearAllKeys } = await import("../../shared/storage/indexeddb");
+        await clearAllKeys();
+      } catch {
+      }
     }
   }, []);
 

@@ -10,9 +10,18 @@ import type {
   FileStartPayload,
   FileChunkPayload,
   FileCompletePayload,
+  AckPayload,
 } from '../../shared/websocket/types';
 import { generateEphemeralKeyPair } from '../../shared/crypto/ephemeral';
-import { exportPublicKey, importPublicKey } from '../../shared/crypto/identity';
+import {
+  exportPublicKey,
+  importPublicKey,
+  loadIdentityPrivateKey,
+} from '../../shared/crypto/identity';
+import {
+  signEphemeralKey,
+  verifyEphemeralKeySignature,
+} from '../../shared/crypto/signature';
 import { deriveSessionKey } from '../../shared/crypto/session';
 import { encrypt, decrypt } from '../../shared/crypto/encryption';
 import {
@@ -21,6 +30,7 @@ import {
   calculateChunks,
   getChunkSize,
 } from '../../shared/crypto/file-encryption';
+import { getIdentityKey } from './api';
 import type { SessionKey } from '../../shared/crypto/session';
 
 export type ChatSessionState =
@@ -47,14 +57,12 @@ export type ChatMessage = {
 type UseChatSessionOptions = {
   token: string | null;
   peerId: string | null;
-  peerUsername: string;
   enabled: boolean;
 };
 
 export function useChatSession({
   token,
   peerId,
-  peerUsername,
   enabled,
 }: UseChatSessionOptions) {
   const [state, setState] = useState<ChatSessionState>('idle');
@@ -77,6 +85,22 @@ export function useChatSession({
       }
     >
   >(new Map());
+  const myIdentityPrivateKeyRef = useRef<CryptoKey | null>(null);
+  const peerIdentityPublicKeyRef = useRef<string | null>(null);
+  const pendingAcksRef = useRef<
+    Map<
+      string,
+      {
+        message: WSMessage;
+        timeout: number;
+        retries: number;
+        timestamp: number;
+      }
+    >
+  >(new Map());
+  const ACK_TIMEOUT = 5000;
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY = 1000;
 
   const handleIncomingMessage = useCallback(async (payload: MessagePayload) => {
     if (!sessionKeyRef.current) return;
@@ -103,13 +127,11 @@ export function useChatSession({
 
   const handleIncomingFile = useCallback(async (fileId: string) => {
     if (!sessionKeyRef.current) {
-      console.warn('handleIncomingFile: no session key', fileId);
       return;
     }
 
     const buffer = fileBuffersRef.current.get(fileId);
     if (!buffer) {
-      console.warn('handleIncomingFile: no buffer for file', fileId);
       return;
     }
 
@@ -120,10 +142,6 @@ export function useChatSession({
     for (let i = 0; i < expectedChunks; i++) {
       const chunk = chunks[i];
       if (!chunk || !chunk.ciphertext || !chunk.nonce) {
-        console.warn(
-          `handleIncomingFile: missing chunk ${i} of ${expectedChunks} for file`,
-          fileId,
-        );
         setError(
           `Не все части файла получены (${sortedChunks.length}/${expectedChunks})`,
         );
@@ -150,7 +168,6 @@ export function useChatSession({
       setMessages((prev) => [...prev, newMessage]);
       fileBuffersRef.current.delete(fileId);
     } catch (err) {
-      console.error('handleIncomingFile: decrypt error', err);
       setError('Ошибка расшифровки файла');
       fileBuffersRef.current.delete(fileId);
     }
@@ -178,7 +195,13 @@ export function useChatSession({
               }
               return currentState;
             });
-            handlePeerEphemeralKey(payload.public_key);
+            handlePeerEphemeralKey(payload);
+            break;
+          }
+
+          case 'ack': {
+            const payload = message.payload as AckPayload;
+            handleAck(payload.message_id);
             break;
           }
 
@@ -200,6 +223,11 @@ export function useChatSession({
           case 'peer_offline': {
             const payload = message.payload as PeerOfflinePayload;
             if (payload.peer_id === peerId) {
+              for (const [, pending] of pendingAcksRef.current) {
+                clearTimeout(pending.timeout);
+              }
+              pendingAcksRef.current.clear();
+
               setState('peer_offline');
               setError('Собеседник не в сети');
             }
@@ -226,11 +254,6 @@ export function useChatSession({
                 chunks: [],
                 metadata: payload,
               });
-              console.log(
-                'file_start received',
-                payload.file_id,
-                payload.total_chunks,
-              );
             }
             break;
           }
@@ -248,18 +271,7 @@ export function useChatSession({
                     ciphertext: payload.ciphertext,
                     nonce: payload.nonce,
                   };
-                  const received = buffer.chunks.filter(
-                    (c) => c !== undefined,
-                  ).length;
-                  console.log(
-                    `file_chunk received ${payload.chunk_index + 1}/${
-                      payload.total_chunks
-                    } (${received} total)`,
-                    payload.file_id,
-                  );
                 }
-              } else {
-                console.warn('file_chunk: no buffer for', payload.file_id);
               }
             }
             break;
@@ -268,7 +280,6 @@ export function useChatSession({
           case 'file_complete': {
             const payload = message.payload as FileCompletePayload;
             if (payload.to === peerId) {
-              console.log('file_complete received', payload.file_id);
               handleIncomingFile(payload.file_id);
             }
             break;
@@ -283,14 +294,101 @@ export function useChatSession({
     }, []),
   });
 
+  const handleAck = useCallback((messageId: string) => {
+    const pending = pendingAcksRef.current.get(messageId);
+    if (pending) {
+      clearTimeout(pending.timeout);
+      pendingAcksRef.current.delete(messageId);
+    }
+  }, []);
+
+  const scheduleRetry = useCallback(
+    (messageId: string) => {
+      const pending = pendingAcksRef.current.get(messageId);
+      if (!pending) return;
+
+      pending.retries++;
+      if (pending.retries >= MAX_RETRIES) {
+        pendingAcksRef.current.delete(messageId);
+        setError('Не удалось доставить ключ. Попробуйте переподключиться.');
+        setState('error');
+        return;
+      }
+
+      const retryTimeout = setTimeout(() => {
+        send(pending.message);
+        const ackTimeout = setTimeout(() => {
+          scheduleRetry(messageId);
+        }, ACK_TIMEOUT) as unknown as number;
+        pending.timeout = ackTimeout;
+      }, RETRY_DELAY) as unknown as number;
+
+      pending.timeout = retryTimeout;
+    },
+    [send],
+  );
+
+  const sendWithAck = useCallback(
+    (message: WSMessage, requiresAck: boolean) => {
+      if (!requiresAck) {
+        send(message);
+        return;
+      }
+
+      const payload = message.payload as EphemeralKeyPayload;
+      const messageId = payload.message_id;
+
+      const timeout = setTimeout(() => {
+        scheduleRetry(messageId);
+      }, ACK_TIMEOUT) as unknown as number;
+
+      pendingAcksRef.current.set(messageId, {
+        message,
+        timeout,
+        retries: 0,
+        timestamp: Date.now(),
+      });
+
+      send(message);
+    },
+    [send, scheduleRetry],
+  );
+
   const handlePeerEphemeralKey = useCallback(
-    async (peerPublicKeyBase64: string) => {
-      if (!peerId) {
+    async (payload: EphemeralKeyPayload) => {
+      if (!peerId || !token) {
         return;
       }
 
       try {
-        const peerPublicKey = await importPublicKey(peerPublicKeyBase64);
+        if (!peerIdentityPublicKeyRef.current) {
+          const identityKeyResponse = await getIdentityKey(peerId, token);
+          peerIdentityPublicKeyRef.current = identityKeyResponse.public_key;
+        }
+
+        const isValid = await verifyEphemeralKeySignature(
+          payload.public_key,
+          payload.signature,
+          peerIdentityPublicKeyRef.current,
+        );
+
+        if (!isValid) {
+          setError('Ошибка проверки подписи ключа');
+          setState('error');
+          return;
+        }
+
+        if (payload.requires_ack && payload.from) {
+          send({
+            type: 'ack',
+            payload: {
+              to: payload.from,
+              message_id: payload.message_id,
+            },
+          });
+        }
+
+        const peerPublicKey = await importPublicKey(payload.public_key);
         peerEphemeralKeyRef.current = peerPublicKey;
 
         if (myEphemeralKeyRef.current) {
@@ -319,7 +417,7 @@ export function useChatSession({
         setState('error');
       }
     },
-    [peerId, send, state],
+    [peerId, token, send, state],
   );
 
   const startSession = useCallback(async () => {
@@ -331,8 +429,24 @@ export function useChatSession({
     sessionKeyRef.current = null;
     myEphemeralKeyRef.current = null;
     peerEphemeralKeyRef.current = null;
+    peerIdentityPublicKeyRef.current = null;
+
+    for (const [, pending] of pendingAcksRef.current) {
+      clearTimeout(pending.timeout);
+    }
+    pendingAcksRef.current.clear();
 
     try {
+      if (!myIdentityPrivateKeyRef.current) {
+        const identityKey = await loadIdentityPrivateKey();
+        if (!identityKey) {
+          setError('Не найден приватный ключ');
+          setState('error');
+          return;
+        }
+        myIdentityPrivateKeyRef.current = identityKey;
+      }
+
       const myEphemeral = await generateEphemeralKeyPair();
       myEphemeralKeyRef.current = myEphemeral;
 
@@ -340,13 +454,28 @@ export function useChatSession({
         myEphemeral.publicKey,
       );
 
-      send({
-        type: 'ephemeral_key',
-        payload: {
-          to: peerId,
-          public_key: myEphemeralPublicKeyBase64,
+      const signature = await signEphemeralKey(
+        myEphemeralPublicKeyBase64,
+        myIdentityPrivateKeyRef.current,
+      );
+
+      const messageId = `ephemeral-${Date.now()}-${Math.random()
+        .toString(36)
+        .substr(2, 9)}`;
+
+      sendWithAck(
+        {
+          type: 'ephemeral_key',
+          payload: {
+            to: peerId,
+            public_key: myEphemeralPublicKeyBase64,
+            signature,
+            message_id: messageId,
+            requires_ack: true,
+          },
         },
-      });
+        true,
+      );
 
       if (peerEphemeralKeyRef.current) {
         const sessionKey = await deriveSessionKey(
@@ -368,10 +497,12 @@ export function useChatSession({
         setError(null);
       }
     } catch (err) {
-      setError('Ошибка установки сессии');
+      const errorMessage =
+        err instanceof Error ? err.message : 'Ошибка установки сессии';
+      setError(`Ошибка установки сессии: ${errorMessage}`);
       setState('error');
     }
-  }, [token, peerId, isConnected, send]);
+  }, [token, peerId, isConnected, send, sendWithAck]);
 
   const sendMessage = useCallback(
     async (text: string) => {
@@ -520,6 +651,12 @@ export function useChatSession({
       sessionKeyRef.current = null;
       myEphemeralKeyRef.current = null;
       peerEphemeralKeyRef.current = null;
+      peerIdentityPublicKeyRef.current = null;
+
+      for (const [, pending] of pendingAcksRef.current) {
+        clearTimeout(pending.timeout);
+      }
+      pendingAcksRef.current.clear();
     }
   }, [enabled, peerId, isConnected, state, startSession]);
 

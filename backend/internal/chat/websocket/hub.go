@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/metrics"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 	userdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
 	userrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/repository"
@@ -56,10 +57,13 @@ func (h *Hub) Run(ctx context.Context) {
 				h.log.Infof("websocket closing existing connection user_id=%s username=%s", existing.userID, existing.username)
 				close(existing.send)
 				delete(h.clients, existing.userID)
+				metrics.DecrementActiveWebSocketConnections()
 			}
 			h.clients[client.userID] = client
+			totalClients := len(h.clients)
 			h.mu.Unlock()
-			h.log.Infof("websocket client registered user_id=%s username=%s total=%d", client.userID, client.username, len(h.clients))
+			metrics.IncrementActiveWebSocketConnections()
+			h.log.Infof("websocket client registered user_id=%s username=%s total=%d", client.userID, client.username, totalClients)
 			h.updateLastSeenDebounced(client.userID)
 
 		case client := <-h.unregister:
@@ -121,6 +125,7 @@ func (p SessionEstablishedPayload) GetTo() string { return p.To }
 func (p FileStartPayload) GetTo() string          { return p.To }
 func (p FileChunkPayload) GetTo() string          { return p.To }
 func (p FileCompletePayload) GetTo() string       { return p.To }
+func (p AckPayload) GetTo() string                { return p.To }
 
 func (h *Hub) forwardMessage(client *Client, msg *WSMessage, payload payloadWithTo, requireOnline bool) bool {
 	to := payload.GetTo()
@@ -153,15 +158,49 @@ func (h *Hub) forwardMessage(client *Client, msg *WSMessage, payload payloadWith
 	return false
 }
 
+func (h *Hub) forwardMessageWithModifiedPayload(msg *WSMessage, payload payloadWithTo, requireOnline bool, fromUserID string) bool {
+	to := payload.GetTo()
+	if to == "" {
+		return false
+	}
+
+	if requireOnline && !h.IsUserOnline(to) {
+		if fromUserID != "" {
+			if err := h.sendPeerOffline(fromUserID, to); err != nil {
+				h.log.Errorf("websocket failed to send peer_offline from=%s to=%s: %v", fromUserID, to, err)
+			}
+		}
+		h.log.Infof("websocket message to offline user from=%s to=%s type=%s", fromUserID, to, msg.Type)
+		return false
+	}
+
+	if h.SendToUser(to, msg) {
+		h.log.Debugf("websocket message forwarded from=%s to=%s type=%s", fromUserID, to, msg.Type)
+		return true
+	}
+	return false
+}
+
 func (h *Hub) HandleMessage(client *Client, msg *WSMessage) {
 	switch msg.Type {
 	case TypeEphemeralKey:
 		var payload EphemeralKeyPayload
 		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
 			h.log.Warnf("websocket invalid ephemeral_key payload user_id=%s: %v", client.userID, err)
+			metrics.IncrementWebSocketError("invalid_ephemeral_key_payload")
 			return
 		}
-		h.forwardMessage(client, msg, payload, true)
+		payload.From = client.userID
+		payloadBytes, err := json.Marshal(payload)
+		if err != nil {
+			h.log.Warnf("websocket failed to marshal ephemeral_key payload user_id=%s: %v", client.userID, err)
+			return
+		}
+		forwardMsg := &WSMessage{
+			Type:    msg.Type,
+			Payload: payloadBytes,
+		}
+		h.forwardMessageWithModifiedPayload(forwardMsg, payload, true, client.userID)
 
 	case TypeMessage:
 		var payload MessagePayload
@@ -203,8 +242,17 @@ func (h *Hub) HandleMessage(client *Client, msg *WSMessage) {
 		}
 		h.forwardMessage(client, msg, payload, true)
 
+	case TypeAck:
+		var payload AckPayload
+		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+			h.log.Warnf("websocket invalid ack payload user_id=%s: %v", client.userID, err)
+			return
+		}
+		h.forwardMessage(client, msg, payload, false)
+
 	default:
 		h.log.Warnf("websocket unknown message type user_id=%s type=%s", client.userID, msg.Type)
+		metrics.IncrementWebSocketError("unknown_message_type")
 	}
 }
 
@@ -217,8 +265,10 @@ func (h *Hub) handleUnregister(client *Client) {
 	}
 
 	delete(h.clients, client.userID)
+	totalClients := len(h.clients)
 	close(client.send)
-	h.log.Infof("websocket client unregistered user_id=%s username=%s total=%d", client.userID, client.username, len(h.clients))
+	metrics.DecrementActiveWebSocketConnections()
+	h.log.Infof("websocket client unregistered user_id=%s username=%s total=%d", client.userID, client.username, totalClients)
 
 	disconnectedMsg := &WSMessage{
 		Type:    TypePeerDisconnected,

@@ -37,7 +37,6 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
     useChatSession({
       token,
       peerId: peer.id,
-      peerUsername: peer.username,
       enabled: true,
     });
 

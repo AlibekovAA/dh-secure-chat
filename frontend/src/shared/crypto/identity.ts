@@ -66,15 +66,51 @@ export async function importPublicKey(base64: string): Promise<CryptoKey> {
 
 const IDENTITY_KEY_STORAGE = 'identity_private_key';
 
-export function saveIdentityPrivateKey(privateKey: CryptoKey): Promise<void> {
-  return crypto.subtle.exportKey('pkcs8', privateKey).then((exported) => {
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(exported)));
-    localStorage.setItem(IDENTITY_KEY_STORAGE, base64);
-  });
+async function saveToIndexedDB(key: string, data: string): Promise<void> {
+  try {
+    if ('indexedDB' in window) {
+      const { saveKey } = await import('../storage/indexeddb');
+      await saveKey(key, data, 'identity');
+      return;
+    }
+  } catch {}
+  localStorage.setItem(key, data);
+}
+
+async function loadFromIndexedDB(key: string): Promise<string | null> {
+  try {
+    if ('indexedDB' in window) {
+      const { loadKey } = await import('../storage/indexeddb');
+      const stored = await loadKey(key);
+      if (stored) {
+        return stored;
+      }
+    }
+  } catch {}
+  return localStorage.getItem(key);
+}
+
+async function deleteFromIndexedDB(key: string): Promise<void> {
+  try {
+    if ('indexedDB' in window) {
+      const { deleteKey } = await import('../storage/indexeddb');
+      await deleteKey(key);
+      return;
+    }
+  } catch {}
+  localStorage.removeItem(key);
+}
+
+export async function saveIdentityPrivateKey(
+  privateKey: CryptoKey,
+): Promise<void> {
+  const exported = await crypto.subtle.exportKey('pkcs8', privateKey);
+  const base64 = btoa(String.fromCharCode(...new Uint8Array(exported)));
+  await saveToIndexedDB(IDENTITY_KEY_STORAGE, base64);
 }
 
 export async function loadIdentityPrivateKey(): Promise<CryptoKey | null> {
-  const stored = localStorage.getItem(IDENTITY_KEY_STORAGE);
+  const stored = await loadFromIndexedDB(IDENTITY_KEY_STORAGE);
   if (!stored) {
     return null;
   }
@@ -91,7 +127,11 @@ export async function loadIdentityPrivateKey(): Promise<CryptoKey | null> {
       true,
       ['deriveKey', 'deriveBits'],
     );
-  } catch {
+  } catch (err) {
     return null;
   }
+}
+
+export async function deleteIdentityPrivateKey(): Promise<void> {
+  await deleteFromIndexedDB(IDENTITY_KEY_STORAGE);
 }

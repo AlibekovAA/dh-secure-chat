@@ -15,7 +15,7 @@ export class WebSocketClient {
   private handlers: EventHandlers;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
-  private reconnectDelay = 1000;
+  private baseDelay = 1000;
   private reconnectTimer: number | null = null;
   private state: ConnectionState = 'disconnected';
 
@@ -23,7 +23,7 @@ export class WebSocketClient {
     this.token = token;
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
-    this.url = `${protocol}//${host}/ws/?token=${encodeURIComponent(token)}`;
+    this.url = `${protocol}//${host}/ws/`;
     this.handlers = handlers;
   }
 
@@ -42,14 +42,57 @@ export class WebSocketClient {
       this.ws = new WebSocket(this.url);
 
       this.ws.onopen = () => {
-        this.setState('connected');
-        this.reconnectAttempts = 0;
+        this.ws?.send(
+          JSON.stringify({
+            type: 'auth',
+            payload: { token: this.token },
+          }),
+        );
       };
 
       this.ws.onmessage = (event) => {
         try {
-          const message = JSON.parse(event.data) as WSMessage;
-          this.handlers.onMessage?.(message);
+          const data = event.data as string;
+          const messages = data
+            .split('\n')
+            .filter((line) => line.trim() !== '');
+
+          for (const messageData of messages) {
+            try {
+              const message = JSON.parse(messageData) as WSMessage;
+
+              if (message.type === 'auth') {
+                const payload = message.payload as {
+                  authenticated?: boolean;
+                  error?: string;
+                };
+                if (payload.authenticated === true) {
+                  this.setState('connected');
+                  this.reconnectAttempts = 0;
+                  continue;
+                }
+                if (payload.error) {
+                  this.handlers.onError?.(new Error(payload.error));
+                  this.ws?.close();
+                  return;
+                }
+              }
+
+              if (this.state === 'connecting') {
+                this.setState('connected');
+                this.reconnectAttempts = 0;
+              }
+
+              this.handlers.onMessage?.(message);
+            } catch (parseErr) {
+              console.error(
+                'Failed to parse WebSocket message:',
+                parseErr,
+                'Data:',
+                messageData,
+              );
+            }
+          }
         } catch (err) {
           this.handlers.onError?.(
             new Error('Failed to parse WebSocket message'),
@@ -126,7 +169,10 @@ export class WebSocketClient {
     }
 
     this.reconnectAttempts++;
-    const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
+    const delay = Math.min(
+      this.baseDelay * Math.pow(2, this.reconnectAttempts - 1),
+      30000,
+    );
 
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;

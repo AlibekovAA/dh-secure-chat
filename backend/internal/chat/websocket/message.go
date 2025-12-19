@@ -5,6 +5,7 @@ import "encoding/json"
 type MessageType string
 
 const (
+	TypeAuth                MessageType = "auth"
 	TypeEphemeralKey       MessageType = "ephemeral_key"
 	TypeMessage            MessageType = "message"
 	TypeSessionEstablished MessageType = "session_established"
@@ -13,6 +14,7 @@ const (
 	TypeFileStart          MessageType = "file_start"
 	TypeFileChunk          MessageType = "file_chunk"
 	TypeFileComplete       MessageType = "file_complete"
+	TypeAck                MessageType = "ack"
 )
 
 type WSMessage struct {
@@ -21,8 +23,17 @@ type WSMessage struct {
 }
 
 type EphemeralKeyPayload struct {
+	To          string `json:"to"`
+	From        string `json:"from,omitempty"`
+	PublicKey   string `json:"public_key"`
+	Signature   string `json:"signature"`
+	MessageID   string `json:"message_id"`
+	RequiresAck bool   `json:"requires_ack"`
+}
+
+type AckPayload struct {
 	To        string `json:"to"`
-	PublicKey string `json:"public_key"`
+	MessageID string `json:"message_id"`
 }
 
 type MessagePayload struct {
@@ -66,4 +77,8 @@ type FileChunkPayload struct {
 type FileCompletePayload struct {
 	To     string `json:"to"`
 	FileID string `json:"file_id"`
+}
+
+type AuthPayload struct {
+	Token string `json:"token"`
 }

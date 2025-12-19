@@ -180,31 +180,14 @@ func (h *Handler) getIdentityKey(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleWebSocket(w http.ResponseWriter, r *http.Request) {
-	token := r.URL.Query().Get("token")
-	if token == "" {
-		h.log.Warnf("websocket connection failed: missing token")
-		commonhttp.WriteError(w, http.StatusUnauthorized, "missing token")
-		return
-	}
-
-	claims, err := jwtverify.ParseToken(token, []byte(h.jwtSecret))
-	if err != nil {
-		h.log.Warnf("websocket connection failed: invalid token: %v", err)
-		commonhttp.WriteError(w, http.StatusUnauthorized, "invalid token")
-		return
-	}
-
 	conn, err := h.upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		h.log.Errorf("websocket upgrade failed user_id=%s: %v", claims.UserID, err)
+		h.log.Errorf("websocket upgrade failed: %v", err)
 		return
 	}
 
-	client := websocket.NewClient(h.hub, conn, claims.UserID, claims.Username, h.log)
-	h.hub.Register(client)
+	client := websocket.NewUnauthenticatedClient(h.hub, conn, h.jwtSecret, h.log)
 	client.Start()
-
-	h.log.Infof("websocket connection established user_id=%s username=%s", claims.UserID, claims.Username)
 }
 
 func toUserResponses(users []userdomain.Summary) []userResponse {
