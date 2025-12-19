@@ -11,10 +11,21 @@ import (
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 )
 
+type ShutdownHook func(ctx context.Context) error
+
 func StartWithGracefulShutdown(
 	server *http.Server,
 	log *logger.Logger,
 	serviceName string,
+) {
+	StartWithGracefulShutdownAndHooks(server, log, serviceName, nil)
+}
+
+func StartWithGracefulShutdownAndHooks(
+	server *http.Server,
+	log *logger.Logger,
+	serviceName string,
+	hooks []ShutdownHook,
 ) {
 	go func() {
 		log.Infof("%s service listening on %s", serviceName, server.Addr)
@@ -29,10 +40,25 @@ func StartWithGracefulShutdown(
 
 	log.Infof("shutting down %s service...", serviceName)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
 
-	if err := server.Shutdown(ctx); err != nil {
+	drainCtx, drainCancel := context.WithTimeout(shutdownCtx, 10*time.Second)
+	defer drainCancel()
+
+	log.Infof("%s service: stopping accepting new connections (drain period: %v)", serviceName, 10*time.Second)
+	server.SetKeepAlivesEnabled(false)
+
+	if len(hooks) > 0 {
+		log.Infof("%s service: executing shutdown hooks", serviceName)
+		for i, hook := range hooks {
+			if err := hook(drainCtx); err != nil {
+				log.Errorf("%s service: shutdown hook %d failed: %v", serviceName, i, err)
+			}
+		}
+	}
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
 		log.Errorf("%s service forced to shutdown: %v", serviceName, err)
 	} else {
 		log.Infof("%s service stopped gracefully", serviceName)

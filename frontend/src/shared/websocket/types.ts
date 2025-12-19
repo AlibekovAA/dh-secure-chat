@@ -19,6 +19,7 @@ export type ConnectionState =
 export type WSMessage = {
   type: MessageType;
   payload: unknown;
+  sequence?: number;
 };
 
 export type EphemeralKeyPayload = {

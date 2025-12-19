@@ -62,14 +62,24 @@ func main() {
 	mux.Handle("/", handler)
 	mux.Handle("/debug/vars", expvar.Handler())
 
+	rateLimiter := commonhttp.NewStrictRateLimiter()
 	metrics := httpmetrics.New("auth")
 	recovery := commonhttp.RecoveryMiddleware(log)
 	traceID := commonhttp.TraceIDMiddleware
 	maxRequestSize := commonhttp.MaxRequestSizeMiddleware(commonhttp.DefaultMaxRequestSize)
+	securityHeaders := commonhttp.SecurityHeadersMiddleware
+	csp := commonhttp.ContentSecurityPolicyMiddleware("")
+
+	baseHandler := securityHeaders(csp(recovery(traceID(maxRequestSize(metrics.Wrap(mux))))))
+
+	muxWithRateLimit := http.NewServeMux()
+	muxWithRateLimit.HandleFunc("/api/auth/login", rateLimiter.MiddlewareForPath("/api/auth/login")(baseHandler).ServeHTTP)
+	muxWithRateLimit.HandleFunc("/api/auth/register", rateLimiter.MiddlewareForPath("/api/auth/register")(baseHandler).ServeHTTP)
+	muxWithRateLimit.Handle("/", baseHandler)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.HTTPPort,
-		Handler:           recovery(traceID(maxRequestSize(metrics.Wrap(mux)))),
+		Handler:           muxWithRateLimit,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,

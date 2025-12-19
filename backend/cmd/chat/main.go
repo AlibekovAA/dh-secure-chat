@@ -76,7 +76,10 @@ func main() {
 	recovery := commonhttp.RecoveryMiddleware(log)
 	traceID := commonhttp.TraceIDMiddleware
 	maxRequestSize := commonhttp.MaxRequestSizeMiddleware(commonhttp.DefaultMaxRequestSize)
-	wrappedRestMux := recovery(traceID(maxRequestSize(metrics.Wrap(restMux))))
+	securityHeaders := commonhttp.SecurityHeadersMiddleware
+	csp := commonhttp.ContentSecurityPolicyMiddleware("")
+
+	wrappedRestMux := securityHeaders(csp(recovery(traceID(maxRequestSize(metrics.Wrap(restMux))))))
 
 	mainMux := http.NewServeMux()
 	mainMux.Handle("/ws/", handler)
@@ -91,8 +94,14 @@ func main() {
 		IdleTimeout:       120 * time.Second,
 	}
 
-	srv.StartWithGracefulShutdown(server, log, "chat")
+	shutdownHooks := []srv.ShutdownHook{
+		func(ctx context.Context) error {
+			log.Infof("chat service: shutting down WebSocket hub")
+			cancel()
+			wg.Wait()
+			return nil
+		},
+	}
 
-	cancel()
-	wg.Wait()
+	srv.StartWithGracefulShutdownAndHooks(server, log, "chat", shutdownHooks)
 }

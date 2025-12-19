@@ -1,4 +1,5 @@
 import type { WSMessage, ConnectionState } from './types';
+import { SequenceManager } from './sequence-manager';
 
 type MessageHandler = (message: WSMessage) => void;
 
@@ -6,6 +7,7 @@ type EventHandlers = {
   onStateChange?: (state: ConnectionState) => void;
   onMessage?: MessageHandler;
   onError?: (error: Error) => void;
+  onMissingSequence?: (expected: number, received: number) => void;
 };
 
 export class WebSocketClient {
@@ -18,6 +20,7 @@ export class WebSocketClient {
   private baseDelay = 1000;
   private reconnectTimer: number | null = null;
   private state: ConnectionState = 'disconnected';
+  private sequenceManager: SequenceManager;
 
   constructor(token: string, handlers: EventHandlers = {}) {
     this.token = token;
@@ -25,6 +28,9 @@ export class WebSocketClient {
     const host = window.location.host;
     this.url = `${protocol}//${host}/ws/`;
     this.handlers = handlers;
+    this.sequenceManager = new SequenceManager({
+      onMissingSequence: handlers.onMissingSequence,
+    });
   }
 
   connect(): void {
@@ -83,7 +89,20 @@ export class WebSocketClient {
                 this.reconnectAttempts = 0;
               }
 
-              this.handlers.onMessage?.(message);
+              if (message.sequence !== undefined) {
+                const { messages, hasGap } = this.sequenceManager.addMessage(
+                  message.sequence,
+                  message,
+                );
+                if (hasGap) {
+                  console.warn('WebSocket: detected missing sequence numbers');
+                }
+                for (const orderedMessage of messages) {
+                  this.handlers.onMessage?.(orderedMessage as WSMessage);
+                }
+              } else {
+                this.handlers.onMessage?.(message);
+              }
             } catch (parseErr) {
               console.error(
                 'Failed to parse WebSocket message:',
@@ -108,6 +127,7 @@ export class WebSocketClient {
       this.ws.onclose = () => {
         this.setState('disconnected');
         this.ws = null;
+        this.sequenceManager.reset();
 
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
           this.scheduleReconnect();
@@ -140,9 +160,13 @@ export class WebSocketClient {
     this.reconnectAttempts = this.maxReconnectAttempts;
   }
 
-  send(message: WSMessage): void {
+  send(message: WSMessage, addSequence = true): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(message));
+      const messageToSend: WSMessage = { ...message };
+      if (addSequence && message.type !== 'auth') {
+        messageToSend.sequence = this.sequenceManager.getNextSequence();
+      }
+      this.ws.send(JSON.stringify(messageToSend));
     } else {
       this.handlers.onError?.(new Error('WebSocket is not connected'));
     }

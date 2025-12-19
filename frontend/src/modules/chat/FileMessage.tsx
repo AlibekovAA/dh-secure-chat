@@ -103,6 +103,7 @@ export function FileMessage({ filename, mimeType, size, blob, isOwn }: Props) {
               type="button"
               onClick={handleDownload}
               className="text-xs text-emerald-400 hover:text-emerald-200 transition-colors flex items-center gap-1 flex-shrink-0"
+              title="Скачать файл"
             >
               <svg
                 className="w-3.5 h-3.5"
@@ -120,6 +121,32 @@ export function FileMessage({ filename, mimeType, size, blob, isOwn }: Props) {
               Скачать
             </button>
           )}
+        </div>
+      )}
+
+      {canPreview && blob && (
+        <div className="flex items-center justify-end mt-2">
+          <button
+            type="button"
+            onClick={handleDownload}
+            className="text-xs text-emerald-400 hover:text-emerald-200 transition-colors flex items-center gap-1"
+            title="Скачать изображение"
+          >
+            <svg
+              className="w-3.5 h-3.5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+              />
+            </svg>
+            Скачать
+          </button>
         </div>
       )}
     </div>

@@ -32,7 +32,17 @@ import {
 } from '../../shared/crypto/file-encryption';
 import { getIdentityKey } from './api';
 import type { SessionKey } from '../../shared/crypto/session';
-import { MAX_FILE_SIZE } from './constants';
+import { MAX_FILE_SIZE, MAX_VOICE_SIZE, VOICE_MIME_TYPES } from './constants';
+
+function extractDurationFromFilename(filename: string): number {
+  const match = filename.match(/voice-(\d+)s/);
+  const extracted = match ? parseInt(match[1], 10) : 0;
+  return extracted > 0 ? extracted : 0;
+}
+
+function isVoiceFile(mimeType: string): boolean {
+  return VOICE_MIME_TYPES.some((type) => mimeType.includes(type));
+}
 
 export type ChatSessionState =
   | 'idle'
@@ -49,6 +59,13 @@ export type ChatMessage = {
     filename: string;
     mimeType: string;
     size: number;
+    blob?: Blob;
+  };
+  voice?: {
+    filename: string;
+    mimeType: string;
+    size: number;
+    duration: number;
     blob?: Blob;
   };
   timestamp: number;
@@ -279,16 +296,49 @@ export function useChatSession({
     }
 
     try {
-      const blob = await decryptFile(sessionKeyRef.current, sortedChunks);
+      const decryptedBlob = await decryptFile(
+        sessionKeyRef.current,
+        sortedChunks,
+      );
+
+      if (!decryptedBlob || decryptedBlob.size === 0) {
+        setError('Получен пустой файл');
+        fileBuffersRef.current.delete(fileId);
+        return;
+      }
+
+      const mimeType = metadata.mime_type || 'application/octet-stream';
+      const blob = new Blob([decryptedBlob], { type: mimeType });
+
+      if (!blob || blob.size === 0) {
+        setError('Получен пустой файл');
+        fileBuffersRef.current.delete(fileId);
+        return;
+      }
+
+      const isVoice = metadata.mime_type.startsWith('audio/');
+      const extractedDuration = extractDurationFromFilename(metadata.filename);
 
       const newMessage: ChatMessage = {
         id: `file-${Date.now()}-${messageIdCounterRef.current++}`,
-        file: {
-          filename: metadata.filename,
-          mimeType: metadata.mime_type,
-          size: metadata.total_size,
-          blob,
-        },
+        ...(isVoice
+          ? {
+              voice: {
+                filename: metadata.filename,
+                mimeType,
+                size: metadata.total_size,
+                duration: extractedDuration > 0 ? extractedDuration : 0,
+                blob,
+              },
+            }
+          : {
+              file: {
+                filename: metadata.filename,
+                mimeType,
+                size: metadata.total_size,
+                blob,
+              },
+            }),
         timestamp: Date.now(),
         isOwn: false,
       };
@@ -296,6 +346,7 @@ export function useChatSession({
       setMessages((prev) => [...prev, newMessage]);
       fileBuffersRef.current.delete(fileId);
     } catch (err) {
+      console.error('Ошибка расшифровки файла:', err);
       setError('Ошибка расшифровки файла');
       fileBuffersRef.current.delete(fileId);
     }
@@ -644,13 +695,30 @@ export function useChatSession({
           },
         });
 
+        const isVoice = isVoiceFile(file.type || '');
+        const mimeType =
+          file.type || (isVoice ? 'audio/webm' : 'application/octet-stream');
+        const blobClone = new Blob([file], { type: mimeType });
         const newMessage: ChatMessage = {
           id: `file-${Date.now()}-${messageIdCounterRef.current++}`,
-          file: {
-            filename: file.name,
-            mimeType: file.type || 'application/octet-stream',
-            size: file.size,
-          },
+          ...(isVoice
+            ? {
+                voice: {
+                  filename: file.name,
+                  mimeType,
+                  size: file.size,
+                  duration: extractDurationFromFilename(file.name),
+                  blob: blobClone,
+                },
+              }
+            : {
+                file: {
+                  filename: file.name,
+                  mimeType,
+                  size: file.size,
+                  blob: blobClone,
+                },
+              }),
           timestamp: Date.now(),
           isOwn: true,
         };
@@ -704,12 +772,24 @@ export function useChatSession({
     };
   }, []);
 
+  const sendVoice = useCallback(
+    async (file: File, duration: number) => {
+      if (file.size > MAX_VOICE_SIZE) {
+        setError('Голосовое сообщение слишком большое (максимум 10MB)');
+        return;
+      }
+      await sendFile(file);
+    },
+    [sendFile],
+  );
+
   return {
     state,
     messages,
     error,
     sendMessage,
     sendFile,
+    sendVoice,
     isSessionActive: state === 'active',
   };
 }

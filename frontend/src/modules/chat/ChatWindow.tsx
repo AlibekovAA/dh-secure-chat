@@ -3,6 +3,8 @@ import { useChatSession } from './useChatSession';
 import type { UserSummary } from './api';
 import { FingerprintVerificationModal } from './FingerprintVerificationModal';
 import { FileMessage } from './FileMessage';
+import { VoiceMessage } from './VoiceMessage';
+import { VoiceRecorder } from './VoiceRecorder';
 import { getFingerprint } from './api';
 import {
   getVerifiedPeerFingerprint,
@@ -34,7 +36,7 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const { showToast } = useToast();
 
-  const { state, messages, error, sendMessage, sendFile, isSessionActive } =
+  const { state, messages, error, sendMessage, sendFile, sendVoice, isSessionActive } =
     useChatSession({
       token,
       peerId: peer.id,
@@ -292,7 +294,14 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
                     {message.text}
                   </p>
                 )}
-                {message.file && (
+                {message.voice && (
+                  <VoiceMessage
+                    duration={message.voice.duration}
+                    blob={message.voice.blob}
+                    isOwn={message.isOwn}
+                  />
+                )}
+                {message.file && !message.voice && (
                   <FileMessage
                     filename={message.file.filename}
                     mimeType={message.file.mimeType}
@@ -365,6 +374,15 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
             disabled={!isSessionActive || isChatBlocked}
           />
           <div className="flex items-center gap-2">
+            <VoiceRecorder
+              onRecorded={(file, duration) => {
+                sendVoice(file, duration).catch(() => {
+                  showToast('Ошибка отправки голосового сообщения', 'error');
+                });
+              }}
+              onError={(error) => showToast(error, 'error')}
+              disabled={!isSessionActive || isChatBlocked}
+            />
             <div className="flex-1 relative flex items-center">
               <textarea
                 ref={inputRef}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"expvar"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -93,7 +94,7 @@ func ParseToken(tokenString string, secret []byte) (Claims, error) {
 func parseToken(tokenString string, secret []byte) (Claims, error) {
 	parsed, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
 		if token.Method != jwt.SigningMethodHS256 {
-			return nil, errors.New("unexpected signing method")
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Method)
 		}
 		return secret, nil
 	})
@@ -101,19 +102,19 @@ func parseToken(tokenString string, secret []byte) (Claims, error) {
 		if err == nil {
 			err = errors.New("token is not valid")
 		}
-		return Claims{}, err
+		return Claims{}, fmt.Errorf("failed to parse token: %w", err)
 	}
 
 	mapClaims, ok := parsed.Claims.(jwt.MapClaims)
 	if !ok {
-		return Claims{}, errors.New("invalid claims type")
+		return Claims{}, fmt.Errorf("invalid claims type: expected MapClaims, got %T", parsed.Claims)
 	}
 
 	sub, _ := mapClaims["sub"].(string)
 	username, _ := mapClaims["usr"].(string)
 	jti, _ := mapClaims["jti"].(string)
 	if sub == "" || username == "" {
-		return Claims{}, errors.New("missing sub or usr claims")
+		return Claims{}, fmt.Errorf("missing required claims: sub=%q, usr=%q", sub, username)
 	}
 
 	return Claims{

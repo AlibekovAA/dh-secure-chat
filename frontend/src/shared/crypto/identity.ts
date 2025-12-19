@@ -3,12 +3,10 @@ export type IdentityKeyPair = {
   privateKey: CryptoKey;
 };
 
+import { checkWebCryptoSupport as checkBrowserSupport } from '../browser-support';
+
 function checkWebCryptoSupport(): void {
-  if (!crypto || !crypto.subtle) {
-    throw new Error(
-      'Web Crypto API не поддерживается в этом браузере. Используйте современный браузер (Chrome, Firefox, Safari, Edge).',
-    );
-  }
+  checkBrowserSupport();
 }
 
 export async function generateIdentityKeyPair(): Promise<IdentityKeyPair> {

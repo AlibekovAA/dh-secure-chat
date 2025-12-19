@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,12 +14,28 @@ import (
 	userrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/repository"
 )
 
+func isValidAudioMimeType(mimeType string) bool {
+	validTypes := []string{
+		"audio/webm",
+		"audio/ogg",
+		"audio/mpeg",
+		"audio/mp4",
+		"audio/wav",
+		"audio/x-m4a",
+	}
+	for _, validType := range validTypes {
+		if strings.HasPrefix(mimeType, validType) {
+			return true
+		}
+	}
+	return false
+}
+
 type Hub struct {
-	clients                map[string]*Client
+	clients                sync.Map
 	register               chan *Client
 	unregister             chan *Client
-	lastSeenUpdates        map[string]time.Time
-	mu                     sync.RWMutex
+	lastSeenUpdates        sync.Map
 	log                    *logger.Logger
 	userRepo               userrepo.Repository
 	lastSeenUpdateInterval time.Duration
@@ -26,10 +43,8 @@ type Hub struct {
 
 func NewHub(log *logger.Logger, userRepo userrepo.Repository, lastSeenUpdateInterval time.Duration) *Hub {
 	return &Hub{
-		clients:                make(map[string]*Client),
 		register:               make(chan *Client),
 		unregister:             make(chan *Client),
-		lastSeenUpdates:        make(map[string]time.Time),
 		log:                    log,
 		userRepo:               userRepo,
 		lastSeenUpdateInterval: lastSeenUpdateInterval,
@@ -52,17 +67,16 @@ func (h *Hub) Run(ctx context.Context) {
 			return
 
 		case client := <-h.register:
-			h.mu.Lock()
-			if existing, ok := h.clients[client.userID]; ok {
-				h.log.Infof("websocket closing existing connection user_id=%s username=%s", existing.userID, existing.username)
-				existing.Stop()
-				close(existing.send)
-				delete(h.clients, existing.userID)
+			if existing, ok := h.clients.Load(client.userID); ok {
+				existingClient := existing.(*Client)
+				h.log.Infof("websocket closing existing connection user_id=%s username=%s", existingClient.userID, existingClient.username)
+				existingClient.Stop()
+				close(existingClient.send)
+				h.clients.Delete(client.userID)
 				metrics.DecrementActiveWebSocketConnections()
 			}
-			h.clients[client.userID] = client
-			totalClients := len(h.clients)
-			h.mu.Unlock()
+			h.clients.Store(client.userID, client)
+			totalClients := h.countClients()
 			metrics.IncrementActiveWebSocketConnections()
 			h.log.Infof("websocket client registered user_id=%s username=%s total=%d", client.userID, client.username, totalClients)
 			h.updateLastSeenDebounced(client.userID)
@@ -74,12 +88,11 @@ func (h *Hub) Run(ctx context.Context) {
 }
 
 func (h *Hub) shutdown() {
-	h.mu.Lock()
-	clients := make([]*Client, 0, len(h.clients))
-	for _, client := range h.clients {
-		clients = append(clients, client)
-	}
-	h.mu.Unlock()
+	clients := make([]*Client, 0)
+	h.clients.Range(func(key, value interface{}) bool {
+		clients = append(clients, value.(*Client))
+		return true
+	})
 
 	for _, client := range clients {
 		client.Stop()
@@ -90,24 +103,21 @@ func (h *Hub) shutdown() {
 		close(client.send)
 	}
 
-	h.mu.Lock()
-	for id := range h.clients {
-		delete(h.clients, id)
-	}
-	h.mu.Unlock()
+	h.clients.Range(func(key, value interface{}) bool {
+		h.clients.Delete(key)
+		return true
+	})
 
 	h.log.Infof("websocket hub shutdown completed clients=%d", len(clients))
 }
 
 func (h *Hub) SendToUser(userID string, message *WSMessage) bool {
-	h.mu.RLock()
-	client, ok := h.clients[userID]
+	value, ok := h.clients.Load(userID)
 	if !ok {
-		h.mu.RUnlock()
 		return false
 	}
+	client := value.(*Client)
 	sendChan := client.send
-	h.mu.RUnlock()
 
 	messageBytes, err := json.Marshal(message)
 	if err != nil {
@@ -164,10 +174,17 @@ func (h *Hub) sendWithRetry(sendChan chan []byte, messageBytes []byte, userID, m
 }
 
 func (h *Hub) IsUserOnline(userID string) bool {
-	h.mu.RLock()
-	_, ok := h.clients[userID]
-	h.mu.RUnlock()
+	_, ok := h.clients.Load(userID)
 	return ok
+}
+
+func (h *Hub) countClients() int {
+	count := 0
+	h.clients.Range(func(key, value interface{}) bool {
+		count++
+		return true
+	})
+	return count
 }
 
 type payloadWithTo interface {
@@ -282,6 +299,39 @@ func (h *Hub) HandleMessage(client *Client, msg *WSMessage) {
 			metrics.IncrementWebSocketError("invalid_file_start_payload")
 			return
 		}
+
+		isAudio := strings.HasPrefix(payload.MimeType, "audio/")
+		maxFileSize := int64(50 * 1024 * 1024)
+		if isAudio {
+			maxFileSize = 10 * 1024 * 1024
+		}
+
+		if payload.TotalSize > maxFileSize {
+			h.log.Warnf("websocket file_start rejected user_id=%s: file size %d exceeds maximum %d (audio=%v)", client.userID, payload.TotalSize, maxFileSize, isAudio)
+			metrics.IncrementWebSocketError("file_size_exceeded")
+			return
+		}
+
+		if payload.TotalSize <= 0 {
+			h.log.Warnf("websocket file_start rejected user_id=%s: invalid file size %d", client.userID, payload.TotalSize)
+			metrics.IncrementWebSocketError("invalid_file_size")
+			return
+		}
+
+		if payload.TotalChunks <= 0 || payload.TotalChunks > 1000 {
+			h.log.Warnf("websocket file_start rejected user_id=%s: invalid total_chunks %d", client.userID, payload.TotalChunks)
+			metrics.IncrementWebSocketError("invalid_total_chunks")
+			return
+		}
+
+		if isAudio {
+			if !isValidAudioMimeType(payload.MimeType) {
+				h.log.Warnf("websocket file_start rejected user_id=%s: invalid audio mime type %s", client.userID, payload.MimeType)
+				metrics.IncrementWebSocketError("invalid_audio_mime_type")
+				return
+			}
+		}
+
 		payload.From = client.userID
 		payloadBytes, err := json.Marshal(payload)
 		if err != nil {
@@ -360,20 +410,17 @@ func (h *Hub) HandleMessage(client *Client, msg *WSMessage) {
 }
 
 func (h *Hub) handleUnregister(client *Client) {
-	h.mu.Lock()
-
-	if _, ok := h.clients[client.userID]; !ok {
-		h.mu.Unlock()
+	if _, ok := h.clients.Load(client.userID); !ok {
 		return
 	}
 
-	delete(h.clients, client.userID)
-	totalClients := len(h.clients)
-	clients := make([]*Client, 0, len(h.clients))
-	for _, c := range h.clients {
-		clients = append(clients, c)
-	}
-	h.mu.Unlock()
+	h.clients.Delete(client.userID)
+	totalClients := h.countClients()
+	clients := make([]*Client, 0)
+	h.clients.Range(func(key, value interface{}) bool {
+		clients = append(clients, value.(*Client))
+		return true
+	})
 
 	client.Stop()
 	close(client.send)
@@ -425,14 +472,14 @@ func (h *Hub) sendPeerOffline(fromUserID, peerID string) error {
 
 func (h *Hub) updateLastSeenDebounced(userID string) {
 	now := time.Now()
-	h.mu.Lock()
-	lastUpdate, exists := h.lastSeenUpdates[userID]
-	if exists && now.Sub(lastUpdate) < h.lastSeenUpdateInterval {
-		h.mu.Unlock()
-		return
+	value, exists := h.lastSeenUpdates.Load(userID)
+	if exists {
+		lastUpdate := value.(time.Time)
+		if now.Sub(lastUpdate) < h.lastSeenUpdateInterval {
+			return
+		}
 	}
-	h.lastSeenUpdates[userID] = now
-	h.mu.Unlock()
+	h.lastSeenUpdates.Store(userID, now)
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

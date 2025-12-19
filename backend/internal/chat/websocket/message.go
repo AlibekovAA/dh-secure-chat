@@ -17,6 +17,21 @@ const (
 	TypeAck                MessageType = "ack"
 )
 
+func (mt MessageType) String() string {
+	return string(mt)
+}
+
+func (mt MessageType) IsValid() bool {
+	switch mt {
+	case TypeAuth, TypeEphemeralKey, TypeMessage, TypeSessionEstablished,
+		TypePeerOffline, TypePeerDisconnected, TypeFileStart, TypeFileChunk,
+		TypeFileComplete, TypeAck:
+		return true
+	default:
+		return false
+	}
+}
+
 type WSMessage struct {
 	Type    MessageType     `json:"type"`
 	Payload json.RawMessage `json:"payload"`
