@@ -21,10 +21,6 @@ export function VoiceMessage({ duration, blob, isOwn }: Props) {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    setMetadataDuration(null);
-  }, [blob]);
-
-  useEffect(() => {
     if (!blob) {
       if (audioUrl) {
         if (audioRef.current) {
@@ -53,7 +49,6 @@ export function VoiceMessage({ duration, blob, isOwn }: Props) {
 
     setCurrentTime(0);
     setIsPlaying(false);
-    setMetadataDuration(null);
 
     let url: string | null = null;
     try {
@@ -91,11 +86,15 @@ export function VoiceMessage({ duration, blob, isOwn }: Props) {
       try {
         audio.src = audioUrl;
         audio.load();
+        audio.currentTime = 0.01;
+        audio.currentTime = 0;
       } catch (error) {
         console.error('VoiceMessage: failed to set audio src', error, { audioUrl });
         setIsLoading(false);
         return;
       }
+    } else if (audio.readyState === 0) {
+      audio.load();
     }
 
     let loadTimeout: number | null = null;
@@ -193,11 +192,30 @@ export function VoiceMessage({ duration, blob, isOwn }: Props) {
     audio.addEventListener('canplaythrough', handleCanPlay);
     audio.addEventListener('error', handleError);
 
-    if (audio.readyState >= 2) {
-      checkMetadata();
-      setIsLoading(false);
-    } else {
-      metadataCheckInterval = window.setInterval(checkMetadata, 100);
+    const tryLoadMetadata = () => {
+      if (audio.readyState >= 2) {
+        checkMetadata();
+        setIsLoading(false);
+        if (metadataCheckInterval) {
+          clearInterval(metadataCheckInterval);
+          metadataCheckInterval = null;
+        }
+      } else {
+        audio.load();
+      }
+    };
+
+    tryLoadMetadata();
+    if (!metadataCheckInterval) {
+      metadataCheckInterval = window.setInterval(() => {
+        checkMetadata();
+        if (audio.readyState >= 2) {
+          if (metadataCheckInterval) {
+            clearInterval(metadataCheckInterval);
+            metadataCheckInterval = null;
+          }
+        }
+      }, 100);
     }
 
     return () => {
@@ -233,7 +251,7 @@ export function VoiceMessage({ duration, blob, isOwn }: Props) {
     }
   };
 
-  const displayDuration = metadataDuration !== null ? metadataDuration : duration;
+  const displayDuration = metadataDuration !== null && metadataDuration > 0 ? metadataDuration : (duration > 0 ? duration : 0);
   const progress = displayDuration > 0 ? (currentTime / displayDuration) * 100 : 0;
 
   return (

@@ -100,6 +100,7 @@ export function useChatSession({
       {
         chunks: Array<{ ciphertext: string; nonce: string }>;
         metadata: FileStartPayload;
+        processing: boolean;
       }
     >
   >(new Map());
@@ -272,21 +273,40 @@ export function useChatSession({
 
   const handleIncomingFile = useCallback(async (fileId: string) => {
     if (!sessionKeyRef.current) {
+      console.error('handleIncomingFile: session key not available');
       return;
     }
 
     const buffer = fileBuffersRef.current.get(fileId);
     if (!buffer) {
+      console.error('handleIncomingFile: buffer not found for fileId:', fileId);
+      return;
+    }
+
+    if (buffer.processing) {
+      console.warn('handleIncomingFile: file already being processed:', fileId);
       return;
     }
 
     const { chunks, metadata } = buffer;
     const expectedChunks = metadata.total_chunks;
 
+    if (chunks.length < expectedChunks) {
+      console.warn(
+        `handleIncomingFile: not all chunks received (${chunks.length}/${expectedChunks}), waiting...`,
+      );
+      return;
+    }
+
+    buffer.processing = true;
+
     const sortedChunks: Array<{ ciphertext: string; nonce: string }> = [];
     for (let i = 0; i < expectedChunks; i++) {
       const chunk = chunks[i];
       if (!chunk || !chunk.ciphertext || !chunk.nonce) {
+        console.error(
+          `handleIncomingFile: missing chunk ${i} (${sortedChunks.length}/${expectedChunks})`,
+        );
         setError(
           `Не все части файла получены (${sortedChunks.length}/${expectedChunks})`,
         );
@@ -316,7 +336,8 @@ export function useChatSession({
         return;
       }
 
-      const isVoice = metadata.mime_type.startsWith('audio/');
+      const isVoice =
+        metadata.mime_type && metadata.mime_type.startsWith('audio/');
       const extractedDuration = extractDurationFromFilename(metadata.filename);
 
       const newMessage: ChatMessage = {
@@ -432,6 +453,7 @@ export function useChatSession({
               fileBuffersRef.current.set(payload.file_id, {
                 chunks: [],
                 metadata: payload,
+                processing: false,
               });
             }
             break;
@@ -441,7 +463,7 @@ export function useChatSession({
             const payload = message.payload as FileChunkPayload;
             if (payload.from === peerId) {
               const buffer = fileBuffersRef.current.get(payload.file_id);
-              if (buffer) {
+              if (buffer && !buffer.processing) {
                 if (
                   payload.chunk_index >= 0 &&
                   payload.chunk_index < payload.total_chunks
@@ -459,7 +481,9 @@ export function useChatSession({
           case 'file_complete': {
             const payload = message.payload as FileCompletePayload;
             if (payload.from === peerId) {
-              handleIncomingFile(payload.file_id);
+              setTimeout(() => {
+                handleIncomingFile(payload.file_id);
+              }, 100);
             }
             break;
           }
@@ -609,7 +633,7 @@ export function useChatSession({
   );
 
   const sendFile = useCallback(
-    async (file: File) => {
+    async (file: File, voiceDuration?: number) => {
       if (
         !sessionKeyRef.current ||
         !peerId ||
@@ -654,13 +678,17 @@ export function useChatSession({
           return;
         }
 
+        const isVoice = isVoiceFile(file.type || '');
+        const mimeType =
+          file.type || (isVoice ? 'audio/webm' : 'application/octet-stream');
+
         send({
           type: 'file_start',
           payload: {
             to: peerId,
             file_id: fileId,
             filename: file.name,
-            mime_type: file.type || 'application/octet-stream',
+            mime_type: mimeType,
             total_size: totalSize,
             total_chunks: totalChunks,
             chunk_size: chunkSize,
@@ -695,9 +723,6 @@ export function useChatSession({
           },
         });
 
-        const isVoice = isVoiceFile(file.type || '');
-        const mimeType =
-          file.type || (isVoice ? 'audio/webm' : 'application/octet-stream');
         const blobClone = new Blob([file], { type: mimeType });
         const newMessage: ChatMessage = {
           id: `file-${Date.now()}-${messageIdCounterRef.current++}`,
@@ -707,7 +732,10 @@ export function useChatSession({
                   filename: file.name,
                   mimeType,
                   size: file.size,
-                  duration: extractDurationFromFilename(file.name),
+                  duration:
+                    voiceDuration !== undefined
+                      ? voiceDuration
+                      : extractDurationFromFilename(file.name),
                   blob: blobClone,
                 },
               }
@@ -778,7 +806,7 @@ export function useChatSession({
         setError('Голосовое сообщение слишком большое (максимум 10MB)');
         return;
       }
-      await sendFile(file);
+      await sendFile(file, duration);
     },
     [sendFile],
   );
