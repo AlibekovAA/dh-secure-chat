@@ -48,7 +48,19 @@ func main() {
 	identityService := identityservice.NewIdentityService(identityRepo, log)
 	chatSvc := chatservice.NewChatService(userRepo, identityService, log)
 
-	hub := websocket.NewHub(log, userRepo, cfg.LastSeenUpdateInterval)
+	hubConfig := websocket.HubConfig{
+		MaxFileSize:             50 * 1024 * 1024,
+		MaxVoiceSize:            10 * 1024 * 1024,
+		ProcessorWorkers:        10,
+		ProcessorQueueSize:      1000,
+		LastSeenUpdateInterval:  cfg.LastSeenUpdateInterval,
+		CircuitBreakerThreshold: 5,
+		CircuitBreakerTimeout:   5 * time.Second,
+		CircuitBreakerReset:     30 * time.Second,
+		FileTransferTimeout:     10 * time.Minute,
+		IdempotencyTTL:          5 * time.Minute,
+	}
+	hub := websocket.NewHub(log, userRepo, hubConfig)
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -97,6 +109,7 @@ func main() {
 	shutdownHooks := []srv.ShutdownHook{
 		func(ctx context.Context) error {
 			log.Infof("chat service: shutting down WebSocket hub")
+			hub.Shutdown()
 			cancel()
 			wg.Wait()
 			return nil

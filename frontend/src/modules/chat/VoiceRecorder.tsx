@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { AudioRecorder } from '../../shared/audio/audio-recorder';
-import { checkMediaRecorderSupport, getBrowserSupportMessage } from '../../shared/browser-support';
+import { checkMediaRecorderSupport } from '../../shared/browser-support';
 import { MAX_VOICE_DURATION_SECONDS } from './constants';
 
 type Props = {

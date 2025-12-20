@@ -3,8 +3,8 @@ package websocket
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -24,7 +24,7 @@ func isValidAudioMimeType(mimeType string) bool {
 		"audio/x-m4a",
 	}
 	for _, validType := range validTypes {
-		if strings.HasPrefix(mimeType, validType) {
+		if len(mimeType) >= len(validType) && mimeType[:len(validType)] == validType {
 			return true
 		}
 	}
@@ -39,16 +39,52 @@ type Hub struct {
 	log                    *logger.Logger
 	userRepo               userrepo.Repository
 	lastSeenUpdateInterval time.Duration
+	processor              *MessageProcessor
+	fileTracker            *FileTransferTracker
+	circuitBreaker         *CircuitBreaker
+	idempotency            *IdempotencyTracker
+	ctx                    context.Context
+	cancel                 context.CancelFunc
 }
 
-func NewHub(log *logger.Logger, userRepo userrepo.Repository, lastSeenUpdateInterval time.Duration) *Hub {
-	return &Hub{
+type HubConfig struct {
+	MaxFileSize             int64
+	MaxVoiceSize            int64
+	ProcessorWorkers        int
+	ProcessorQueueSize      int
+	LastSeenUpdateInterval  time.Duration
+	CircuitBreakerThreshold int32
+	CircuitBreakerTimeout   time.Duration
+	CircuitBreakerReset     time.Duration
+	FileTransferTimeout     time.Duration
+	IdempotencyTTL          time.Duration
+}
+
+func NewHub(log *logger.Logger, userRepo userrepo.Repository, config HubConfig) *Hub {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	validator := NewDefaultValidator(config.MaxFileSize, config.MaxVoiceSize)
+	router := NewMessageRouter(nil, validator, log)
+
+	hub := &Hub{
 		register:               make(chan *Client),
 		unregister:             make(chan *Client),
 		log:                    log,
 		userRepo:               userRepo,
-		lastSeenUpdateInterval: lastSeenUpdateInterval,
+		lastSeenUpdateInterval: config.LastSeenUpdateInterval,
+		fileTracker:            NewFileTransferTracker(config.FileTransferTimeout),
+		circuitBreaker:         NewCircuitBreaker(config.CircuitBreakerThreshold, config.CircuitBreakerTimeout, config.CircuitBreakerReset),
+		idempotency:            NewIdempotencyTracker(config.IdempotencyTTL),
+		ctx:                    ctx,
+		cancel:                 cancel,
 	}
+
+	router.hub = hub
+	hub.processor = NewMessageProcessor(config.ProcessorWorkers, router, log, config.ProcessorQueueSize)
+
+	go hub.fileTrackerCleanup()
+
+	return hub
 }
 
 func (h *Hub) Register(client *Client) {
@@ -112,20 +148,36 @@ func (h *Hub) shutdown() {
 }
 
 func (h *Hub) SendToUser(userID string, message *WSMessage) bool {
+	err := h.SendToUserWithContext(h.ctx, userID, message)
+	return err == nil
+}
+
+func (h *Hub) SendToUserWithContext(ctx context.Context, userID string, message *WSMessage) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
 	value, ok := h.clients.Load(userID)
 	if !ok {
-		return false
+		return fmt.Errorf("user %s not connected", userID)
 	}
+
 	client := value.(*Client)
 	sendChan := client.send
 
 	messageBytes, err := json.Marshal(message)
 	if err != nil {
 		h.log.Errorf("websocket marshal error: %v", err)
-		return false
+		return fmt.Errorf("marshal error: %w", err)
 	}
 
-	return h.sendWithRetry(sendChan, messageBytes, userID, string(message.Type))
+	if h.sendWithRetry(sendChan, messageBytes, userID, string(message.Type)) {
+		return nil
+	}
+
+	return fmt.Errorf("failed to send message to user %s", userID)
 }
 
 func (h *Hub) sendWithRetry(sendChan chan []byte, messageBytes []byte, userID, messageType string) bool {
@@ -199,42 +251,23 @@ func (p FileChunkPayload) GetTo() string          { return p.To }
 func (p FileCompletePayload) GetTo() string       { return p.To }
 func (p AckPayload) GetTo() string                { return p.To }
 
-func (h *Hub) forwardMessage(client *Client, msg *WSMessage, payload payloadWithTo, requireOnline bool) bool {
+func (h *Hub) forwardMessage(ctx context.Context, msg *WSMessage, payload payloadWithTo, requireOnline bool, fromUserID string) bool {
 	to := payload.GetTo()
 	if to == "" {
-		h.log.Warnf("websocket message missing 'to' field user_id=%s type=%s", client.userID, msg.Type)
-		return false
-	}
-
-	if to == client.userID {
-		h.log.Warnf("websocket message to self user_id=%s type=%s", client.userID, msg.Type)
-		return false
-	}
-
-	if requireOnline && !h.IsUserOnline(to) {
-		if err := h.sendPeerOffline(client.userID, to); err != nil {
-			h.log.Errorf("websocket failed to send peer_offline from=%s to=%s: %v", client.userID, to, err)
+		if fromUserID != "" {
+			h.log.Warnf("websocket message missing 'to' field from=%s type=%s", fromUserID, msg.Type)
 		}
-		h.log.Infof("websocket message to offline user from=%s to=%s type=%s", client.userID, to, msg.Type)
 		return false
 	}
 
-	if h.SendToUser(to, msg) {
-		h.log.Debugf("websocket message forwarded from=%s to=%s type=%s", client.userID, to, msg.Type)
-		return true
-	}
-	return false
-}
-
-func (h *Hub) forwardMessageWithModifiedPayload(msg *WSMessage, payload payloadWithTo, requireOnline bool, fromUserID string) bool {
-	to := payload.GetTo()
-	if to == "" {
+	if fromUserID != "" && to == fromUserID {
+		h.log.Warnf("websocket message to self from=%s type=%s", fromUserID, msg.Type)
 		return false
 	}
 
 	if requireOnline && !h.IsUserOnline(to) {
 		if fromUserID != "" {
-			if err := h.sendPeerOffline(fromUserID, to); err != nil {
+			if err := h.sendPeerOffline(ctx, fromUserID, to); err != nil {
 				h.log.Errorf("websocket failed to send peer_offline from=%s to=%s: %v", fromUserID, to, err)
 			}
 		}
@@ -242,171 +275,31 @@ func (h *Hub) forwardMessageWithModifiedPayload(msg *WSMessage, payload payloadW
 		return false
 	}
 
-	if h.SendToUser(to, msg) {
-		h.log.Debugf("websocket message forwarded from=%s to=%s type=%s", fromUserID, to, msg.Type)
-		return true
+	if err := h.SendToUserWithContext(ctx, to, msg); err != nil {
+		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			h.log.Warnf("websocket failed to forward message from=%s to=%s type=%s: %v", fromUserID, to, msg.Type, err)
+		}
+		return false
 	}
-	return false
+
+	h.log.Debugf("websocket message forwarded from=%s to=%s type=%s", fromUserID, to, msg.Type)
+	return true
 }
 
 func (h *Hub) HandleMessage(client *Client, msg *WSMessage) {
-	switch msg.Type {
-	case TypeEphemeralKey:
-		var payload EphemeralKeyPayload
-		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
-			h.log.Warnf("websocket invalid ephemeral_key payload user_id=%s: %v", client.userID, err)
-			metrics.IncrementWebSocketError("invalid_ephemeral_key_payload")
-			return
-		}
-		payload.From = client.userID
-		payloadBytes, err := json.Marshal(payload)
+	if msg.Type == TypeEphemeralKey {
+		operationID := h.idempotency.generateOperationID(client.userID, msg.Type, msg.Payload)
+		_, err := h.idempotency.Execute(operationID, func() (interface{}, error) {
+			h.processor.Submit(client.ctx, client, msg)
+			return nil, nil
+		})
 		if err != nil {
-			h.log.Warnf("websocket failed to marshal ephemeral_key payload user_id=%s: %v", client.userID, err)
-			return
+			h.log.Warnf("websocket idempotency check failed user_id=%s: %v", client.userID, err)
 		}
-		forwardMsg := &WSMessage{
-			Type:    msg.Type,
-			Payload: payloadBytes,
-		}
-		if h.forwardMessageWithModifiedPayload(forwardMsg, payload, true, client.userID) {
-			metrics.IncrementWebSocketMessage("ephemeral_key")
-		}
-
-	case TypeMessage:
-		var payload MessagePayload
-		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
-			h.log.Warnf("websocket invalid message payload user_id=%s: %v", client.userID, err)
-			return
-		}
-		if h.forwardMessage(client, msg, payload, true) {
-			metrics.IncrementWebSocketMessage("message")
-		}
-
-	case TypeSessionEstablished:
-		var payload SessionEstablishedPayload
-		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
-			h.log.Warnf("websocket invalid session_established payload user_id=%s: %v", client.userID, err)
-			return
-		}
-		if h.forwardMessage(client, msg, payload, false) {
-			metrics.IncrementWebSocketMessage("session_established")
-		}
-
-	case TypeFileStart:
-		var payload FileStartPayload
-		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
-			h.log.Warnf("websocket invalid file_start payload user_id=%s: %v", client.userID, err)
-			metrics.IncrementWebSocketError("invalid_file_start_payload")
-			return
-		}
-
-		isAudio := strings.HasPrefix(payload.MimeType, "audio/")
-		maxFileSize := int64(50 * 1024 * 1024)
-		if isAudio {
-			maxFileSize = 10 * 1024 * 1024
-		}
-
-		if payload.TotalSize > maxFileSize {
-			h.log.Warnf("websocket file_start rejected user_id=%s: file size %d exceeds maximum %d (audio=%v)", client.userID, payload.TotalSize, maxFileSize, isAudio)
-			metrics.IncrementWebSocketError("file_size_exceeded")
-			return
-		}
-
-		if payload.TotalSize <= 0 {
-			h.log.Warnf("websocket file_start rejected user_id=%s: invalid file size %d", client.userID, payload.TotalSize)
-			metrics.IncrementWebSocketError("invalid_file_size")
-			return
-		}
-
-		if payload.TotalChunks <= 0 || payload.TotalChunks > 1000 {
-			h.log.Warnf("websocket file_start rejected user_id=%s: invalid total_chunks %d", client.userID, payload.TotalChunks)
-			metrics.IncrementWebSocketError("invalid_total_chunks")
-			return
-		}
-
-		if isAudio {
-			if !isValidAudioMimeType(payload.MimeType) {
-				h.log.Warnf("websocket file_start rejected user_id=%s: invalid audio mime type %s", client.userID, payload.MimeType)
-				metrics.IncrementWebSocketError("invalid_audio_mime_type")
-				return
-			}
-		}
-
-		payload.From = client.userID
-		payloadBytes, err := json.Marshal(payload)
-		if err != nil {
-			h.log.Warnf("websocket failed to marshal file_start payload user_id=%s: %v", client.userID, err)
-			return
-		}
-		forwardMsg := &WSMessage{
-			Type:    msg.Type,
-			Payload: payloadBytes,
-		}
-		h.log.Debugf("websocket file_start from=%s to=%s file_id=%s filename=%s", client.userID, payload.To, payload.FileID, payload.Filename)
-		if h.forwardMessageWithModifiedPayload(forwardMsg, payload, true, client.userID) {
-			metrics.IncrementWebSocketFile()
-			metrics.IncrementWebSocketMessage("file_start")
-		}
-
-	case TypeFileChunk:
-		var payload FileChunkPayload
-		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
-			h.log.Warnf("websocket invalid file_chunk payload user_id=%s: %v", client.userID, err)
-			metrics.IncrementWebSocketError("invalid_file_chunk_payload")
-			return
-		}
-		payload.From = client.userID
-		payloadBytes, err := json.Marshal(payload)
-		if err != nil {
-			h.log.Warnf("websocket failed to marshal file_chunk payload user_id=%s: %v", client.userID, err)
-			return
-		}
-		forwardMsg := &WSMessage{
-			Type:    msg.Type,
-			Payload: payloadBytes,
-		}
-		h.log.Debugf("websocket file_chunk from=%s to=%s file_id=%s chunk_index=%d/%d", client.userID, payload.To, payload.FileID, payload.ChunkIndex, payload.TotalChunks)
-		if h.forwardMessageWithModifiedPayload(forwardMsg, payload, true, client.userID) {
-			metrics.IncrementWebSocketFileChunk()
-			metrics.IncrementWebSocketMessage("file_chunk")
-		}
-
-	case TypeFileComplete:
-		var payload FileCompletePayload
-		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
-			h.log.Warnf("websocket invalid file_complete payload user_id=%s: %v", client.userID, err)
-			metrics.IncrementWebSocketError("invalid_file_complete_payload")
-			return
-		}
-		payload.From = client.userID
-		payloadBytes, err := json.Marshal(payload)
-		if err != nil {
-			h.log.Warnf("websocket failed to marshal file_complete payload user_id=%s: %v", client.userID, err)
-			return
-		}
-		forwardMsg := &WSMessage{
-			Type:    msg.Type,
-			Payload: payloadBytes,
-		}
-		h.log.Debugf("websocket file_complete from=%s to=%s file_id=%s", client.userID, payload.To, payload.FileID)
-		if h.forwardMessageWithModifiedPayload(forwardMsg, payload, true, client.userID) {
-			metrics.IncrementWebSocketMessage("file_complete")
-		}
-
-	case TypeAck:
-		var payload AckPayload
-		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
-			h.log.Warnf("websocket invalid ack payload user_id=%s: %v", client.userID, err)
-			return
-		}
-		if h.forwardMessage(client, msg, payload, false) {
-			metrics.IncrementWebSocketMessage("ack")
-		}
-
-	default:
-		h.log.Warnf("websocket unknown message type user_id=%s type=%s", client.userID, msg.Type)
-		metrics.IncrementWebSocketError("unknown_message_type")
+		return
 	}
+
+	h.processor.Submit(client.ctx, client, msg)
 }
 
 func (h *Hub) handleUnregister(client *Client) {
@@ -421,6 +314,12 @@ func (h *Hub) handleUnregister(client *Client) {
 		clients = append(clients, value.(*Client))
 		return true
 	})
+
+	transfers := h.fileTracker.GetTransfersForUser(client.userID)
+	for _, transfer := range transfers {
+		h.notifyFileTransferFailed(transfer)
+		h.fileTracker.Complete(transfer.FileID)
+	}
 
 	client.Stop()
 	close(client.send)
@@ -452,10 +351,10 @@ func (h *Hub) handleUnregister(client *Client) {
 	}
 }
 
-func (h *Hub) sendPeerOffline(fromUserID, peerID string) error {
+func (h *Hub) sendPeerOffline(ctx context.Context, fromUserID, peerID string) error {
 	payloadBytes, err := json.Marshal(PeerOfflinePayload{PeerID: peerID})
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal error: %w", err)
 	}
 
 	msg := &WSMessage{
@@ -463,8 +362,8 @@ func (h *Hub) sendPeerOffline(fromUserID, peerID string) error {
 		Payload: payloadBytes,
 	}
 
-	if ok := h.SendToUser(fromUserID, msg); !ok {
-		return fmt.Errorf("user %s is not connected", fromUserID)
+	if err := h.SendToUserWithContext(ctx, fromUserID, msg); err != nil {
+		return fmt.Errorf("user %s is not connected: %w", fromUserID, err)
 	}
 
 	return nil
@@ -485,8 +384,67 @@ func (h *Hub) updateLastSeenDebounced(userID string) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		if err := h.userRepo.UpdateLastSeen(ctx, userdomain.ID(userID)); err != nil {
+		err := h.circuitBreaker.Call(ctx, func(ctx context.Context) error {
+			return h.userRepo.UpdateLastSeen(ctx, userdomain.ID(userID))
+		})
+
+		if err != nil && !errors.Is(err, ErrCircuitOpen) {
 			h.log.Warnf("websocket failed to update last_seen user_id=%s: %v", userID, err)
 		}
 	}()
+}
+
+func (h *Hub) trackFileTransfer(payload FileStartPayload) {
+	h.fileTracker.Track(payload)
+}
+
+func (h *Hub) updateFileTransferProgress(fileID string, chunkIndex int) {
+	h.fileTracker.UpdateProgress(fileID, chunkIndex)
+}
+
+func (h *Hub) completeFileTransfer(fileID string) {
+	h.fileTracker.Complete(fileID)
+}
+
+func (h *Hub) notifyFileTransferFailed(transfer *FileTransfer) {
+	payloadBytes, err := json.Marshal(FileCompletePayload{
+		To:     transfer.To,
+		From:   transfer.From,
+		FileID: transfer.FileID,
+	})
+	if err != nil {
+		h.log.Errorf("websocket failed to marshal file_failed payload: %v", err)
+		return
+	}
+
+	msg := &WSMessage{
+		Type:    TypeFileComplete,
+		Payload: payloadBytes,
+	}
+
+	if transfer.To != "" {
+		if err := h.SendToUserWithContext(h.ctx, transfer.To, msg); err != nil {
+			h.log.Warnf("websocket failed to notify file transfer failure to=%s file_id=%s: %v", transfer.To, transfer.FileID, err)
+		}
+	}
+}
+
+func (h *Hub) fileTrackerCleanup() {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-h.ctx.Done():
+			return
+		case <-ticker.C:
+			h.fileTracker.CleanupStale()
+		}
+	}
+}
+
+func (h *Hub) Shutdown() {
+	h.cancel()
+	h.processor.Shutdown()
+	h.shutdown()
 }

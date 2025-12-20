@@ -114,14 +114,14 @@ export class WebSocketClient {
           }
         } catch (err) {
           this.handlers.onError?.(
-            new Error('Failed to parse WebSocket message'),
+            new Error('Не удалось разобрать сообщение WebSocket'),
           );
         }
       };
 
       this.ws.onerror = () => {
         this.setState('error');
-        this.handlers.onError?.(new Error('WebSocket connection error'));
+        this.handlers.onError?.(new Error('Ошибка подключения WebSocket'));
       };
 
       this.ws.onclose = () => {
@@ -133,14 +133,18 @@ export class WebSocketClient {
           this.scheduleReconnect();
         } else {
           this.handlers.onError?.(
-            new Error('Max reconnection attempts reached'),
+            new Error(
+              'Достигнуто максимальное количество попыток переподключения',
+            ),
           );
         }
       };
     } catch (err) {
       this.setState('error');
       this.handlers.onError?.(
-        err instanceof Error ? err : new Error('Failed to create WebSocket'),
+        err instanceof Error
+          ? err
+          : new Error('Не удалось создать WebSocket соединение'),
       );
     }
   }
@@ -168,7 +172,7 @@ export class WebSocketClient {
       }
       this.ws.send(JSON.stringify(messageToSend));
     } else {
-      this.handlers.onError?.(new Error('WebSocket is not connected'));
+      this.handlers.onError?.(new Error('WebSocket не подключен'));
     }
   }
 

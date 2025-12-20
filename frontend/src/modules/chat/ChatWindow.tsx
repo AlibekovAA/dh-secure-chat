@@ -8,9 +8,7 @@ import { VoiceRecorder } from './VoiceRecorder';
 import { getFingerprint } from './api';
 import {
   getVerifiedPeerFingerprint,
-  hasPeerFingerprintChanged,
   isPeerVerified,
-  saveVerifiedPeerFingerprint,
 } from '../../shared/crypto/fingerprint';
 import { useToast } from '../../shared/ui/ToastProvider';
 import { MAX_FILE_SIZE } from './constants';
@@ -32,6 +30,8 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
   const [peerFingerprint, setPeerFingerprint] = useState<string | null>(null);
   const [fingerprintWarning, setFingerprintWarning] = useState(false);
   const [isChatBlocked, setIsChatBlocked] = useState(false);
+  const [imagePreview, setImagePreview] = useState<{ file: File; url: string } | null>(null);
+  const [voicePreview, setVoicePreview] = useState<{ file: File; duration: number; url: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const { showToast } = useToast();
@@ -55,10 +55,13 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
   }, [messages.length, scrollToBottom]);
 
   useEffect(() => {
-    if (isSessionActive && inputRef.current) {
-      inputRef.current.focus();
+    if (inputRef.current && !isChatBlocked && isSessionActive && !isSending) {
+      const timer = setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
+      return () => clearTimeout(timer);
     }
-  }, [isSessionActive]);
+  }, [isChatBlocked, isSessionActive, isSending]);
 
   useEffect(() => {
     const loadFingerprints = async () => {
@@ -98,23 +101,59 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
     }
   }, [token, myUserId, peer.id, isSessionActive, showToast]);
 
+  useEffect(() => {
+    return () => {
+      if (imagePreview) {
+        URL.revokeObjectURL(imagePreview.url);
+      }
+      if (voicePreview) {
+        URL.revokeObjectURL(voicePreview.url);
+      }
+    };
+  }, [imagePreview, voicePreview]);
+
+  const handleRemovePreview = useCallback(() => {
+    if (imagePreview) {
+      URL.revokeObjectURL(imagePreview.url);
+      setImagePreview(null);
+    }
+  }, [imagePreview]);
+
+  const handleRemoveVoicePreview = useCallback(() => {
+    if (voicePreview) {
+      URL.revokeObjectURL(voicePreview.url);
+      setVoicePreview(null);
+    }
+  }, [voicePreview]);
+
   const handleSend = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
-      if (!messageText.trim() || isSending || !isSessionActive || isChatBlocked) return;
+      if ((!messageText.trim() && !imagePreview && !voicePreview) || isSending || !isSessionActive || isChatBlocked) return;
 
       setIsSending(true);
       try {
-        await sendMessage(messageText.trim());
+        if (imagePreview) {
+          await sendFile(imagePreview.file);
+          handleRemovePreview();
+        } else if (voicePreview) {
+          await sendVoice(voicePreview.file, voicePreview.duration);
+          handleRemoveVoicePreview();
+        } else {
+          await sendMessage(messageText.trim());
+        }
         setMessageText('');
         if (inputRef.current) {
+          inputRef.current.style.height = '40px';
           inputRef.current.focus();
         }
+      } catch (err) {
+        showToast('Ошибка отправки сообщения', 'error');
       } finally {
         setIsSending(false);
       }
     },
-    [messageText, isSending, isSessionActive, sendMessage],
+    [messageText, imagePreview, voicePreview, isSending, isSessionActive, isChatBlocked, sendMessage, sendFile, sendVoice, handleRemovePreview, handleRemoveVoicePreview, showToast],
   );
 
   const handleKeyDown = useCallback(
@@ -127,6 +166,16 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
     [handleSend],
   );
 
+  const handleInputBlur = useCallback(() => {
+    if (!isChatBlocked && isSessionActive && !isSending && inputRef.current) {
+      setTimeout(() => {
+        if (inputRef.current && document.activeElement !== inputRef.current) {
+          inputRef.current.focus();
+        }
+      }, 100);
+    }
+  }, [isChatBlocked, isSessionActive, isSending]);
+
   const handleFileSelect = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
@@ -134,6 +183,18 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
 
       if (file.size > MAX_FILE_SIZE) {
         showToast('Файл слишком большой (максимум 50MB)', 'error');
+        return;
+      }
+
+      if (file.type.startsWith('image/')) {
+        if (imagePreview) {
+          URL.revokeObjectURL(imagePreview.url);
+        }
+        const url = URL.createObjectURL(file);
+        setImagePreview({ file, url });
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
         return;
       }
 
@@ -150,8 +211,55 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
         }
       }
     },
-    [isSendingFile, isSessionActive, isChatBlocked, sendFile, showToast],
+    [isSendingFile, isSessionActive, isChatBlocked, sendFile, showToast, imagePreview],
   );
+
+  const handlePaste = useCallback(
+    async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      if (isSendingFile || !isSessionActive || isChatBlocked) return;
+
+      const items = e.clipboardData.items;
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.startsWith('image/')) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (!file) continue;
+
+          if (file.size > MAX_FILE_SIZE) {
+            showToast('Изображение слишком большое (максимум 50MB)', 'error');
+            continue;
+          }
+
+          if (imagePreview) {
+            URL.revokeObjectURL(imagePreview.url);
+          }
+
+          const url = URL.createObjectURL(file);
+          setImagePreview({ file, url });
+          break;
+        }
+      }
+    },
+    [isSendingFile, isSessionActive, isChatBlocked, showToast, imagePreview],
+  );
+
+  const handleSendVoice = useCallback(async () => {
+    if (!voicePreview || isSending || !isSessionActive || isChatBlocked) return;
+
+    setIsSending(true);
+    try {
+      await sendVoice(voicePreview.file, voicePreview.duration);
+      handleRemoveVoicePreview();
+      if (inputRef.current) {
+        inputRef.current.focus();
+      }
+    } catch {
+      showToast('Ошибка отправки голосового сообщения', 'error');
+    } finally {
+      setIsSending(false);
+    }
+  }, [voicePreview, isSending, isSessionActive, isChatBlocked, sendVoice, handleRemoveVoicePreview, showToast]);
 
   const handleFileButtonClick = useCallback(() => {
     if (!isSessionActive || isChatBlocked) return;
@@ -175,8 +283,16 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
 
   const isLoading = state === 'establishing';
 
+  useEffect(() => {
+    return () => {
+      if (imagePreview) {
+        URL.revokeObjectURL(imagePreview.url);
+      }
+    };
+  }, [imagePreview]);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="w-full max-w-2xl h-[80vh] flex flex-col bg-black border border-emerald-700 rounded-xl overflow-hidden animate-[fadeIn_0.3s_ease-out,slideUp_0.3s_ease-out]">
         <div className="flex items-center justify-between px-4 py-3 border-b border-emerald-700/60 bg-black/80">
           <div className="flex items-center gap-3">
@@ -361,6 +477,77 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
           <div ref={messagesEndRef} />
         </div>
 
+        {imagePreview && (
+          <div className="border-t border-emerald-700/60 bg-black/80 px-4 py-3">
+            <div className="flex items-center gap-3 p-3 rounded-lg border border-emerald-700/40 bg-emerald-900/20">
+              <div className="relative flex-shrink-0">
+                <img
+                  src={imagePreview.url}
+                  alt="Preview"
+                  className="w-16 h-16 object-cover rounded border border-emerald-700/40"
+                />
+                <button
+                  type="button"
+                  onClick={handleRemovePreview}
+                  className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center text-xs transition-colors"
+                  aria-label="Удалить предпросмотр"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-emerald-100 truncate">{imagePreview.file.name}</p>
+                <p className="text-xs text-emerald-500/80 mt-0.5">
+                  {(imagePreview.file.size / 1024 / 1024).toFixed(2)} MB
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {voicePreview && (
+          <div className="border-t border-emerald-700/60 bg-black/80 px-4 py-3">
+            <div className="flex items-center gap-3 p-3 rounded-lg border border-emerald-700/40 bg-emerald-900/20">
+              <div className="flex-shrink-0">
+                <div className="w-12 h-12 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center">
+                  <svg
+                    className="w-6 h-6 text-emerald-400"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
+                    <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
+                  </svg>
+                </div>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-emerald-100">Голосовое сообщение</p>
+                <p className="text-xs text-emerald-500/80 mt-0.5">
+                  {Math.floor(voicePreview.duration / 60)}:{(voicePreview.duration % 60).toString().padStart(2, '0')}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSendVoice}
+                  disabled={isSending || !isSessionActive || isChatBlocked}
+                  className="px-3 py-1.5 text-xs font-medium text-emerald-100 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-900/40 disabled:cursor-not-allowed rounded transition-colors"
+                >
+                  Отправить
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRemoveVoicePreview}
+                  disabled={isSending}
+                  className="px-3 py-1.5 text-xs font-medium text-emerald-400 hover:text-emerald-200 disabled:text-emerald-600 rounded transition-colors"
+                >
+                  Отменить
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <form
           onSubmit={handleSend}
           className="border-t border-emerald-700/60 bg-black/80 px-4 py-3"
@@ -376,12 +563,11 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
           <div className="flex items-center gap-2">
             <VoiceRecorder
               onRecorded={(file, duration) => {
-                sendVoice(file, duration).catch(() => {
-                  showToast('Ошибка отправки голосового сообщения', 'error');
-                });
+                const url = URL.createObjectURL(file);
+                setVoicePreview({ file, duration, url });
               }}
               onError={(error) => showToast(error, 'error')}
-              disabled={!isSessionActive || isChatBlocked}
+              disabled={!isSessionActive || isChatBlocked || !!voicePreview}
             />
             <div className="flex-1 relative flex items-center">
               <textarea
@@ -389,12 +575,14 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
                 value={messageText}
                 onChange={(e) => setMessageText(e.target.value)}
                 onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
+                onBlur={handleInputBlur}
                 disabled={!isSessionActive || isSending || isChatBlocked}
                 placeholder={
                   isChatBlocked
                     ? 'Чат заблокирован: верифицируйте identity'
                     : isSessionActive
-                      ? 'Введите сообщение... (Enter для отправки)'
+                      ? 'Введите сообщение...'
                       : 'Ожидание установки сессии...'
                 }
                 rows={1}
@@ -440,7 +628,7 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
             </div>
             <button
               type="submit"
-              disabled={!messageText.trim() || !isSessionActive || isSending}
+              disabled={(!messageText.trim() && !imagePreview) || !isSessionActive || isSending}
               className="rounded-md bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-700 disabled:cursor-not-allowed text-sm font-medium px-4 h-10 text-black transition-colors flex items-center justify-center min-w-[80px]"
             >
               {isSending ? (

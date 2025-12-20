@@ -32,13 +32,18 @@ export function fingerprintToEmojis(fingerprint: string): string {
     '🙈',
   ];
 
-  return (
-    fingerprint
-      .match(/.{1,4}/g)
-      ?.slice(0, 8)
-      .map((hex) => emojis[parseInt(hex, 16) % emojis.length])
-      .join(' ') || ''
-  );
+  const result: string[] = [];
+  for (let i = 0; i < 8 && i * 4 < fingerprint.length; i++) {
+    const start = i * 4;
+    const end = start + 4;
+    const hex = fingerprint.slice(start, end);
+    if (hex.length === 4) {
+      const value = parseInt(hex, 16);
+      result.push(emojis[value % emojis.length]);
+    }
+  }
+
+  return result.join(' ');
 }
 
 const VERIFIED_PEERS_STORAGE = 'verified_peers';

@@ -20,6 +20,10 @@ func NewPool(log *logger.Logger, databaseURL string) *pgxpool.Pool {
 	cfg.MaxConnLifetime = time.Hour
 	cfg.MaxConnIdleTime = 30 * time.Minute
 	cfg.HealthCheckPeriod = time.Minute
+	cfg.ConnConfig.ConnectTimeout = 5 * time.Second
+	cfg.ConnConfig.RuntimeParams = map[string]string{
+		"application_name": "dh-secure-chat",
+	}
 
 	const maxAttempts = 10
 	const delay = time.Second

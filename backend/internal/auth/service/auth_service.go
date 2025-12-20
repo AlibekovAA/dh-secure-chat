@@ -107,7 +107,11 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (AuthRe
 			return AuthResult{}, ErrUsernameTaken
 		}
 		s.log.Errorf("register failed username=%s: %v", input.Username, err)
-		return AuthResult{}, err
+		return AuthResult{}, &AuthError{
+			Code:    "DB_ERROR",
+			Message: "failed to create user",
+			Err:     err,
+		}
 	}
 
 	if len(input.IdentityPubKey) > 0 {
@@ -153,7 +157,11 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (AuthResult, 
 			return AuthResult{}, ErrInvalidCredentials
 		}
 		s.log.Errorf("login failed username=%s: %v", input.Username, err)
-		return AuthResult{}, err
+		return AuthResult{}, &AuthError{
+			Code:    "DB_ERROR",
+			Message: "failed to fetch user",
+			Err:     err,
+		}
 	}
 
 	if err := s.hasher.Compare(user.PasswordHash, input.Password); err != nil {
