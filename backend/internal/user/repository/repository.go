@@ -3,12 +3,12 @@ package repository
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/jackc/pgconn"
 	pgx "github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/db"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
 )
 
@@ -42,7 +42,7 @@ func (r *PgRepository) Create(ctx context.Context, user domain.User) error {
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			return ErrUsernameAlreadyExists
 		}
-		return fmt.Errorf("failed to create user: %w", err)
+		return db.HandleExecError(err, "create user")
 	}
 	return nil
 }
@@ -56,13 +56,9 @@ func (r *PgRepository) FindByUsername(ctx context.Context, username string) (dom
 
 	var user domain.User
 	err := row.Scan(&user.ID, &user.Username, &user.PasswordHash, &user.CreatedAt, &user.LastSeenAt)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.User{}, ErrUserNotFound
-		}
-		return domain.User{}, fmt.Errorf("failed to find user by username: %w", err)
+	if err := db.HandleQueryError(err, ErrUserNotFound, "find user by username"); err != nil {
+		return domain.User{}, err
 	}
-
 	return user, nil
 }
 
@@ -75,13 +71,9 @@ func (r *PgRepository) FindByID(ctx context.Context, id domain.ID) (domain.User,
 
 	var user domain.User
 	err := row.Scan(&user.ID, &user.Username, &user.PasswordHash, &user.CreatedAt, &user.LastSeenAt)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.User{}, ErrUserNotFound
-		}
-		return domain.User{}, fmt.Errorf("failed to find user by id: %w", err)
+	if err := db.HandleQueryError(err, ErrUserNotFound, "find user by id"); err != nil {
+		return domain.User{}, err
 	}
-
 	return user, nil
 }
 
@@ -98,7 +90,7 @@ func (r *PgRepository) SearchByUsername(ctx context.Context, query string, limit
 		limit,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to search users: %w", err)
+		return nil, db.HandleExecError(err, "search users")
 	}
 	defer rows.Close()
 
@@ -106,13 +98,13 @@ func (r *PgRepository) SearchByUsername(ctx context.Context, query string, limit
 	for rows.Next() {
 		var u domain.Summary
 		if err := rows.Scan(&u.ID, &u.Username, &u.CreatedAt); err != nil {
-			return nil, fmt.Errorf("failed to scan user: %w", err)
+			return nil, db.HandleQueryError(err, nil, "scan user")
 		}
 		users = append(users, u)
 	}
 
 	if rows.Err() != nil {
-		return nil, fmt.Errorf("rows iteration error: %w", rows.Err())
+		return nil, db.HandleQueryError(rows.Err(), nil, "iterate rows")
 	}
 
 	return users, nil
@@ -124,10 +116,7 @@ func (r *PgRepository) UpdateLastSeen(ctx context.Context, userID domain.ID) err
 		`UPDATE users SET last_seen_at = NOW() WHERE id = $1`,
 		string(userID),
 	)
-	if err != nil {
-		return fmt.Errorf("failed to update last_seen_at: %w", err)
-	}
-	return nil
+	return db.HandleExecError(err, "update last_seen_at")
 }
 
 func (r *PgRepository) Delete(ctx context.Context, id domain.ID) error {
@@ -136,10 +125,7 @@ func (r *PgRepository) Delete(ctx context.Context, id domain.ID) error {
 		`DELETE FROM users WHERE id = $1`,
 		string(id),
 	)
-	if err != nil {
-		return fmt.Errorf("failed to delete user: %w", err)
-	}
-	return nil
+	return db.HandleExecError(err, "delete user")
 }
 
 var ErrUserNotFound = pgx.ErrNoRows

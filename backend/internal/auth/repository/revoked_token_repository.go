@@ -3,11 +3,12 @@ package repository
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	pgx "github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
+
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/db"
 )
 
 type RevokedTokenRepository interface {
@@ -34,10 +35,7 @@ func (r *PgRevokedTokenRepository) Revoke(ctx context.Context, jti string, userI
 		userID,
 		expiresAt,
 	)
-	if err != nil {
-		return fmt.Errorf("failed to revoke token: %w", err)
-	}
-	return nil
+	return db.HandleExecError(err, "revoke token")
 }
 
 func (r *PgRevokedTokenRepository) IsRevoked(ctx context.Context, jti string) (bool, error) {
@@ -55,9 +53,8 @@ func (r *PgRevokedTokenRepository) IsRevoked(ctx context.Context, jti string) (b
 		if errors.Is(err, pgx.ErrNoRows) {
 			return false, nil
 		}
-		return false, fmt.Errorf("failed to check revoked token: %w", err)
+		return false, db.HandleQueryError(err, nil, "check revoked token")
 	}
-
 	return exists, nil
 }
 
@@ -67,7 +64,7 @@ func (r *PgRevokedTokenRepository) DeleteExpired(ctx context.Context) (int64, er
 		`DELETE FROM revoked_tokens WHERE expires_at < NOW()`,
 	)
 	if err != nil {
-		return 0, fmt.Errorf("failed to delete expired revoked tokens: %w", err)
+		return 0, db.HandleExecError(err, "delete expired revoked tokens")
 	}
 	return res.RowsAffected(), nil
 }

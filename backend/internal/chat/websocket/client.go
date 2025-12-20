@@ -12,7 +12,7 @@ import (
 )
 
 type Client struct {
-	hub                 *Hub
+	hub                 HubInterface
 	conn                *gorillaWS.Conn
 	userID              string
 	username            string
@@ -30,7 +30,7 @@ type Client struct {
 	cancel              context.CancelFunc
 }
 
-func NewUnauthenticatedClient(hub *Hub, conn *gorillaWS.Conn, jwtSecret string, log *logger.Logger, revokedTokenChecker jwtverify.RevokedTokenChecker, writeWait, pongWait, pingPeriod time.Duration, maxMsgSize int64, authTimeout time.Duration, sendBufSize int) *Client {
+func NewUnauthenticatedClient(hub HubInterface, conn *gorillaWS.Conn, jwtSecret string, log *logger.Logger, revokedTokenChecker jwtverify.RevokedTokenChecker, writeWait, pongWait, pingPeriod time.Duration, maxMsgSize int64, authTimeout time.Duration, sendBufSize int) *Client {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Client{
 		hub:                 hub,

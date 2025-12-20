@@ -5,6 +5,7 @@ import (
 	"expvar"
 	"net/http"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -26,18 +27,14 @@ import (
 )
 
 func main() {
-	cfg, err := config.LoadChatConfig()
-	if err != nil {
-		log := logger.GetInstance()
-		if initErr := log.Initialize(os.Getenv("LOG_DIR"), "chat", os.Getenv("LOG_LEVEL")); initErr != nil {
-			os.Exit(1)
-		}
-		log.Fatalf("failed to load config: %v", err)
-	}
-
 	log := logger.GetInstance()
 	if err := log.Initialize(os.Getenv("LOG_DIR"), "chat", os.Getenv("LOG_LEVEL")); err != nil {
 		log.Fatalf("failed to initialize logger: %v", err)
+	}
+
+	cfg, err := config.LoadChatConfig()
+	if err != nil {
+		log.Fatalf("failed to load config: %v", err)
 	}
 
 	pool := db.NewPool(log, cfg.DatabaseURL)
@@ -47,6 +44,13 @@ func main() {
 	identityRepo := identityrepo.NewPgRepository(pool)
 	identityService := identityservice.NewIdentityService(identityRepo, log)
 	chatSvc := chatservice.NewChatService(userRepo, identityService, log)
+
+	shardCount := 0
+	if v := os.Getenv("CHAT_WS_SHARD_COUNT"); v != "" {
+		if count, err := strconv.Atoi(v); err == nil && count > 0 {
+			shardCount = count
+		}
+	}
 
 	hubConfig := websocket.HubConfig{
 		MaxFileSize:             50 * 1024 * 1024,
@@ -59,15 +63,32 @@ func main() {
 		CircuitBreakerReset:     30 * time.Second,
 		FileTransferTimeout:     10 * time.Minute,
 		IdempotencyTTL:          5 * time.Minute,
+		ShardCount:              shardCount,
 	}
-	hub := websocket.NewHub(log, userRepo, hubConfig)
+
+	var hub websocket.HubInterface
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		hub.Run(ctx)
-	}()
+
+	if shardCount > 0 {
+		shardedHub := websocket.NewShardedHub(log, userRepo, hubConfig, shardCount)
+		hub = shardedHub
+		log.Infof("using sharded hub with %d shards", shardCount)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			shardedHub.Run(ctx)
+		}()
+	} else {
+		regularHub := websocket.NewHub(log, userRepo, hubConfig)
+		hub = regularHub
+		log.Infof("using regular hub")
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			regularHub.Run(ctx)
+		}()
+	}
 
 	handler := chathttp.NewHandler(chatSvc, hub, cfg, log, pool)
 

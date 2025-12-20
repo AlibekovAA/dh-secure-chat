@@ -58,6 +58,7 @@ type HubConfig struct {
 	CircuitBreakerReset     time.Duration
 	FileTransferTimeout     time.Duration
 	IdempotencyTTL          time.Duration
+	ShardCount              int
 }
 
 func NewHub(log *logger.Logger, userRepo userrepo.Repository, config HubConfig) *Hub {
@@ -165,18 +166,14 @@ func (h *Hub) SendToUserWithContext(ctx context.Context, userID string, message 
 	}
 
 	client := value.(*Client)
-	sendChan := client.send
-
 	messageBytes, err := json.Marshal(message)
 	if err != nil {
 		h.log.Errorf("websocket marshal error: %v", err)
 		return fmt.Errorf("marshal error: %w", err)
 	}
-
-	if h.sendWithRetry(sendChan, messageBytes, userID, string(message.Type)) {
+	if h.sendWithRetry(client.send, messageBytes, userID, string(message.Type)) {
 		return nil
 	}
-
 	return fmt.Errorf("failed to send message to user %s", userID)
 }
 
@@ -250,6 +247,9 @@ func (p FileStartPayload) GetTo() string          { return p.To }
 func (p FileChunkPayload) GetTo() string          { return p.To }
 func (p FileCompletePayload) GetTo() string       { return p.To }
 func (p AckPayload) GetTo() string                { return p.To }
+func (p ReactionPayload) GetTo() string           { return p.To }
+func (p TypingPayload) GetTo() string             { return p.To }
+func (p ReadReceiptPayload) GetTo() string        { return p.To }
 
 func (h *Hub) forwardMessage(ctx context.Context, msg *WSMessage, payload payloadWithTo, requireOnline bool, fromUserID string) bool {
 	to := payload.GetTo()
@@ -326,46 +326,28 @@ func (h *Hub) handleUnregister(client *Client) {
 	metrics.DecrementActiveWebSocketConnections()
 	h.log.Infof("websocket client unregistered user_id=%s username=%s total=%d", client.userID, client.username, totalClients)
 
-	payloadBytes, err := json.Marshal(PeerDisconnectedPayload{PeerID: client.userID})
+	msg, err := marshalMessage(TypePeerDisconnected, PeerDisconnectedPayload{PeerID: client.userID})
 	if err != nil {
-		h.log.Errorf("websocket marshal peer_disconnected payload failed user_id=%s: %v", client.userID, err)
+		h.log.Errorf("websocket marshal peer_disconnected failed user_id=%s: %v", client.userID, err)
 		return
 	}
-
-	disconnectedMsg := &WSMessage{
-		Type:    TypePeerDisconnected,
-		Payload: payloadBytes,
-	}
-
-	messageBytes, err := json.Marshal(disconnectedMsg)
-	if err != nil {
-		h.log.Errorf("websocket marshal peer_disconnected message failed user_id=%s: %v", client.userID, err)
-		return
-	}
-
+	msgBytes, _ := json.Marshal(msg)
 	for _, otherClient := range clients {
 		select {
-		case otherClient.send <- messageBytes:
+		case otherClient.send <- msgBytes:
 		default:
 		}
 	}
 }
 
 func (h *Hub) sendPeerOffline(ctx context.Context, fromUserID, peerID string) error {
-	payloadBytes, err := json.Marshal(PeerOfflinePayload{PeerID: peerID})
+	msg, err := marshalMessage(TypePeerOffline, PeerOfflinePayload{PeerID: peerID})
 	if err != nil {
 		return fmt.Errorf("marshal error: %w", err)
 	}
-
-	msg := &WSMessage{
-		Type:    TypePeerOffline,
-		Payload: payloadBytes,
-	}
-
 	if err := h.SendToUserWithContext(ctx, fromUserID, msg); err != nil {
 		return fmt.Errorf("user %s is not connected: %w", fromUserID, err)
 	}
-
 	return nil
 }
 
@@ -407,25 +389,20 @@ func (h *Hub) completeFileTransfer(fileID string) {
 }
 
 func (h *Hub) notifyFileTransferFailed(transfer *FileTransfer) {
-	payloadBytes, err := json.Marshal(FileCompletePayload{
+	if transfer.To == "" {
+		return
+	}
+	msg, err := marshalMessage(TypeFileComplete, FileCompletePayload{
 		To:     transfer.To,
 		From:   transfer.From,
 		FileID: transfer.FileID,
 	})
 	if err != nil {
-		h.log.Errorf("websocket failed to marshal file_failed payload: %v", err)
+		h.log.Errorf("websocket failed to marshal file_failed: %v", err)
 		return
 	}
-
-	msg := &WSMessage{
-		Type:    TypeFileComplete,
-		Payload: payloadBytes,
-	}
-
-	if transfer.To != "" {
-		if err := h.SendToUserWithContext(h.ctx, transfer.To, msg); err != nil {
-			h.log.Warnf("websocket failed to notify file transfer failure to=%s file_id=%s: %v", transfer.To, transfer.FileID, err)
-		}
+	if err := h.SendToUserWithContext(h.ctx, transfer.To, msg); err != nil {
+		h.log.Warnf("websocket failed to notify file transfer failure to=%s file_id=%s: %v", transfer.To, transfer.FileID, err)
 	}
 }
 

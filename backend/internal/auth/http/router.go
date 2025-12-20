@@ -1,7 +1,6 @@
 package http
 
 import (
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -44,20 +43,15 @@ func NewHandler(auth *service.AuthService, cfg config.AuthConfig, log *logger.Lo
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", commonhttp.HealthHandler(log))
-	mux.HandleFunc("/api/auth/register", h.register)
-	mux.HandleFunc("/api/auth/login", h.login)
-	mux.HandleFunc("/api/auth/refresh", h.refresh)
-	mux.HandleFunc("/api/auth/logout", h.logout)
-	mux.HandleFunc("/api/auth/revoke", h.revoke)
+	mux.HandleFunc("/api/auth/register", commonhttp.RequireMethod(http.MethodPost)(commonhttp.WithTimeout(cfg.RequestTimeout)(h.register)))
+	mux.HandleFunc("/api/auth/login", commonhttp.RequireMethod(http.MethodPost)(commonhttp.WithTimeout(cfg.RequestTimeout)(h.login)))
+	mux.HandleFunc("/api/auth/refresh", commonhttp.RequireMethod(http.MethodPost)(commonhttp.WithTimeout(cfg.RequestTimeout)(h.refresh)))
+	mux.HandleFunc("/api/auth/logout", commonhttp.RequireMethod(http.MethodPost)(commonhttp.WithTimeout(cfg.RequestTimeout)(h.logout)))
+	mux.HandleFunc("/api/auth/revoke", commonhttp.RequireMethod(http.MethodPost)(commonhttp.WithTimeout(cfg.RequestTimeout)(h.revoke)))
 	return mux
 }
 
 func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		commonhttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
 	var req registerRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.log.Warnf("register failed: invalid json: %v", err)
@@ -65,8 +59,7 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), h.requestTimeout)
-	defer cancel()
+	ctx := r.Context()
 
 	var pubKey []byte
 	if req.IdentityPubKey != "" {
@@ -94,11 +87,6 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		commonhttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
 	var req loginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.log.Warnf("login failed: invalid json: %v", err)
@@ -106,8 +94,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), h.requestTimeout)
-	defer cancel()
+	ctx := r.Context()
 
 	result, err := h.auth.Login(ctx, service.LoginInput{
 		Username: req.Username,
@@ -123,19 +110,13 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		commonhttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
 	cookie, err := r.Cookie("refresh_token")
 	if err != nil || cookie.Value == "" {
 		commonhttp.WriteError(w, http.StatusUnauthorized, "missing refresh token")
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), h.requestTimeout)
-	defer cancel()
+	ctx := r.Context()
 
 	result, err := h.auth.RefreshAccessToken(ctx, cookie.Value)
 	if err != nil {
@@ -153,13 +134,7 @@ func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		commonhttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), h.requestTimeout)
-	defer cancel()
+	ctx := r.Context()
 
 	raw := r.Header.Get("Authorization")
 	if raw != "" && strings.HasPrefix(raw, "Bearer ") {
@@ -184,19 +159,13 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) revoke(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		commonhttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
 	raw := r.Header.Get("Authorization")
 	if raw == "" || !strings.HasPrefix(raw, "Bearer ") {
 		commonhttp.WriteError(w, http.StatusUnauthorized, "missing authorization")
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), h.requestTimeout)
-	defer cancel()
+	ctx := r.Context()
 
 	tokenString := strings.TrimPrefix(raw, "Bearer ")
 	claims, err := h.auth.ParseTokenForRevoke(ctx, tokenString)

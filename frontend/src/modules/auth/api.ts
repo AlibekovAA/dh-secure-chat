@@ -39,7 +39,11 @@ export async function register(
   const json = (await res.json()) as AuthResponse | AuthError;
 
   if (!res.ok) {
-    throw new Error('error' in json ? json.error : 'Registration failed');
+    const errorMsg = 'error' in json ? json.error : 'Registration failed';
+    if (res.status === 409) {
+      throw new Error(errorMsg);
+    }
+    throw new Error(errorMsg);
   }
 
   return json as AuthResponse;

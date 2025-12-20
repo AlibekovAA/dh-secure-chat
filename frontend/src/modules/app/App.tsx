@@ -79,7 +79,6 @@ export function App() {
         if (cancelled) {
           return;
         }
-        console.warn("Silent refresh failed:", err);
         setToken(null);
         setProfile(null);
         setSearchResults([]);

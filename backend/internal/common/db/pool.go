@@ -17,8 +17,8 @@ func NewPool(log *logger.Logger, databaseURL string) *pgxpool.Pool {
 
 	cfg.MaxConns = 25
 	cfg.MinConns = 5
-	cfg.MaxConnLifetime = time.Hour
-	cfg.MaxConnIdleTime = 30 * time.Minute
+	cfg.MaxConnLifetime = 5 * time.Minute
+	cfg.MaxConnIdleTime = 10 * time.Minute
 	cfg.HealthCheckPeriod = time.Minute
 	cfg.ConnConfig.ConnectTimeout = 5 * time.Second
 	cfg.ConnConfig.RuntimeParams = map[string]string{

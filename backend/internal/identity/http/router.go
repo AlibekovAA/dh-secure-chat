@@ -9,7 +9,6 @@ import (
 	"time"
 
 	commonhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/http"
-	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/jwtverify"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/service"
 )
@@ -26,7 +25,7 @@ func NewHandler(identity *service.IdentityService, log *logger.Logger) http.Hand
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/identity/users/", h.handleIdentityRoutes)
+	mux.HandleFunc("/api/identity/users/", commonhttp.RequireMethod(http.MethodGet)(commonhttp.WithTimeout(5*time.Second)(h.handleIdentityRoutes)))
 
 	return mux
 }
@@ -75,16 +74,6 @@ func (h *Handler) handleIdentityRequest(
 	operation string,
 	handler func(context.Context, string) (map[string]string, error),
 ) {
-	if r.Method != http.MethodGet {
-		commonhttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
-	if _, ok := jwtverify.FromContext(r.Context()); !ok {
-		commonhttp.WriteError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
 	urlPath := r.URL.Path
 	if !strings.HasSuffix(urlPath, suffix) {
 		commonhttp.WriteError(w, http.StatusBadRequest, "invalid path")
@@ -105,8 +94,7 @@ func (h *Handler) handleIdentityRequest(
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-	defer cancel()
+	ctx := r.Context()
 
 	result, err := handler(ctx, userID)
 	if err != nil {

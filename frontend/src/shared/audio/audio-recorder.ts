@@ -79,7 +79,12 @@ export class AudioRecorder {
 
     this.stopDurationTimer();
 
+    if (this.startTime > 0) {
+      this.duration = Date.now() - this.startTime;
+    }
+
     if (this.mediaRecorder.state === 'recording') {
+      this.mediaRecorder.requestData();
       this.mediaRecorder.stop();
     }
 

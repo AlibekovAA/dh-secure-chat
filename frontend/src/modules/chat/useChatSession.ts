@@ -11,6 +11,7 @@ import type {
   FileChunkPayload,
   FileCompletePayload,
   AckPayload,
+  TypingPayload,
 } from '../../shared/websocket/types';
 import { generateEphemeralKeyPair } from '../../shared/crypto/ephemeral';
 import {
@@ -86,6 +87,7 @@ export function useChatSession({
   const [state, setState] = useState<ChatSessionState>('idle');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [isPeerTyping, setIsPeerTyping] = useState(false);
 
   const sessionKeyRef = useRef<SessionKey | null>(null);
   const myEphemeralKeyRef = useRef<{
@@ -121,6 +123,7 @@ export function useChatSession({
   const ACK_TIMEOUT = 5000;
   const MAX_RETRIES = 3;
   const RETRY_DELAY = 1000;
+  const typingTimeoutRef = useRef<number | null>(null);
 
   const handleAck = useCallback((messageId: string) => {
     const pending = pendingAcksRef.current.get(messageId);
@@ -487,6 +490,22 @@ export function useChatSession({
             }
             break;
           }
+
+          case 'typing': {
+            const payload = message.payload as TypingPayload;
+            if (payload.from === peerId) {
+              setIsPeerTyping(payload.is_typing);
+              if (typingTimeoutRef.current) {
+                clearTimeout(typingTimeoutRef.current);
+              }
+              if (payload.is_typing) {
+                typingTimeoutRef.current = setTimeout(() => {
+                  setIsPeerTyping(false);
+                }, 3000) as unknown as number;
+              }
+            }
+            break;
+          }
         }
       },
       [
@@ -724,6 +743,18 @@ export function useChatSession({
         });
 
         const blobClone = new Blob([file], { type: mimeType });
+        const extractedDuration = extractDurationFromFilename(file.name);
+        const finalDuration =
+          voiceDuration !== undefined ? voiceDuration : extractedDuration;
+
+        console.log('[useChatSession] sendFile создает сообщение:', {
+          isVoice,
+          voiceDuration,
+          extractedDuration,
+          finalDuration,
+          filename: file.name,
+        });
+
         const newMessage: ChatMessage = {
           id: `file-${Date.now()}-${messageIdCounterRef.current++}`,
           ...(isVoice
@@ -732,10 +763,7 @@ export function useChatSession({
                   filename: file.name,
                   mimeType,
                   size: file.size,
-                  duration:
-                    voiceDuration !== undefined
-                      ? voiceDuration
-                      : extractDurationFromFilename(file.name),
+                  duration: finalDuration,
                   blob: blobClone,
                 },
               }
@@ -751,9 +779,18 @@ export function useChatSession({
           isOwn: true,
         };
 
+        console.log('[useChatSession] sendFile созданное сообщение:', {
+          messageId: newMessage.id,
+          voiceDuration: isVoice ? newMessage.voice?.duration : undefined,
+        });
+
         setMessages((prev) => [...prev, newMessage]);
       } catch (err) {
-        setError('Ошибка отправки файла');
+        const errorMsg =
+          err instanceof Error ? err.message : 'Ошибка отправки файла';
+        console.error('sendFile error:', err);
+        setError(`Не удалось отправить файл: ${errorMsg}`);
+        throw err;
       }
     },
     [peerId, isConnected, state, send],
@@ -802,6 +839,11 @@ export function useChatSession({
 
   const sendVoice = useCallback(
     async (file: File, duration: number) => {
+      console.log('[useChatSession] sendVoice вызван:', {
+        duration,
+        filename: file.name,
+        fileSize: file.size,
+      });
       if (file.size > MAX_VOICE_SIZE) {
         setError('Голосовое сообщение слишком большое (максимум 10MB)');
         return;
@@ -811,6 +853,28 @@ export function useChatSession({
     [sendFile],
   );
 
+  const sendTyping = useCallback(
+    (isTyping: boolean) => {
+      if (!peerId || !isConnected || !send) return;
+      send({
+        type: 'typing',
+        payload: {
+          to: peerId,
+          is_typing: isTyping,
+        },
+      });
+    },
+    [peerId, isConnected, send],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
+  }, []);
+
   return {
     state,
     messages,
@@ -818,6 +882,8 @@ export function useChatSession({
     sendMessage,
     sendFile,
     sendVoice,
+    sendTyping,
+    isPeerTyping,
     isSessionActive: state === 'active',
   };
 }

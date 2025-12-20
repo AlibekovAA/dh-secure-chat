@@ -135,8 +135,9 @@ export function AuthForm({ onAuthenticated }: Props) {
           autoComplete="username"
           value={username}
           readOnly
-          className="sr-only"
+          style={{ position: 'absolute', left: '-9999px', width: '1px', height: '1px', opacity: 0 }}
           tabIndex={-1}
+          aria-hidden="true"
         />
         <div className="space-y-1">
           <label className="block text-sm text-emerald-300">Имя пользователя</label>

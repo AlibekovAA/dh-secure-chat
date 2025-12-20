@@ -89,7 +89,6 @@ export function VoiceMessage({ duration, blob, isOwn }: Props) {
         audio.currentTime = 0.01;
         audio.currentTime = 0;
       } catch (error) {
-        console.error('VoiceMessage: failed to set audio src', error, { audioUrl });
         setIsLoading(false);
         return;
       }
@@ -251,8 +250,16 @@ export function VoiceMessage({ duration, blob, isOwn }: Props) {
     }
   };
 
-  const displayDuration = metadataDuration !== null && metadataDuration > 0 ? metadataDuration : (duration > 0 ? duration : 0);
+  const displayDuration = metadataDuration !== null && metadataDuration > 0 ? metadataDuration : duration;
   const progress = displayDuration > 0 ? (currentTime / displayDuration) * 100 : 0;
+
+  console.log('[VoiceMessage] Отображение:', {
+    duration,
+    metadataDuration,
+    displayDuration,
+    blobSize: blob?.size,
+    blobType: blob?.type,
+  });
 
   return (
     <div
@@ -329,16 +336,17 @@ export function VoiceMessage({ duration, blob, isOwn }: Props) {
         onError={(e) => {
           const audio = e.currentTarget;
           const error = audio.error;
-          const errorMessage = error?.message || 'Unknown error';
-          const errorCode = error?.code || 0;
-          console.error('VoiceMessage audio error:', {
-            code: errorCode,
-            message: errorMessage,
-            blobSize: blob?.size,
-            blobType: blob?.type,
-            audioUrl,
-            audioSrc: audio.src,
-          });
+          if (error && error.code !== 4 && error.code !== 2) {
+            const isBlobError = audio.src && audio.src.startsWith('blob:');
+            if (!isBlobError) {
+              console.error('VoiceMessage audio error:', {
+                code: error.code,
+                message: error.message,
+                blobSize: blob?.size,
+                blobType: blob?.type,
+              });
+            }
+          }
           setIsLoading(false);
         }}
       />

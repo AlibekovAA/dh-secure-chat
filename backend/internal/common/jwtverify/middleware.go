@@ -2,6 +2,7 @@ package jwtverify
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"expvar"
 	"fmt"
@@ -10,7 +11,6 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	commonhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/http"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 )
 
@@ -34,6 +34,12 @@ type contextKey string
 
 const claimsKey contextKey = "jwt_claims"
 
+func writeError(w http.ResponseWriter, status int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": message})
+}
+
 func Middleware(secret string, log *logger.Logger, checker RevokedTokenChecker) func(next http.Handler) http.Handler {
 	secretBytes := []byte(secret)
 
@@ -44,7 +50,7 @@ func Middleware(secret string, log *logger.Logger, checker RevokedTokenChecker) 
 				jwtValidationsTotal.Add(1)
 				jwtValidationsFailed.Add(1)
 				log.Warnf("jwt auth failed path=%s: missing or invalid authorization header", r.URL.Path)
-				commonhttp.WriteError(w, http.StatusUnauthorized, "missing or invalid authorization")
+				writeError(w, http.StatusUnauthorized, "missing or invalid authorization")
 				return
 			}
 
@@ -54,7 +60,7 @@ func Middleware(secret string, log *logger.Logger, checker RevokedTokenChecker) 
 			if err != nil {
 				jwtValidationsFailed.Add(1)
 				log.Warnf("jwt auth failed path=%s: %v", r.URL.Path, err)
-				commonhttp.WriteError(w, http.StatusUnauthorized, "invalid token")
+				writeError(w, http.StatusUnauthorized, "invalid token")
 				return
 			}
 
@@ -64,13 +70,13 @@ func Middleware(secret string, log *logger.Logger, checker RevokedTokenChecker) 
 				if err != nil {
 					jwtValidationsFailed.Add(1)
 					log.Errorf("jwt auth failed path=%s: failed to check revoked token jti=%s: %v", r.URL.Path, claims.JTI, err)
-					commonhttp.WriteError(w, http.StatusInternalServerError, "internal error")
+					writeError(w, http.StatusInternalServerError, "internal error")
 					return
 				}
 				if revoked {
 					jwtValidationsFailed.Add(1)
 					log.Warnf("jwt auth failed path=%s: token revoked jti=%s", r.URL.Path, claims.JTI)
-					commonhttp.WriteError(w, http.StatusUnauthorized, "token revoked")
+					writeError(w, http.StatusUnauthorized, "token revoked")
 					return
 				}
 			}
@@ -85,6 +91,16 @@ func FromContext(ctx context.Context) (Claims, bool) {
 	val := ctx.Value(claimsKey)
 	claims, ok := val.(Claims)
 	return claims, ok
+}
+
+func RequireAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := FromContext(r.Context()); !ok {
+			writeError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		next(w, r)
+	}
 }
 
 func ParseToken(tokenString string, secret []byte) (Claims, error) {

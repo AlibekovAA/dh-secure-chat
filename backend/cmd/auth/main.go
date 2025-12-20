@@ -24,18 +24,14 @@ import (
 )
 
 func main() {
-	cfg, err := config.LoadAuthConfig()
-	if err != nil {
-		log := logger.GetInstance()
-		if initErr := log.Initialize(os.Getenv("LOG_DIR"), "auth", os.Getenv("LOG_LEVEL")); initErr != nil {
-			os.Exit(1)
-		}
-		log.Fatalf("failed to load config: %v", err)
-	}
-
 	log := logger.GetInstance()
 	if err := log.Initialize(os.Getenv("LOG_DIR"), "auth", os.Getenv("LOG_LEVEL")); err != nil {
 		log.Fatalf("failed to initialize logger: %v", err)
+	}
+
+	cfg, err := config.LoadAuthConfig()
+	if err != nil {
+		log.Fatalf("failed to load config: %v", err)
 	}
 
 	pool := db.NewPool(log, cfg.DatabaseURL)

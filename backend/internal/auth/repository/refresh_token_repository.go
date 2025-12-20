@@ -2,13 +2,12 @@ package repository
 
 import (
 	"context"
-	"errors"
-	"fmt"
 
 	pgx "github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 
 	authdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/domain"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/db"
 )
 
 type RefreshTokenRepository interface {
@@ -47,10 +46,7 @@ func (r *PgRefreshTokenRepository) Create(ctx context.Context, token authdomain.
 		token.ExpiresAt,
 		token.CreatedAt,
 	)
-	if err != nil {
-		return fmt.Errorf("failed to create refresh token: %w", err)
-	}
-	return nil
+	return db.HandleExecError(err, "create refresh token")
 }
 
 func (r *PgRefreshTokenRepository) FindByTokenHash(ctx context.Context, hash string) (authdomain.RefreshToken, error) {
@@ -64,13 +60,9 @@ func (r *PgRefreshTokenRepository) FindByTokenHash(ctx context.Context, hash str
 
 	var token authdomain.RefreshToken
 	err := row.Scan(&token.ID, &token.TokenHash, &token.UserID, &token.ExpiresAt, &token.CreatedAt)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return authdomain.RefreshToken{}, ErrRefreshTokenNotFound
-		}
-		return authdomain.RefreshToken{}, fmt.Errorf("failed to find refresh token: %w", err)
+	if err := db.HandleQueryError(err, ErrRefreshTokenNotFound, "find refresh token"); err != nil {
+		return authdomain.RefreshToken{}, err
 	}
-
 	return token, nil
 }
 
@@ -80,10 +72,7 @@ func (r *PgRefreshTokenRepository) DeleteByTokenHash(ctx context.Context, hash s
 		`DELETE FROM refresh_tokens WHERE token_hash = $1`,
 		hash,
 	)
-	if err != nil {
-		return fmt.Errorf("failed to delete refresh token: %w", err)
-	}
-	return nil
+	return db.HandleExecError(err, "delete refresh token")
 }
 
 func (r *PgRefreshTokenRepository) CountByUserID(ctx context.Context, userID string) (int, error) {
@@ -95,9 +84,8 @@ func (r *PgRefreshTokenRepository) CountByUserID(ctx context.Context, userID str
 
 	var count int
 	if err := row.Scan(&count); err != nil {
-		return 0, fmt.Errorf("failed to count refresh tokens: %w", err)
+		return 0, db.HandleQueryError(err, nil, "count refresh tokens")
 	}
-
 	return count, nil
 }
 
@@ -114,10 +102,7 @@ func (r *PgRefreshTokenRepository) DeleteOldestByUserID(ctx context.Context, use
 		 )`,
 		userID,
 	)
-	if err != nil {
-		return fmt.Errorf("failed to delete oldest refresh token: %w", err)
-	}
-	return nil
+	return db.HandleExecError(err, "delete oldest refresh token")
 }
 
 func (r *PgRefreshTokenRepository) DeleteExpired(ctx context.Context) (int64, error) {
@@ -126,7 +111,7 @@ func (r *PgRefreshTokenRepository) DeleteExpired(ctx context.Context) (int64, er
 		`DELETE FROM refresh_tokens WHERE expires_at < NOW()`,
 	)
 	if err != nil {
-		return 0, fmt.Errorf("failed to delete expired refresh tokens: %w", err)
+		return 0, db.HandleExecError(err, "delete expired refresh tokens")
 	}
 	return res.RowsAffected(), nil
 }
@@ -134,7 +119,7 @@ func (r *PgRefreshTokenRepository) DeleteExpired(ctx context.Context) (int64, er
 func (r *PgRefreshTokenRepository) BeginTx(ctx context.Context) (RefreshTokenTx, error) {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to begin refresh token tx: %w", err)
+		return nil, db.HandleExecError(err, "begin refresh token tx")
 	}
 	return &pgRefreshTokenTx{tx: tx}, nil
 }
@@ -155,13 +140,9 @@ func (t *pgRefreshTokenTx) FindByTokenHashForUpdate(ctx context.Context, hash st
 
 	var token authdomain.RefreshToken
 	err := row.Scan(&token.ID, &token.TokenHash, &token.UserID, &token.ExpiresAt, &token.CreatedAt)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return authdomain.RefreshToken{}, ErrRefreshTokenNotFound
-		}
-		return authdomain.RefreshToken{}, fmt.Errorf("failed to find refresh token in tx: %w", err)
+	if err := db.HandleQueryError(err, ErrRefreshTokenNotFound, "find refresh token in tx"); err != nil {
+		return authdomain.RefreshToken{}, err
 	}
-
 	return token, nil
 }
 
@@ -171,10 +152,7 @@ func (t *pgRefreshTokenTx) DeleteByTokenHash(ctx context.Context, hash string) e
 		`DELETE FROM refresh_tokens WHERE token_hash = $1`,
 		hash,
 	)
-	if err != nil {
-		return fmt.Errorf("failed to delete refresh token in tx: %w", err)
-	}
-	return nil
+	return db.HandleExecError(err, "delete refresh token in tx")
 }
 
 func (t *pgRefreshTokenTx) Commit(ctx context.Context) error {

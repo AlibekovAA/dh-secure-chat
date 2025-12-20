@@ -3,11 +3,10 @@ package repository
 import (
 	"context"
 	"errors"
-	"fmt"
 
-	pgx "github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/db"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/domain"
 )
 
@@ -31,10 +30,7 @@ func (r *PgRepository) Create(ctx context.Context, key domain.IdentityKey) error
 		key.UserID,
 		key.PublicKey,
 	)
-	if err != nil {
-		return fmt.Errorf("failed to create identity key: %w", err)
-	}
-	return nil
+	return db.HandleExecError(err, "create identity key")
 }
 
 func (r *PgRepository) FindByUserID(ctx context.Context, userID string) (domain.IdentityKey, error) {
@@ -46,13 +42,9 @@ func (r *PgRepository) FindByUserID(ctx context.Context, userID string) (domain.
 
 	var key domain.IdentityKey
 	err := row.Scan(&key.UserID, &key.PublicKey, &key.CreatedAt)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.IdentityKey{}, ErrIdentityKeyNotFound
-		}
-		return domain.IdentityKey{}, fmt.Errorf("failed to find identity key: %w", err)
+	if err := db.HandleQueryError(err, ErrIdentityKeyNotFound, "find identity key"); err != nil {
+		return domain.IdentityKey{}, err
 	}
-
 	return key, nil
 }
 

@@ -31,17 +31,14 @@ func (p *EphemeralKeyPayload) SetFrom(from string) { p.From = from }
 func (p *FileStartPayload) SetFrom(from string)    { p.From = from }
 func (p *FileChunkPayload) SetFrom(from string)    { p.From = from }
 func (p *FileCompletePayload) SetFrom(from string) { p.From = from }
+func (p *ReactionPayload) SetFrom(from string)     { p.From = from }
+func (p *TypingPayload) SetFrom(from string)       { p.From = from }
+func (p *ReadReceiptPayload) SetFrom(from string)  { p.From = from }
 
 func (r *MessageRouter) Route(ctx context.Context, client *Client, msg *WSMessage) error {
 	switch msg.Type {
 	case TypeEphemeralKey:
-		return r.routeWithModifiedPayload(ctx, client, msg, func(ctx context.Context, payload interface{}) error {
-			p := payload.(*EphemeralKeyPayload)
-			if r.hub.forwardMessage(ctx, msg, p, true, client.userID) {
-				metrics.IncrementWebSocketMessage("ephemeral_key")
-			}
-			return nil
-		}, &EphemeralKeyPayload{}, "ephemeral_key")
+		return r.routeWithModifiedPayload(ctx, client, msg, &EphemeralKeyPayload{}, "ephemeral_key", true)
 
 	case TypeMessage:
 		return r.routeSimple(ctx, client, msg, &MessagePayload{}, "message", true, client.userID)
@@ -53,28 +50,48 @@ func (r *MessageRouter) Route(ctx context.Context, client *Client, msg *WSMessag
 		return r.routeFileStart(ctx, client, msg)
 
 	case TypeFileChunk:
-		return r.routeWithModifiedPayload(ctx, client, msg, func(ctx context.Context, payload interface{}) error {
-			p := payload.(*FileChunkPayload)
-			if r.hub.forwardMessage(ctx, msg, p, true, client.userID) {
-				metrics.IncrementWebSocketFileChunk()
-				metrics.IncrementWebSocketMessage("file_chunk")
-				r.hub.updateFileTransferProgress(p.FileID, p.ChunkIndex)
-			}
-			return nil
-		}, &FileChunkPayload{}, "file_chunk")
+		var payload FileChunkPayload
+		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+			r.log.Warnf("websocket invalid file_chunk payload user_id=%s: %v", client.userID, err)
+			metrics.IncrementWebSocketError("invalid_file_chunk_payload")
+			return fmt.Errorf("invalid file_chunk payload: %w", err)
+		}
+		payload.From = client.userID
+		payloadBytes, _ := json.Marshal(payload)
+		msg.Payload = payloadBytes
+		if r.hub.forwardMessage(ctx, msg, &payload, true, client.userID) {
+			metrics.IncrementWebSocketFileChunk()
+			metrics.IncrementWebSocketMessage("file_chunk")
+			r.hub.updateFileTransferProgress(payload.FileID, payload.ChunkIndex)
+		}
+		return nil
 
 	case TypeFileComplete:
-		return r.routeWithModifiedPayload(ctx, client, msg, func(ctx context.Context, payload interface{}) error {
-			p := payload.(*FileCompletePayload)
-			if r.hub.forwardMessage(ctx, msg, p, true, client.userID) {
-				metrics.IncrementWebSocketMessage("file_complete")
-				r.hub.completeFileTransfer(p.FileID)
-			}
-			return nil
-		}, &FileCompletePayload{}, "file_complete")
+		var payload FileCompletePayload
+		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+			r.log.Warnf("websocket invalid file_complete payload user_id=%s: %v", client.userID, err)
+			return fmt.Errorf("invalid file_complete payload: %w", err)
+		}
+		payload.From = client.userID
+		payloadBytes, _ := json.Marshal(payload)
+		msg.Payload = payloadBytes
+		if r.hub.forwardMessage(ctx, msg, &payload, true, client.userID) {
+			metrics.IncrementWebSocketMessage("file_complete")
+			r.hub.completeFileTransfer(payload.FileID)
+		}
+		return nil
 
 	case TypeAck:
 		return r.routeSimple(ctx, client, msg, &AckPayload{}, "ack", false, client.userID)
+
+	case TypeReaction:
+		return r.routeWithModifiedPayload(ctx, client, msg, &ReactionPayload{}, "reaction", true)
+
+	case TypeTyping:
+		return r.routeWithModifiedPayload(ctx, client, msg, &TypingPayload{}, "typing", true)
+
+	case TypeReadReceipt:
+		return r.routeWithModifiedPayload(ctx, client, msg, &ReadReceiptPayload{}, "read_receipt", true)
 
 	default:
 		r.log.Warnf("websocket unknown message type user_id=%s type=%s", client.userID, msg.Type)
@@ -95,7 +112,7 @@ func (r *MessageRouter) routeSimple(ctx context.Context, client *Client, msg *WS
 	return nil
 }
 
-func (r *MessageRouter) routeWithModifiedPayload(ctx context.Context, client *Client, msg *WSMessage, handler func(context.Context, interface{}) error, payload payloadWithTo, msgType string) error {
+func (r *MessageRouter) routeWithModifiedPayload(ctx context.Context, client *Client, msg *WSMessage, payload payloadWithTo, msgType string, requireOnline bool) error {
 	if err := json.Unmarshal(msg.Payload, payload); err != nil {
 		r.log.Warnf("websocket invalid %s payload user_id=%s: %v", msgType, client.userID, err)
 		metrics.IncrementWebSocketError("invalid_" + msgType + "_payload")
@@ -113,7 +130,10 @@ func (r *MessageRouter) routeWithModifiedPayload(ctx context.Context, client *Cl
 	}
 
 	msg.Payload = payloadBytes
-	return handler(ctx, payload)
+	if r.hub.forwardMessage(ctx, msg, payload, requireOnline, client.userID) {
+		metrics.IncrementWebSocketMessage(msgType)
+	}
+	return nil
 }
 
 func (r *MessageRouter) routeFileStart(ctx context.Context, client *Client, msg *WSMessage) error {

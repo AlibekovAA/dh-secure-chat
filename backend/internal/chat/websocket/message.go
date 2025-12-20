@@ -15,6 +15,9 @@ const (
 	TypeFileChunk          MessageType = "file_chunk"
 	TypeFileComplete       MessageType = "file_complete"
 	TypeAck                MessageType = "ack"
+	TypeReaction           MessageType = "reaction"
+	TypeTyping             MessageType = "typing"
+	TypeReadReceipt        MessageType = "read_receipt"
 )
 
 func (mt MessageType) String() string {
@@ -25,7 +28,7 @@ func (mt MessageType) IsValid() bool {
 	switch mt {
 	case TypeAuth, TypeEphemeralKey, TypeMessage, TypeSessionEstablished,
 		TypePeerOffline, TypePeerDisconnected, TypeFileStart, TypeFileChunk,
-		TypeFileComplete, TypeAck:
+		TypeFileComplete, TypeAck, TypeReaction, TypeTyping, TypeReadReceipt:
 		return true
 	default:
 		return false
@@ -99,4 +102,25 @@ type FileCompletePayload struct {
 
 type AuthPayload struct {
 	Token string `json:"token"`
+}
+
+type ReactionPayload struct {
+	To        string `json:"to"`
+	From      string `json:"from,omitempty"`
+	MessageID string `json:"message_id"`
+	Emoji     string `json:"emoji"`
+	Action    string `json:"action"`
+}
+
+type TypingPayload struct {
+	To       string `json:"to"`
+	From     string `json:"from,omitempty"`
+	IsTyping bool   `json:"is_typing"`
+}
+
+type ReadReceiptPayload struct {
+	To        string `json:"to"`
+	From      string `json:"from,omitempty"`
+	MessageID string `json:"message_id"`
+	ReadAt    int64  `json:"read_at"`
 }

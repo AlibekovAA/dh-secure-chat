@@ -66,7 +66,12 @@ export function FileMessage({ filename, mimeType, size, blob, isOwn }: Props) {
             src={imageUrl}
             alt={filename}
             className="max-w-full max-h-64 object-contain"
-            onError={() => setImageError(true)}
+            onError={(e) => {
+              const img = e.currentTarget;
+              if (img.src && img.src.startsWith('blob:')) {
+                setImageError(true);
+              }
+            }}
           />
         </div>
       ) : (

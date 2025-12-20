@@ -1,7 +1,6 @@
 package http
 
 import (
-	"context"
 	"encoding/base64"
 	"errors"
 	"net/http"
@@ -24,7 +23,7 @@ import (
 
 type Handler struct {
 	chat      *service.ChatService
-	hub       *websocket.Hub
+	hub       websocket.HubInterface
 	jwtSecret string
 	upgrader  gorillaWS.Upgrader
 	log       *logger.Logger
@@ -42,7 +41,7 @@ type userResponse struct {
 	Username string `json:"username"`
 }
 
-func NewHandler(chat *service.ChatService, hub *websocket.Hub, cfg config.ChatConfig, log *logger.Logger, pool *pgxpool.Pool) http.Handler {
+func NewHandler(chat *service.ChatService, hub websocket.HubInterface, cfg config.ChatConfig, log *logger.Logger, pool *pgxpool.Pool) http.Handler {
 	h := &Handler{
 		chat:      chat,
 		hub:       hub,
@@ -68,9 +67,9 @@ func NewHandler(chat *service.ChatService, hub *websocket.Hub, cfg config.ChatCo
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/chat/me", h.me)
-	mux.HandleFunc("/api/chat/users", h.searchUsers)
-	mux.HandleFunc("/api/chat/users/", h.getIdentityKey)
+	mux.HandleFunc("/api/chat/me", commonhttp.WithTimeout(cfg.RequestTimeout)(h.me))
+	mux.HandleFunc("/api/chat/users", commonhttp.RequireMethod(http.MethodGet)(commonhttp.WithTimeout(cfg.SearchTimeout)(h.searchUsers)))
+	mux.HandleFunc("/api/chat/users/", commonhttp.RequireMethod(http.MethodGet)(commonhttp.WithTimeout(cfg.RequestTimeout)(h.getIdentityKey)))
 	mux.HandleFunc("/ws/", h.handleWebSocket)
 
 	return mux
@@ -83,8 +82,7 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), h.cfg.RequestTimeout)
-	defer cancel()
+	ctx := r.Context()
 
 	user, err := h.chat.GetMe(ctx, claims.UserID)
 	if err != nil {
@@ -100,16 +98,6 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) searchUsers(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		commonhttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
-	if _, ok := jwtverify.FromContext(r.Context()); !ok {
-		commonhttp.WriteError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
 	query := r.URL.Query().Get("username")
 	limitStr := r.URL.Query().Get("limit")
 
@@ -120,8 +108,7 @@ func (h *Handler) searchUsers(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), h.cfg.SearchTimeout)
-	defer cancel()
+	ctx := r.Context()
 
 	users, err := h.chat.SearchUsers(ctx, query, limit)
 	if err != nil {
@@ -141,16 +128,6 @@ func (h *Handler) searchUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) getIdentityKey(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		commonhttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
-	if _, ok := jwtverify.FromContext(r.Context()); !ok {
-		commonhttp.WriteError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
 	urlPath := r.URL.Path
 	if !strings.HasSuffix(urlPath, "/identity-key") {
 		commonhttp.WriteError(w, http.StatusBadRequest, "invalid path")
@@ -170,8 +147,7 @@ func (h *Handler) getIdentityKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), h.cfg.RequestTimeout)
-	defer cancel()
+	ctx := r.Context()
 
 	pubKey, err := h.chat.GetIdentityKey(ctx, userID)
 	if err != nil {

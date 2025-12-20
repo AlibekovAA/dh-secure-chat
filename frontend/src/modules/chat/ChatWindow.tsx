@@ -33,9 +33,10 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
   const [imagePreview, setImagePreview] = useState<{ file: File; url: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const typingTimeoutRef = useRef<number | null>(null);
   const { showToast } = useToast();
 
-  const { state, messages, error, sendMessage, sendFile, sendVoice, isSessionActive } =
+  const { state, messages, error, sendMessage, sendFile, sendVoice, sendTyping, isPeerTyping, isSessionActive } =
     useChatSession({
       token,
       peerId: peer.id,
@@ -121,6 +122,12 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
       e.preventDefault();
       if ((!messageText.trim() && !imagePreview) || isSending || !isSessionActive || isChatBlocked) return;
 
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+      sendTyping(false);
+
       setIsSending(true);
       try {
         if (imagePreview) {
@@ -140,7 +147,7 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
         setIsSending(false);
       }
     },
-    [messageText, imagePreview, isSending, isSessionActive, isChatBlocked, sendMessage, sendFile, handleRemovePreview, showToast],
+    [messageText, imagePreview, isSending, isSessionActive, isChatBlocked, sendMessage, sendFile, sendTyping, handleRemovePreview, showToast],
   );
 
   const handleKeyDown = useCallback(
@@ -153,7 +160,42 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
     [handleSend],
   );
 
+  const handleTyping = useCallback(
+    (text: string) => {
+      if (!isSessionActive || isChatBlocked) return;
+
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+
+      if (text.trim().length > 0) {
+        sendTyping(true);
+        typingTimeoutRef.current = setTimeout(() => {
+          sendTyping(false);
+        }, 3000) as unknown as number;
+      } else {
+        sendTyping(false);
+      }
+    },
+    [isSessionActive, isChatBlocked, sendTyping],
+  );
+
+  const handleMessageTextChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const newText = e.target.value;
+      setMessageText(newText);
+      handleTyping(newText);
+    },
+    [handleTyping],
+  );
+
   const handleInputBlur = useCallback(() => {
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+    sendTyping(false);
+
     if (!isChatBlocked && isSessionActive && !isSending && inputRef.current) {
       setTimeout(() => {
         if (inputRef.current && document.activeElement !== inputRef.current) {
@@ -161,7 +203,7 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
         }
       }, 100);
     }
-  }, [isChatBlocked, isSessionActive, isSending]);
+  }, [isChatBlocked, isSessionActive, isSending, sendTyping]);
 
   const handleFileSelect = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -261,6 +303,19 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
       }
     };
   }, [imagePreview]);
+
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !showFingerprintModal) {
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [onClose, showFingerprintModal]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -381,13 +436,21 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
                     {message.text}
                   </p>
                 )}
-                {message.voice && (
-                  <VoiceMessage
-                    duration={message.voice.duration}
-                    blob={message.voice.blob}
-                    isOwn={message.isOwn}
-                  />
-                )}
+                {message.voice && (() => {
+                  console.log('[ChatWindow] Рендер VoiceMessage:', {
+                    messageId: message.id,
+                    duration: message.voice.duration,
+                    blobSize: message.voice.blob?.size,
+                    isOwn: message.isOwn,
+                  });
+                  return (
+                    <VoiceMessage
+                      duration={message.voice.duration}
+                      blob={message.voice.blob}
+                      isOwn={message.isOwn}
+                    />
+                  );
+                })()}
                 {message.file && !message.voice && (
                   <FileMessage
                     filename={message.file.filename}
@@ -406,6 +469,21 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
               </div>
             </div>
           ))}
+
+          {isPeerTyping && isSessionActive && !isChatBlocked && (
+            <div className="flex justify-start animate-[fadeIn_0.2s_ease-out]">
+              <div className="max-w-[75%] rounded-lg px-3 py-2 bg-emerald-900/20 border border-emerald-700/40">
+                <div className="flex items-center gap-1.5">
+                  <div className="flex gap-1">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400/80 animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400/80 animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400/80 animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                  <span className="text-xs text-emerald-400/80 italic">печатает...</span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {isChatBlocked && (
             <div className="flex items-center justify-center py-4">
@@ -492,6 +570,11 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
             <VoiceRecorder
               onRecorded={async (file, duration) => {
                 if (!isSessionActive || isChatBlocked) return;
+                console.log('[ChatWindow] onRecorded вызван:', {
+                  duration,
+                  filename: file.name,
+                  fileSize: file.size,
+                });
                 try {
                   await sendVoice(file, duration);
                 } catch (err) {
@@ -505,7 +588,7 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
               <textarea
                 ref={inputRef}
                 value={messageText}
-                onChange={(e) => setMessageText(e.target.value)}
+                onChange={handleMessageTextChange}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
                 onBlur={handleInputBlur}
