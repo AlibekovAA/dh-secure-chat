@@ -1,11 +1,9 @@
-export type BrowserSupport = {
+function checkBrowserSupport(): {
   webCrypto: boolean;
   mediaRecorder: boolean;
   getUserMedia: boolean;
-};
-
-export function checkBrowserSupport(): BrowserSupport {
-  const support: BrowserSupport = {
+} {
+  const support = {
     webCrypto: false,
     mediaRecorder: false,
     getUserMedia: false,
@@ -27,25 +25,7 @@ export function checkBrowserSupport(): BrowserSupport {
   return support;
 }
 
-export function getUnsupportedFeatures(support: BrowserSupport): string[] {
-  const unsupported: string[] = [];
-
-  if (!support.webCrypto) {
-    unsupported.push('Web Crypto API');
-  }
-
-  if (!support.mediaRecorder) {
-    unsupported.push('MediaRecorder API');
-  }
-
-  if (!support.getUserMedia) {
-    unsupported.push('getUserMedia API');
-  }
-
-  return unsupported;
-}
-
-export function getBrowserSupportMessage(unsupported: string[]): string | null {
+function getBrowserSupportMessage(unsupported: string[]): string | null {
   if (unsupported.length === 0) {
     return null;
   }

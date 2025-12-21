@@ -64,7 +64,6 @@ export function AuthForm({ onAuthenticated }: Props) {
         } catch (err) {
           const errorMessage = err instanceof Error ? err.message : "Ошибка генерации ключей. Попробуйте ещё раз.";
           showToast(errorMessage, "error");
-          console.error("Key generation error:", err);
           setSubmitting(false);
           return;
         }
@@ -129,16 +128,6 @@ export function AuthForm({ onAuthenticated }: Props) {
         onSubmit={handleSubmit}
         className="space-y-4 rounded-xl bg-black/80 px-5 py-4 border border-emerald-700"
       >
-        <input
-          type="text"
-          name="username"
-          autoComplete="username"
-          value={username}
-          readOnly
-          style={{ position: 'absolute', left: '-9999px', width: '1px', height: '1px', opacity: 0 }}
-          tabIndex={-1}
-          aria-hidden="true"
-        />
         <div className="space-y-1">
           <label className="block text-sm text-emerald-300">Имя пользователя</label>
           <input

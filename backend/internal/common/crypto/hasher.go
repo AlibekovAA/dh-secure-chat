@@ -9,10 +9,6 @@ type PasswordHasher interface {
 
 type BcryptHasher struct{}
 
-func NewBcryptHasher() *BcryptHasher {
-	return &BcryptHasher{}
-}
-
 func (h *BcryptHasher) Hash(password string) (string, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), 12)
 	if err != nil {

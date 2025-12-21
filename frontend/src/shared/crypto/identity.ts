@@ -88,17 +88,6 @@ async function loadFromIndexedDB(key: string): Promise<string | null> {
   return localStorage.getItem(key);
 }
 
-async function deleteFromIndexedDB(key: string): Promise<void> {
-  try {
-    if ('indexedDB' in window) {
-      const { deleteKey } = await import('../storage/indexeddb');
-      await deleteKey(key);
-      return;
-    }
-  } catch {}
-  localStorage.removeItem(key);
-}
-
 export async function saveIdentityPrivateKey(
   privateKey: CryptoKey,
 ): Promise<void> {
@@ -128,8 +117,4 @@ export async function loadIdentityPrivateKey(): Promise<CryptoKey | null> {
   } catch (err) {
     return null;
   }
-}
-
-export async function deleteIdentityPrivateKey(): Promise<void> {
-  await deleteFromIndexedDB(IDENTITY_KEY_STORAGE);
 }

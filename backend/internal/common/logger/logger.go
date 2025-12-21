@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -76,18 +77,12 @@ func (l *Logger) Initialize(logDir, serviceName, level string) error {
 	}
 
 	multiWriter := io.MultiWriter(os.Stdout, fileWriter)
-	l.out = log.New(multiWriter, "", log.LstdFlags|log.Lshortfile)
+	l.out = log.New(multiWriter, "", log.LstdFlags)
 
 	l.level = parseLevel(level)
 	l.serviceName = serviceName
 
 	return nil
-}
-
-func (l *Logger) SetLevel(level LogLevel) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.level = level
 }
 
 func (l *Logger) log(level LogLevel, msg string) {
@@ -117,7 +112,15 @@ func (l *Logger) logWithContext(level LogLevel, ctx context.Context, msg string)
 		}
 	}
 
-	l.out.Output(3, fmt.Sprintf("%s %s", prefix, msg))
+	_, file, line, ok := runtime.Caller(3)
+	if !ok {
+		file = "unknown"
+		line = 0
+	} else {
+		file = filepath.Base(file)
+	}
+
+	l.out.Output(0, fmt.Sprintf("%s %s:%d %s", prefix, file, line, msg))
 }
 
 func (l *Logger) Debug(msg string)    { l.log(DEBUG, msg) }
@@ -144,26 +147,6 @@ func (l *Logger) Errorf(format string, args ...any) {
 
 func (l *Logger) Criticalf(format string, args ...any) {
 	l.log(CRITICAL, fmt.Sprintf(format, args...))
-}
-
-func (l *Logger) DebugfCtx(ctx context.Context, format string, args ...any) {
-	l.logWithContext(DEBUG, ctx, fmt.Sprintf(format, args...))
-}
-
-func (l *Logger) InfofCtx(ctx context.Context, format string, args ...any) {
-	l.logWithContext(INFO, ctx, fmt.Sprintf(format, args...))
-}
-
-func (l *Logger) WarnfCtx(ctx context.Context, format string, args ...any) {
-	l.logWithContext(WARNING, ctx, fmt.Sprintf(format, args...))
-}
-
-func (l *Logger) ErrorfCtx(ctx context.Context, format string, args ...any) {
-	l.logWithContext(ERROR, ctx, fmt.Sprintf(format, args...))
-}
-
-func (l *Logger) CriticalfCtx(ctx context.Context, format string, args ...any) {
-	l.logWithContext(CRITICAL, ctx, fmt.Sprintf(format, args...))
 }
 
 func (l *Logger) Fatal(msg string) {

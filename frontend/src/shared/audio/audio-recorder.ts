@@ -1,6 +1,4 @@
 import { checkMediaRecorderSupport } from '../browser-support';
-import type { SessionKey } from '../crypto/session';
-import { encryptFile } from '../crypto/file-encryption';
 
 export type RecordingState = 'idle' | 'recording' | 'stopped' | 'error';
 
@@ -108,26 +106,11 @@ export class AudioRecorder {
     this.duration = 0;
   }
 
-  getState(): RecordingState {
-    return this.state;
-  }
-
   getDuration(): number {
     if (this.state === 'recording' && this.startTime > 0) {
       return Math.floor((Date.now() - this.startTime) / 1000);
     }
     return Math.floor(this.duration / 1000);
-  }
-
-  getDurationMs(): number {
-    if (this.state === 'recording' && this.startTime > 0) {
-      return Date.now() - this.startTime;
-    }
-    return this.duration;
-  }
-
-  isRecording(): boolean {
-    return this.state === 'recording';
   }
 
   private getSupportedMimeType(): string {
@@ -176,40 +159,6 @@ export class AudioRecorder {
       this.stream.getTracks().forEach((track) => track.stop());
       this.stream = null;
     }
-  }
-
-  async createFile(sessionKey: SessionKey): Promise<{
-    file: File;
-    encryptedChunks: Array<{ ciphertext: string; nonce: string }>;
-    totalSize: number;
-  }> {
-    if (this.state !== 'stopped' || this.chunks.length === 0) {
-      throw new Error('Нет записанного аудио');
-    }
-
-    const blob = new Blob(this.chunks, { type: this.getSupportedMimeType() });
-    const duration = this.getDuration();
-    const filename = `voice-${duration}s.${this.getFileExtension()}`;
-    const file = new File([blob], filename, { type: blob.type });
-
-    const { chunks: encryptedChunks, totalSize } = await encryptFile(
-      sessionKey,
-      file,
-    );
-
-    return {
-      file,
-      encryptedChunks,
-      totalSize,
-    };
-  }
-
-  private getFileExtension(): string {
-    const mimeType = this.getSupportedMimeType();
-    if (mimeType.includes('webm')) return 'webm';
-    if (mimeType.includes('ogg')) return 'ogg';
-    if (mimeType.includes('mp4')) return 'm4a';
-    return 'webm';
   }
 
   cleanup(): void {

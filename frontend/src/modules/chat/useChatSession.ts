@@ -12,6 +12,8 @@ import type {
   FileCompletePayload,
   AckPayload,
   TypingPayload,
+  ReactionPayload,
+  MessageDeletePayload,
 } from '../../shared/websocket/types';
 import { generateEphemeralKeyPair } from '../../shared/crypto/ephemeral';
 import {
@@ -71,6 +73,9 @@ export type ChatMessage = {
   };
   timestamp: number;
   isOwn: boolean;
+  isEdited?: boolean;
+  isDeleted?: boolean;
+  reactions?: Record<string, string[]>;
 };
 
 type UseChatSessionOptions = {
@@ -262,7 +267,9 @@ export function useChatSession({
       );
 
       const newMessage: ChatMessage = {
-        id: `msg-${Date.now()}-${messageIdCounterRef.current++}`,
+        id:
+          payload.message_id ||
+          `msg-${Date.now()}-${messageIdCounterRef.current++}`,
         text: decrypted,
         timestamp: Date.now(),
         isOwn: false,
@@ -276,18 +283,15 @@ export function useChatSession({
 
   const handleIncomingFile = useCallback(async (fileId: string) => {
     if (!sessionKeyRef.current) {
-      console.error('handleIncomingFile: session key not available');
       return;
     }
 
     const buffer = fileBuffersRef.current.get(fileId);
     if (!buffer) {
-      console.error('handleIncomingFile: buffer not found for fileId:', fileId);
       return;
     }
 
     if (buffer.processing) {
-      console.warn('handleIncomingFile: file already being processed:', fileId);
       return;
     }
 
@@ -295,9 +299,6 @@ export function useChatSession({
     const expectedChunks = metadata.total_chunks;
 
     if (chunks.length < expectedChunks) {
-      console.warn(
-        `handleIncomingFile: not all chunks received (${chunks.length}/${expectedChunks}), waiting...`,
-      );
       return;
     }
 
@@ -307,9 +308,6 @@ export function useChatSession({
     for (let i = 0; i < expectedChunks; i++) {
       const chunk = chunks[i];
       if (!chunk || !chunk.ciphertext || !chunk.nonce) {
-        console.error(
-          `handleIncomingFile: missing chunk ${i} (${sortedChunks.length}/${expectedChunks})`,
-        );
         setError(
           `Не все части файла получены (${sortedChunks.length}/${expectedChunks})`,
         );
@@ -344,7 +342,7 @@ export function useChatSession({
       const extractedDuration = extractDurationFromFilename(metadata.filename);
 
       const newMessage: ChatMessage = {
-        id: `file-${Date.now()}-${messageIdCounterRef.current++}`,
+        id: fileId,
         ...(isVoice
           ? {
               voice: {
@@ -370,7 +368,6 @@ export function useChatSession({
       setMessages((prev) => [...prev, newMessage]);
       fileBuffersRef.current.delete(fileId);
     } catch (err) {
-      console.error('Ошибка расшифровки файла:', err);
       setError('Ошибка расшифровки файла');
       fileBuffersRef.current.delete(fileId);
     }
@@ -506,6 +503,59 @@ export function useChatSession({
             }
             break;
           }
+
+          case 'reaction': {
+            const payload = message.payload as ReactionPayload;
+            const currentUserId = localStorage.getItem('userId') || '';
+            if (payload.from && payload.from !== currentUserId) {
+              const fromUserId = payload.from;
+              setMessages((prev) =>
+                prev.map((msg) => {
+                  if (msg.id === payload.message_id) {
+                    const reactions = msg.reactions || {};
+                    const emojiReactions = reactions[payload.emoji] || [];
+                    if (payload.action === 'add') {
+                      if (!emojiReactions.includes(fromUserId)) {
+                        return {
+                          ...msg,
+                          reactions: {
+                            ...reactions,
+                            [payload.emoji]: [...emojiReactions, fromUserId],
+                          },
+                        };
+                      }
+                    } else {
+                      return {
+                        ...msg,
+                        reactions: {
+                          ...reactions,
+                          [payload.emoji]: emojiReactions.filter(
+                            (id) => id !== fromUserId,
+                          ),
+                        },
+                      };
+                    }
+                  }
+                  return msg;
+                }),
+              );
+            }
+            break;
+          }
+
+          case 'message_delete': {
+            const payload = message.payload as MessageDeletePayload;
+            if (payload.from === peerId) {
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === payload.message_id
+                    ? { ...msg, isDeleted: true, text: undefined }
+                    : msg,
+                ),
+              );
+            }
+            break;
+          }
         }
       },
       [
@@ -627,17 +677,20 @@ export function useChatSession({
           text,
         );
 
+        const messageId = `msg-${Date.now()}-${messageIdCounterRef.current++}`;
+
         send({
           type: 'message',
           payload: {
             to: peerId,
+            message_id: messageId,
             ciphertext,
             nonce,
           },
         });
 
         const newMessage: ChatMessage = {
-          id: `msg-${Date.now()}-${messageIdCounterRef.current++}`,
+          id: messageId,
           text,
           timestamp: Date.now(),
           isOwn: true,
@@ -747,16 +800,8 @@ export function useChatSession({
         const finalDuration =
           voiceDuration !== undefined ? voiceDuration : extractedDuration;
 
-        console.log('[useChatSession] sendFile создает сообщение:', {
-          isVoice,
-          voiceDuration,
-          extractedDuration,
-          finalDuration,
-          filename: file.name,
-        });
-
         const newMessage: ChatMessage = {
-          id: `file-${Date.now()}-${messageIdCounterRef.current++}`,
+          id: fileId,
           ...(isVoice
             ? {
                 voice: {
@@ -779,16 +824,10 @@ export function useChatSession({
           isOwn: true,
         };
 
-        console.log('[useChatSession] sendFile созданное сообщение:', {
-          messageId: newMessage.id,
-          voiceDuration: isVoice ? newMessage.voice?.duration : undefined,
-        });
-
         setMessages((prev) => [...prev, newMessage]);
       } catch (err) {
         const errorMsg =
           err instanceof Error ? err.message : 'Ошибка отправки файла';
-        console.error('sendFile error:', err);
         setError(`Не удалось отправить файл: ${errorMsg}`);
         throw err;
       }
@@ -839,11 +878,6 @@ export function useChatSession({
 
   const sendVoice = useCallback(
     async (file: File, duration: number) => {
-      console.log('[useChatSession] sendVoice вызван:', {
-        duration,
-        filename: file.name,
-        fileSize: file.size,
-      });
       if (file.size > MAX_VOICE_SIZE) {
         setError('Голосовое сообщение слишком большое (максимум 10MB)');
         return;
@@ -875,6 +909,88 @@ export function useChatSession({
     };
   }, []);
 
+  const sendReaction = useCallback(
+    async (messageId: string, emoji: string, action: 'add' | 'remove') => {
+      if (!peerId || !isConnected || !send || state !== 'active') return;
+
+      const message = messages.find((m) => m.id === messageId);
+      if (!message) return;
+
+      const reactions = message.reactions || {};
+      const emojiReactions = reactions[emoji] || [];
+      const myUserId = localStorage.getItem('userId') || '';
+
+      if (action === 'add' && emojiReactions.includes(myUserId)) return;
+      if (action === 'remove' && !emojiReactions.includes(myUserId)) return;
+
+      send({
+        type: 'reaction',
+        payload: {
+          to: peerId,
+          message_id: messageId,
+          emoji,
+          action,
+        },
+      });
+
+      setMessages((prev) =>
+        prev.map((msg) => {
+          if (msg.id === messageId) {
+            const currentReactions = msg.reactions || {};
+            const currentEmojiReactions = currentReactions[emoji] || [];
+            if (action === 'add') {
+              return {
+                ...msg,
+                reactions: {
+                  ...currentReactions,
+                  [emoji]: [...currentEmojiReactions, myUserId],
+                },
+              };
+            } else {
+              return {
+                ...msg,
+                reactions: {
+                  ...currentReactions,
+                  [emoji]: currentEmojiReactions.filter(
+                    (id) => id !== myUserId,
+                  ),
+                },
+              };
+            }
+          }
+          return msg;
+        }),
+      );
+    },
+    [peerId, isConnected, send, state, messages],
+  );
+
+  const deleteMessage = useCallback(
+    (messageId: string) => {
+      if (!peerId || !isConnected || !send || state !== 'active') return;
+
+      const message = messages.find((m) => m.id === messageId);
+      if (!message || !message.isOwn) return;
+
+      send({
+        type: 'message_delete',
+        payload: {
+          to: peerId,
+          message_id: messageId,
+        },
+      });
+
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId
+            ? { ...msg, isDeleted: true, text: undefined }
+            : msg,
+        ),
+      );
+    },
+    [peerId, isConnected, send, state, messages],
+  );
+
   return {
     state,
     messages,
@@ -883,6 +999,8 @@ export function useChatSession({
     sendFile,
     sendVoice,
     sendTyping,
+    sendReaction,
+    deleteMessage,
     isPeerTyping,
     isSessionActive: state === 'active',
   };

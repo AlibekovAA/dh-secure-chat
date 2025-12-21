@@ -9,9 +9,9 @@ export type MessageType =
   | 'file_chunk'
   | 'file_complete'
   | 'ack'
-  | 'reaction'
   | 'typing'
-  | 'read_receipt';
+  | 'reaction'
+  | 'message_delete';
 
 export type ConnectionState =
   | 'connecting'
@@ -41,6 +41,8 @@ export type AckPayload = {
 
 export type MessagePayload = {
   to: string;
+  from?: string;
+  message_id: string;
   ciphertext: string;
   nonce: string;
 };
@@ -85,9 +87,10 @@ export type FileCompletePayload = {
   file_id: string;
 };
 
-export type WSMessageWithPayload<T> = {
-  type: MessageType;
-  payload: T;
+export type TypingPayload = {
+  to: string;
+  from?: string;
+  is_typing: boolean;
 };
 
 export type ReactionPayload = {
@@ -98,15 +101,8 @@ export type ReactionPayload = {
   action: 'add' | 'remove';
 };
 
-export type TypingPayload = {
-  to: string;
-  from?: string;
-  is_typing: boolean;
-};
-
-export type ReadReceiptPayload = {
+export type MessageDeletePayload = {
   to: string;
   from?: string;
   message_id: string;
-  read_at: number; // Unix timestamp
 };

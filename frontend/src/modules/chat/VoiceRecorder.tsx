@@ -89,12 +89,6 @@ export function VoiceRecorder({ onRecorded, onError, disabled }: Props) {
         const file = new File([blobClone], `voice-${finalDuration}s.webm`, {
           type: blob.type || 'audio/webm',
         });
-        console.log('[VoiceRecorder] Отправка голосового сообщения:', {
-          duration: finalDuration,
-          filename: file.name,
-          fileSize: file.size,
-          blobSize: blob.size,
-        });
         onRecorded(file, finalDuration);
       }
 

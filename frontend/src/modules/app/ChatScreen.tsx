@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import type React from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 import type { UserSummary } from "../chat/api";
 import { ChatWindow } from "../chat/ChatWindow";
 
@@ -38,7 +37,7 @@ export function ChatScreen({
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedPeer, setSelectedPeer] = useState<UserSummary | null>(null);
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !isSearching && searchQuery.trim()) {
       e.preventDefault();
       setCurrentPage(1);

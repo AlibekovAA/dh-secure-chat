@@ -247,9 +247,9 @@ func (p FileStartPayload) GetTo() string          { return p.To }
 func (p FileChunkPayload) GetTo() string          { return p.To }
 func (p FileCompletePayload) GetTo() string       { return p.To }
 func (p AckPayload) GetTo() string                { return p.To }
-func (p ReactionPayload) GetTo() string           { return p.To }
 func (p TypingPayload) GetTo() string             { return p.To }
-func (p ReadReceiptPayload) GetTo() string        { return p.To }
+func (p ReactionPayload) GetTo() string           { return p.To }
+func (p MessageDeletePayload) GetTo() string      { return p.To }
 
 func (h *Hub) forwardMessage(ctx context.Context, msg *WSMessage, payload payloadWithTo, requireOnline bool, fromUserID string) bool {
 	to := payload.GetTo()

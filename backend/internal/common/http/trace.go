@@ -27,12 +27,6 @@ func TraceIDMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func TraceIDFromContext(ctx context.Context) (string, bool) {
-	val := ctx.Value(traceIDKey)
-	traceID, ok := val.(string)
-	return traceID, ok
-}
-
 func generateTraceID() string {
 	b := make([]byte, 16)
 	rand.Read(b)

@@ -8,10 +8,6 @@ type IDGenerator interface {
 
 type UUIDGenerator struct{}
 
-func NewUUIDGenerator() *UUIDGenerator {
-	return &UUIDGenerator{}
-}
-
 func (g *UUIDGenerator) NewID() (string, error) {
 	return uuid.NewString(), nil
 }

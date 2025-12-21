@@ -38,12 +38,10 @@ export function VoiceMessage({ duration, blob, isOwn }: Props) {
     }
 
     if (blob.size === 0) {
-      console.error('VoiceMessage: blob is empty', { blobType: blob.type, blobSize: blob.size });
       return;
     }
 
     if (!blob.type || !blob.type.startsWith('audio/')) {
-      console.error('VoiceMessage: invalid blob type', { blobType: blob.type });
       return;
     }
 
@@ -54,8 +52,7 @@ export function VoiceMessage({ duration, blob, isOwn }: Props) {
     try {
       url = URL.createObjectURL(blob);
       setAudioUrl(url);
-    } catch (error) {
-      console.error('VoiceMessage: failed to create object URL', error);
+    } catch {
       return;
     }
 
@@ -166,19 +163,6 @@ export function VoiceMessage({ duration, blob, isOwn }: Props) {
         loadTimeout = null;
       }
       setIsLoading(false);
-      const error = (e.target as HTMLAudioElement)?.error;
-      if (error) {
-        const errorMessage = error.message || 'Unknown error';
-        const errorCode = error.code || 0;
-        console.error('VoiceMessage audio error:', {
-          code: errorCode,
-          message: errorMessage,
-          blobSize: blob?.size,
-          blobType: blob?.type,
-          audioUrl,
-          audioSrc: audio.src,
-        });
-      }
     };
 
     audio.addEventListener('timeupdate', updateTime);
@@ -243,8 +227,7 @@ export function VoiceMessage({ duration, blob, isOwn }: Props) {
     if (isPlaying) {
       audio.pause();
     } else {
-      audio.play().catch((error) => {
-        console.error('VoiceMessage: failed to play audio', error);
+      audio.play().catch(() => {
         setIsPlaying(false);
       });
     }
@@ -252,14 +235,6 @@ export function VoiceMessage({ duration, blob, isOwn }: Props) {
 
   const displayDuration = metadataDuration !== null && metadataDuration > 0 ? metadataDuration : duration;
   const progress = displayDuration > 0 ? (currentTime / displayDuration) * 100 : 0;
-
-  console.log('[VoiceMessage] Отображение:', {
-    duration,
-    metadataDuration,
-    displayDuration,
-    blobSize: blob?.size,
-    blobType: blob?.type,
-  });
 
   return (
     <div
@@ -333,20 +308,7 @@ export function VoiceMessage({ duration, blob, isOwn }: Props) {
             setMetadataDuration(newDuration);
           }
         }}
-        onError={(e) => {
-          const audio = e.currentTarget;
-          const error = audio.error;
-          if (error && error.code !== 4 && error.code !== 2) {
-            const isBlobError = audio.src && audio.src.startsWith('blob:');
-            if (!isBlobError) {
-              console.error('VoiceMessage audio error:', {
-                code: error.code,
-                message: error.message,
-                blobSize: blob?.size,
-                blobType: blob?.type,
-              });
-            }
-          }
+        onError={() => {
           setIsLoading(false);
         }}
       />

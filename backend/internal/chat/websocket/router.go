@@ -27,13 +27,14 @@ type payloadWithFrom interface {
 	SetFrom(from string)
 }
 
-func (p *EphemeralKeyPayload) SetFrom(from string) { p.From = from }
-func (p *FileStartPayload) SetFrom(from string)    { p.From = from }
-func (p *FileChunkPayload) SetFrom(from string)    { p.From = from }
-func (p *FileCompletePayload) SetFrom(from string) { p.From = from }
-func (p *ReactionPayload) SetFrom(from string)     { p.From = from }
-func (p *TypingPayload) SetFrom(from string)       { p.From = from }
-func (p *ReadReceiptPayload) SetFrom(from string)  { p.From = from }
+func (p *EphemeralKeyPayload) SetFrom(from string)  { p.From = from }
+func (p *FileStartPayload) SetFrom(from string)     { p.From = from }
+func (p *FileChunkPayload) SetFrom(from string)     { p.From = from }
+func (p *FileCompletePayload) SetFrom(from string)  { p.From = from }
+func (p *TypingPayload) SetFrom(from string)        { p.From = from }
+func (p *ReactionPayload) SetFrom(from string)      { p.From = from }
+func (p *MessagePayload) SetFrom(from string)       { p.From = from }
+func (p *MessageDeletePayload) SetFrom(from string) { p.From = from }
 
 func (r *MessageRouter) Route(ctx context.Context, client *Client, msg *WSMessage) error {
 	switch msg.Type {
@@ -41,7 +42,7 @@ func (r *MessageRouter) Route(ctx context.Context, client *Client, msg *WSMessag
 		return r.routeWithModifiedPayload(ctx, client, msg, &EphemeralKeyPayload{}, "ephemeral_key", true)
 
 	case TypeMessage:
-		return r.routeSimple(ctx, client, msg, &MessagePayload{}, "message", true, client.userID)
+		return r.routeWithModifiedPayload(ctx, client, msg, &MessagePayload{}, "message", true)
 
 	case TypeSessionEstablished:
 		return r.routeSimple(ctx, client, msg, &SessionEstablishedPayload{}, "session_established", false, client.userID)
@@ -84,14 +85,14 @@ func (r *MessageRouter) Route(ctx context.Context, client *Client, msg *WSMessag
 	case TypeAck:
 		return r.routeSimple(ctx, client, msg, &AckPayload{}, "ack", false, client.userID)
 
-	case TypeReaction:
-		return r.routeWithModifiedPayload(ctx, client, msg, &ReactionPayload{}, "reaction", true)
-
 	case TypeTyping:
 		return r.routeWithModifiedPayload(ctx, client, msg, &TypingPayload{}, "typing", true)
 
-	case TypeReadReceipt:
-		return r.routeWithModifiedPayload(ctx, client, msg, &ReadReceiptPayload{}, "read_receipt", true)
+	case TypeReaction:
+		return r.routeWithModifiedPayload(ctx, client, msg, &ReactionPayload{}, "reaction", true)
+
+	case TypeMessageDelete:
+		return r.routeWithModifiedPayload(ctx, client, msg, &MessageDeletePayload{}, "message_delete", true)
 
 	default:
 		r.log.Warnf("websocket unknown message type user_id=%s type=%s", client.userID, msg.Type)

@@ -1,13 +1,3 @@
-export async function generateFingerprint(
-  publicKey: Uint8Array,
-): Promise<string> {
-  const buffer = new Uint8Array(publicKey).buffer;
-  const hash = await crypto.subtle.digest('SHA-256', buffer);
-  return Array.from(new Uint8Array(hash))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
 export function formatFingerprint(fingerprint: string): string {
   return fingerprint.match(/.{1,4}/g)?.join(' ') || fingerprint;
 }
@@ -49,18 +39,13 @@ export function fingerprintToEmojis(fingerprint: string): string {
 const VERIFIED_PEERS_STORAGE = 'verified_peers';
 const FINGERPRINT_HISTORY_STORAGE = 'fingerprint_history';
 
-export interface FingerprintHistory {
+interface FingerprintHistory {
   fingerprint: string;
   verifiedAt: number;
   changedAt?: number;
 }
 
-export type VerifiedPeer = {
-  userId: string;
-  fingerprint: string;
-};
-
-export function getVerifiedPeers(): Record<string, string> {
+function getVerifiedPeers(): Record<string, string> {
   const stored = localStorage.getItem(VERIFIED_PEERS_STORAGE);
   if (!stored) {
     return {};
@@ -112,7 +97,7 @@ export function saveVerifiedPeer(userId: string, fingerprint: string): void {
   localStorage.setItem(FINGERPRINT_HISTORY_STORAGE, JSON.stringify(history));
 }
 
-export function getFingerprintHistory(): Record<string, FingerprintHistory[]> {
+function getFingerprintHistory(): Record<string, FingerprintHistory[]> {
   const stored = localStorage.getItem(FINGERPRINT_HISTORY_STORAGE);
   if (!stored) {
     return {};
@@ -123,19 +108,6 @@ export function getFingerprintHistory(): Record<string, FingerprintHistory[]> {
   } catch {
     return {};
   }
-}
-
-export function getPeerFingerprintHistory(
-  userId: string,
-): FingerprintHistory[] {
-  const history = getFingerprintHistory();
-  return history[userId] || [];
-}
-
-export function removeVerifiedPeer(userId: string): void {
-  const peers = getVerifiedPeers();
-  delete peers[userId];
-  localStorage.setItem(VERIFIED_PEERS_STORAGE, JSON.stringify(peers));
 }
 
 export function isPeerVerified(userId: string, fingerprint: string): boolean {
@@ -162,42 +134,4 @@ export function saveVerifiedPeerFingerprint(
   fingerprint: string,
 ): void {
   saveVerifiedPeer(userId, fingerprint);
-}
-
-export function exportVerifiedPeers(): string {
-  const data = localStorage.getItem(VERIFIED_PEERS_STORAGE);
-  return btoa(data || '{}');
-}
-
-export function importVerifiedPeers(encoded: string): boolean {
-  try {
-    const data = atob(encoded);
-    const parsed = JSON.parse(data);
-    if (typeof parsed === 'object' && parsed !== null) {
-      localStorage.setItem(VERIFIED_PEERS_STORAGE, data);
-      return true;
-    }
-    return false;
-  } catch {
-    return false;
-  }
-}
-
-export function exportFingerprintHistory(): string {
-  const data = localStorage.getItem(FINGERPRINT_HISTORY_STORAGE);
-  return btoa(data || '{}');
-}
-
-export function importFingerprintHistory(encoded: string): boolean {
-  try {
-    const data = atob(encoded);
-    const parsed = JSON.parse(data);
-    if (typeof parsed === 'object' && parsed !== null) {
-      localStorage.setItem(FINGERPRINT_HISTORY_STORAGE, data);
-      return true;
-    }
-    return false;
-  } catch {
-    return false;
-  }
 }

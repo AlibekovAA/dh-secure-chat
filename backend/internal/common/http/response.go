@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"time"
-
-	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 )
 
 type ErrorResponse struct {
@@ -43,12 +41,4 @@ func WithTimeout(timeout time.Duration) func(http.HandlerFunc) http.HandlerFunc 
 			next(w, r.WithContext(ctx))
 		}
 	}
-}
-
-func HandleError(w http.ResponseWriter, log *logger.Logger, err error, defaultMsg string) {
-	if err == nil {
-		return
-	}
-	log.Errorf("handler error: %v", err)
-	WriteError(w, http.StatusInternalServerError, defaultMsg)
 }

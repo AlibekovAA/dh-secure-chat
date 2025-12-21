@@ -86,15 +86,3 @@ func (sh *ShardedHub) Shutdown() {
 		shard.Shutdown()
 	}
 }
-
-func (sh *ShardedHub) GetShardCount() int {
-	return sh.count
-}
-
-func (sh *ShardedHub) CountClients() int {
-	total := 0
-	for _, shard := range sh.shards {
-		total += shard.countClients()
-	}
-	return total
-}

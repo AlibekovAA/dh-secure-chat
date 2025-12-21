@@ -120,7 +120,10 @@ export function App() {
     }
 
     fetchWithRetry((t) => fetchMe(t), token, refreshAccessToken)
-      .then((data) => setProfile(data))
+      .then((data) => {
+        setProfile(data);
+        localStorage.setItem('userId', data.id);
+      })
       .catch((err) => {
         if (err instanceof Error && err.message === SESSION_EXPIRED_ERROR) {
           showToast("Сессия истекла. Войдите снова.", "error");
@@ -191,6 +194,8 @@ export function App() {
 
         const { clearAllKeys } = await import("../../shared/storage/indexeddb");
         await clearAllKeys();
+
+        localStorage.removeItem('userId');
       } catch {
       }
     }

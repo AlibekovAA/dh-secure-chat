@@ -2,9 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useChatSession } from './useChatSession';
 import type { UserSummary } from './api';
 import { FingerprintVerificationModal } from './FingerprintVerificationModal';
-import { FileMessage } from './FileMessage';
-import { VoiceMessage } from './VoiceMessage';
 import { VoiceRecorder } from './VoiceRecorder';
+import { MessageBubble } from './MessageBubble';
 import { getFingerprint } from './api';
 import {
   getVerifiedPeerFingerprint,
@@ -36,12 +35,23 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
   const typingTimeoutRef = useRef<number | null>(null);
   const { showToast } = useToast();
 
-  const { state, messages, error, sendMessage, sendFile, sendVoice, sendTyping, isPeerTyping, isSessionActive } =
-    useChatSession({
-      token,
-      peerId: peer.id,
-      enabled: true,
-    });
+  const {
+    state,
+    messages,
+    error,
+    sendMessage,
+    sendFile,
+    sendVoice,
+    sendTyping,
+    sendReaction,
+    deleteMessage,
+    isPeerTyping,
+    isSessionActive,
+  } = useChatSession({
+    token,
+    peerId: peer.id,
+    enabled: true,
+  });
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -91,8 +101,7 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
             showToast('Security codes изменились! Верифицируйте identity снова.', 'error');
           }
         }
-      } catch (err) {
-        console.warn('Failed to load fingerprints:', err);
+      } catch {
       }
     };
 
@@ -420,54 +429,13 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
           )}
 
           {messages.map((message) => (
-            <div
+            <MessageBubble
               key={message.id}
-              className={`flex ${message.isOwn ? 'justify-end' : 'justify-start'} animate-[fadeIn_0.2s_ease-out]`}
-            >
-              <div
-                className={`max-w-[75%] rounded-lg px-3 py-2 ${
-                  message.isOwn
-                    ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-50'
-                    : 'bg-emerald-900/20 border border-emerald-700/40 text-emerald-100'
-                }`}
-              >
-                {message.text && (
-                  <p className="text-sm whitespace-pre-wrap break-words">
-                    {message.text}
-                  </p>
-                )}
-                {message.voice && (() => {
-                  console.log('[ChatWindow] Рендер VoiceMessage:', {
-                    messageId: message.id,
-                    duration: message.voice.duration,
-                    blobSize: message.voice.blob?.size,
-                    isOwn: message.isOwn,
-                  });
-                  return (
-                    <VoiceMessage
-                      duration={message.voice.duration}
-                      blob={message.voice.blob}
-                      isOwn={message.isOwn}
-                    />
-                  );
-                })()}
-                {message.file && !message.voice && (
-                  <FileMessage
-                    filename={message.file.filename}
-                    mimeType={message.file.mimeType}
-                    size={message.file.size}
-                    blob={message.file.blob}
-                    isOwn={message.isOwn}
-                  />
-                )}
-                <p className="text-[10px] text-emerald-500/60 mt-1">
-                  {new Date(message.timestamp).toLocaleTimeString('ru-RU', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </p>
-              </div>
-            </div>
+              message={message}
+              myUserId={myUserId}
+              onReaction={sendReaction}
+              onDelete={deleteMessage}
+            />
           ))}
 
           {isPeerTyping && isSessionActive && !isChatBlocked && (
@@ -570,14 +538,9 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
             <VoiceRecorder
               onRecorded={async (file, duration) => {
                 if (!isSessionActive || isChatBlocked) return;
-                console.log('[ChatWindow] onRecorded вызван:', {
-                  duration,
-                  filename: file.name,
-                  fileSize: file.size,
-                });
                 try {
                   await sendVoice(file, duration);
-                } catch (err) {
+                } catch {
                   showToast('Ошибка отправки голосового сообщения', 'error');
                 }
               }}
