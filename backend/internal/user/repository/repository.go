@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/db"
+	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
 )
 
@@ -40,7 +41,7 @@ func (r *PgRepository) Create(ctx context.Context, user domain.User) error {
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return ErrUsernameAlreadyExists
+			return commonerrors.ErrUsernameAlreadyExists
 		}
 		return db.HandleExecError(err, "create user")
 	}
@@ -129,5 +130,3 @@ func (r *PgRepository) Delete(ctx context.Context, id domain.ID) error {
 }
 
 var ErrUserNotFound = pgx.ErrNoRows
-
-var ErrUsernameAlreadyExists = errors.New("username already exists")

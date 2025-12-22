@@ -2,12 +2,11 @@ package websocket
 
 import (
 	"context"
-	"errors"
 	"sync/atomic"
 	"time"
-)
 
-var ErrCircuitOpen = errors.New("circuit breaker is open")
+	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
+)
 
 type CircuitBreaker struct {
 	failures    atomic.Int32
@@ -57,7 +56,7 @@ func (cb *CircuitBreaker) reset() {
 
 func (cb *CircuitBreaker) Call(ctx context.Context, fn func(context.Context) error) error {
 	if cb.isOpen() {
-		return ErrCircuitOpen
+		return commonerrors.ErrCircuitOpen
 	}
 
 	callCtx, cancel := context.WithTimeout(ctx, cb.timeout)

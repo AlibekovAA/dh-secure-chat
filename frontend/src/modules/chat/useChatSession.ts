@@ -35,7 +35,12 @@ import {
 } from '../../shared/crypto/file-encryption';
 import { getIdentityKey } from './api';
 import type { SessionKey } from '../../shared/crypto/session';
-import { MAX_FILE_SIZE, MAX_VOICE_SIZE, VOICE_MIME_TYPES } from './constants';
+import {
+  MAX_FILE_SIZE,
+  MAX_MESSAGE_LENGTH,
+  MAX_VOICE_SIZE,
+  VOICE_MIME_TYPES,
+} from './constants';
 
 function extractDurationFromFilename(filename: string): number {
   const match = filename.match(/voice-(\d+)s/);
@@ -76,6 +81,12 @@ export type ChatMessage = {
   isEdited?: boolean;
   isDeleted?: boolean;
   reactions?: Record<string, string[]>;
+  replyTo?: {
+    id: string;
+    text?: string;
+    hasFile?: boolean;
+    hasVoice?: boolean;
+  };
 };
 
 type UseChatSessionOptions = {
@@ -266,16 +277,33 @@ export function useChatSession({
         payload.nonce,
       );
 
-      const newMessage: ChatMessage = {
-        id:
-          payload.message_id ||
-          `msg-${Date.now()}-${messageIdCounterRef.current++}`,
-        text: decrypted,
-        timestamp: Date.now(),
-        isOwn: false,
-      };
+      setMessages((prev) => {
+        let replyTo: ChatMessage['replyTo'] | undefined;
 
-      setMessages((prev) => [...prev, newMessage]);
+        if (payload.reply_to_message_id) {
+          const target = prev.find((m) => m.id === payload.reply_to_message_id);
+          if (target) {
+            replyTo = {
+              id: target.id,
+              text: target.text,
+              hasFile: !!target.file,
+              hasVoice: !!target.voice,
+            };
+          }
+        }
+
+        const newMessage: ChatMessage = {
+          id:
+            payload.message_id ||
+            `msg-${Date.now()}-${messageIdCounterRef.current++}`,
+          text: decrypted,
+          timestamp: Date.now(),
+          isOwn: false,
+          replyTo,
+        };
+
+        return [...prev, newMessage];
+      });
     } catch (err) {
       setError('Ошибка расшифровки сообщения');
     }
@@ -546,13 +574,30 @@ export function useChatSession({
           case 'message_delete': {
             const payload = message.payload as MessageDeletePayload;
             if (payload.from === peerId) {
-              setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.id === payload.message_id
-                    ? { ...msg, isDeleted: true, text: undefined }
-                    : msg,
-                ),
-              );
+              const scope = payload.scope ?? 'all';
+              if (scope === 'all') {
+                setMessages((prev) =>
+                  prev.map((msg) => {
+                    if (msg.id === payload.message_id) {
+                      return { ...msg, isDeleted: true, text: undefined };
+                    }
+
+                    if (msg.replyTo?.id === payload.message_id) {
+                      return {
+                        ...msg,
+                        replyTo: {
+                          ...msg.replyTo,
+                          text: 'Сообщение удалено',
+                          hasFile: false,
+                          hasVoice: false,
+                        },
+                      };
+                    }
+
+                    return msg;
+                  }),
+                );
+              }
             }
             break;
           }
@@ -661,7 +706,7 @@ export function useChatSession({
   }, [token, peerId, isConnected, send, sendWithAck]);
 
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (text: string, replyToMessageId?: string) => {
       if (
         !sessionKeyRef.current ||
         !peerId ||
@@ -671,10 +716,22 @@ export function useChatSession({
         return;
       }
 
+      const trimmed = text.trim();
+      if (!trimmed) {
+        return;
+      }
+
+      if (trimmed.length > MAX_MESSAGE_LENGTH) {
+        setError(
+          `Сообщение слишком длинное (максимум ${MAX_MESSAGE_LENGTH} символов)`,
+        );
+        return;
+      }
+
       try {
         const { ciphertext, nonce } = await encrypt(
           sessionKeyRef.current,
-          text,
+          trimmed,
         );
 
         const messageId = `msg-${Date.now()}-${messageIdCounterRef.current++}`;
@@ -686,17 +743,34 @@ export function useChatSession({
             message_id: messageId,
             ciphertext,
             nonce,
+            reply_to_message_id: replyToMessageId,
           },
         });
 
-        const newMessage: ChatMessage = {
-          id: messageId,
-          text,
-          timestamp: Date.now(),
-          isOwn: true,
-        };
+        setMessages((prev) => {
+          let replyTo: ChatMessage['replyTo'] | undefined;
+          if (replyToMessageId) {
+            const target = prev.find((m) => m.id === replyToMessageId);
+            if (target) {
+              replyTo = {
+                id: target.id,
+                text: target.text,
+                hasFile: !!target.file,
+                hasVoice: !!target.voice,
+              };
+            }
+          }
 
-        setMessages((prev) => [...prev, newMessage]);
+          const newMessage: ChatMessage = {
+            id: messageId,
+            text: trimmed,
+            timestamp: Date.now(),
+            isOwn: true,
+            replyTo,
+          };
+
+          return [...prev, newMessage];
+        });
       } catch (err) {
         setError('Ошибка отправки сообщения');
       }
@@ -966,26 +1040,43 @@ export function useChatSession({
   );
 
   const deleteMessage = useCallback(
-    (messageId: string) => {
+    (messageId: string, scope: 'me' | 'all') => {
       if (!peerId || !isConnected || !send || state !== 'active') return;
 
       const message = messages.find((m) => m.id === messageId);
       if (!message || !message.isOwn) return;
 
-      send({
-        type: 'message_delete',
-        payload: {
-          to: peerId,
-          message_id: messageId,
-        },
-      });
+      if (scope === 'all') {
+        send({
+          type: 'message_delete',
+          payload: {
+            to: peerId,
+            message_id: messageId,
+            scope: 'all',
+          },
+        });
+      }
 
       setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === messageId
-            ? { ...msg, isDeleted: true, text: undefined }
-            : msg,
-        ),
+        prev.map((msg) => {
+          if (msg.id === messageId) {
+            return { ...msg, isDeleted: true, text: undefined };
+          }
+
+          if (msg.replyTo?.id === messageId) {
+            return {
+              ...msg,
+              replyTo: {
+                ...msg.replyTo,
+                text: 'Сообщение удалено',
+                hasFile: false,
+                hasVoice: false,
+              },
+            };
+          }
+
+          return msg;
+        }),
       );
     },
     [peerId, isConnected, send, state, messages],

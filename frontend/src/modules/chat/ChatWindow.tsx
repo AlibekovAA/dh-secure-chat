@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useChatSession } from './useChatSession';
+import { useChatSession, type ChatMessage } from './useChatSession';
 import type { UserSummary } from './api';
 import { FingerprintVerificationModal } from './FingerprintVerificationModal';
 import { VoiceRecorder } from './VoiceRecorder';
@@ -10,7 +10,7 @@ import {
   isPeerVerified,
 } from '../../shared/crypto/fingerprint';
 import { useToast } from '../../shared/ui/ToastProvider';
-import { MAX_FILE_SIZE } from './constants';
+import { MAX_FILE_SIZE, MAX_MESSAGE_LENGTH } from './constants';
 
 type Props = {
   token: string;
@@ -34,6 +34,10 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const typingTimeoutRef = useRef<number | null>(null);
   const { showToast } = useToast();
+  const [activeMediaCount, setActiveMediaCount] = useState(0);
+  const isMediaActive = activeMediaCount > 0;
+  const [hasShownMaxLengthToast, setHasShownMaxLengthToast] = useState(false);
+  const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
 
   const {
     state,
@@ -65,13 +69,19 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
   }, [messages.length, scrollToBottom]);
 
   useEffect(() => {
-    if (inputRef.current && !isChatBlocked && isSessionActive && !isSending) {
+    if (
+      inputRef.current &&
+      !isChatBlocked &&
+      isSessionActive &&
+      !isSending &&
+      !isMediaActive
+    ) {
       const timer = setTimeout(() => {
         inputRef.current?.focus();
       }, 100);
       return () => clearTimeout(timer);
     }
-  }, [isChatBlocked, isSessionActive, isSending]);
+  }, [isChatBlocked, isSessionActive, isSending, isMediaActive]);
 
   useEffect(() => {
     const loadFingerprints = async () => {
@@ -143,9 +153,15 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
           await sendFile(imagePreview.file);
           handleRemovePreview();
         } else {
-          await sendMessage(messageText.trim());
+          await sendMessage(messageText.trim(), replyTo?.id);
         }
         setMessageText('');
+        if (hasShownMaxLengthToast) {
+          setHasShownMaxLengthToast(false);
+        }
+        if (replyTo) {
+          setReplyTo(null);
+        }
         if (inputRef.current) {
           inputRef.current.style.height = '40px';
           inputRef.current.focus();
@@ -192,10 +208,20 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
   const handleMessageTextChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       const newText = e.target.value;
+      if (newText.length > MAX_MESSAGE_LENGTH) {
+        if (!hasShownMaxLengthToast) {
+          showToast(
+            `Сообщение слишком длинное (максимум ${MAX_MESSAGE_LENGTH} символов)`,
+            "warning",
+          );
+          setHasShownMaxLengthToast(true);
+        }
+        return;
+      }
       setMessageText(newText);
       handleTyping(newText);
     },
-    [handleTyping],
+    [handleTyping, hasShownMaxLengthToast, showToast],
   );
 
   const handleInputBlur = useCallback(() => {
@@ -205,14 +231,14 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
     }
     sendTyping(false);
 
-    if (!isChatBlocked && isSessionActive && !isSending && inputRef.current) {
+    if (!isChatBlocked && isSessionActive && !isSending && inputRef.current && !isMediaActive) {
       setTimeout(() => {
         if (inputRef.current && document.activeElement !== inputRef.current) {
           inputRef.current.focus();
         }
       }, 100);
     }
-  }, [isChatBlocked, isSessionActive, isSending, sendTyping]);
+  }, [isChatBlocked, isSessionActive, isSending, isMediaActive, sendTyping]);
 
   const handleFileSelect = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -304,6 +330,13 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
   }, [state, error]);
 
   const isLoading = state === 'establishing';
+
+  const handleMediaActiveChange = useCallback((active: boolean) => {
+    setActiveMediaCount((current) => {
+      const next = current + (active ? 1 : -1);
+      return next < 0 ? 0 : next;
+    });
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -435,6 +468,8 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
               myUserId={myUserId}
               onReaction={sendReaction}
               onDelete={deleteMessage}
+              onMediaActiveChange={handleMediaActiveChange}
+              onReply={setReplyTo}
             />
           ))}
 
@@ -526,6 +561,30 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
           onSubmit={handleSend}
           className="border-t border-emerald-700/60 bg-black/80 px-4 py-3"
         >
+          {replyTo && (
+            <div className="mb-2 rounded-lg border border-emerald-700/60 bg-black/70 px-3 py-2 flex items-start justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] text-emerald-400/80">Ответ на сообщение</p>
+                <p className="text-xs text-emerald-50 truncate">
+                  {replyTo.text
+                    ? replyTo.text
+                    : replyTo.voice
+                      ? 'Голосовое сообщение'
+                      : replyTo.file
+                        ? 'Файл'
+                        : 'Сообщение'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReplyTo(null)}
+                className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-800/60 hover:bg-emerald-700 text-emerald-50 flex items-center justify-center text-[10px] transition-colors mt-1"
+                aria-label="Отменить ответ"
+              >
+                ×
+              </button>
+            </div>
+          )}
           <input
             ref={fileInputRef}
             type="file"

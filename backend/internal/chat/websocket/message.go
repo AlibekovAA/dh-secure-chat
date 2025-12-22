@@ -60,6 +60,7 @@ type MessagePayload struct {
 	MessageID  string `json:"message_id"`
 	Ciphertext string `json:"ciphertext"`
 	Nonce      string `json:"nonce"`
+	ReplyToID  string `json:"reply_to_message_id,omitempty"`
 }
 
 type SessionEstablishedPayload struct {
@@ -124,4 +125,5 @@ type MessageDeletePayload struct {
 	To        string `json:"to"`
 	From      string `json:"from,omitempty"`
 	MessageID string `json:"message_id"`
+	Scope     string `json:"scope,omitempty"`
 }

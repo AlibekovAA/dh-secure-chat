@@ -4,6 +4,7 @@ type Props = {
   duration: number;
   blob?: Blob;
   isOwn: boolean;
+  onPlaybackChange?: (active: boolean) => void;
 };
 
 function formatDuration(seconds: number): string {
@@ -12,7 +13,7 @@ function formatDuration(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-export function VoiceMessage({ duration, blob, isOwn }: Props) {
+export function VoiceMessage({ duration, blob, isOwn, onPlaybackChange }: Props) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -119,13 +120,16 @@ export function VoiceMessage({ duration, blob, isOwn }: Props) {
     };
     const handlePlay = () => {
       setIsPlaying(true);
+      onPlaybackChange?.(true);
     };
     const handlePause = () => {
       setIsPlaying(false);
+      onPlaybackChange?.(false);
     };
     const handleEnded = () => {
       setIsPlaying(false);
       setCurrentTime(0);
+      onPlaybackChange?.(false);
     };
     const handleLoadStart = () => {
       setIsLoading(true);

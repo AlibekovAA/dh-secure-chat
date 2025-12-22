@@ -44,7 +44,19 @@ func main() {
 	revokedTokenRepo := authrepo.NewPgRevokedTokenRepository(pool)
 	hasher := &commoncrypto.BcryptHasher{}
 	idGenerator := &commoncrypto.UUIDGenerator{}
-	authService := service.NewAuthService(userRepo, identityService, refreshTokenRepo, revokedTokenRepo, hasher, idGenerator, cfg.JWTSecret, log)
+	authService := service.NewAuthService(
+		userRepo,
+		identityService,
+		refreshTokenRepo,
+		revokedTokenRepo,
+		hasher,
+		idGenerator,
+		cfg.JWTSecret,
+		cfg.AccessTokenTTL,
+		cfg.RefreshTokenTTL,
+		cfg.MaxRefreshTokensPerUser,
+		log,
+	)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

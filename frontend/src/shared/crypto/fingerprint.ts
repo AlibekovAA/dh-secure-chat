@@ -1,8 +1,14 @@
+export function normalizeFingerprint(fingerprint: string): string {
+  return fingerprint.replace(/[^0-9a-fA-F]/g, '').toLowerCase();
+}
+
 export function formatFingerprint(fingerprint: string): string {
-  return fingerprint.match(/.{1,4}/g)?.join(' ') || fingerprint;
+  const normalized = normalizeFingerprint(fingerprint);
+  return normalized.match(/.{1,4}/g)?.join(' ') || normalized;
 }
 
 export function fingerprintToEmojis(fingerprint: string): string {
+  const normalized = normalizeFingerprint(fingerprint);
   const emojis = [
     '🐶',
     '🐱',
@@ -23,10 +29,8 @@ export function fingerprintToEmojis(fingerprint: string): string {
   ];
 
   const result: string[] = [];
-  for (let i = 0; i < 8 && i * 4 < fingerprint.length; i++) {
-    const start = i * 4;
-    const end = start + 4;
-    const hex = fingerprint.slice(start, end);
+  for (let i = 0; i < 8 && i * 4 < normalized.length; i++) {
+    const hex = normalized.slice(i * 4, i * 4 + 4);
     if (hex.length === 4) {
       const value = parseInt(hex, 16);
       result.push(emojis[value % emojis.length]);
@@ -47,9 +51,7 @@ interface FingerprintHistory {
 
 function getVerifiedPeers(): Record<string, string> {
   const stored = localStorage.getItem(VERIFIED_PEERS_STORAGE);
-  if (!stored) {
-    return {};
-  }
+  if (!stored) return {};
 
   try {
     return JSON.parse(stored) as Record<string, string>;
@@ -59,11 +61,12 @@ function getVerifiedPeers(): Record<string, string> {
 }
 
 export function saveVerifiedPeer(userId: string, fingerprint: string): void {
+  const normalized = normalizeFingerprint(fingerprint);
   const peers = getVerifiedPeers();
   const oldFingerprint = peers[userId];
   const now = Date.now();
 
-  peers[userId] = fingerprint;
+  peers[userId] = normalized;
   localStorage.setItem(VERIFIED_PEERS_STORAGE, JSON.stringify(peers));
 
   const history = getFingerprintHistory();
@@ -72,7 +75,7 @@ export function saveVerifiedPeer(userId: string, fingerprint: string): void {
   }
 
   const existingEntry = history[userId].find(
-    (h) => h.fingerprint === fingerprint,
+    (h) => h.fingerprint === normalized,
   );
   if (existingEntry) {
     if (!existingEntry.verifiedAt) {
@@ -80,12 +83,12 @@ export function saveVerifiedPeer(userId: string, fingerprint: string): void {
     }
   } else {
     history[userId].push({
-      fingerprint,
+      fingerprint: normalized,
       verifiedAt: now,
     });
   }
 
-  if (oldFingerprint && oldFingerprint !== fingerprint) {
+  if (oldFingerprint && oldFingerprint !== normalized) {
     const oldEntry = history[userId].find(
       (h) => h.fingerprint === oldFingerprint,
     );
@@ -99,9 +102,7 @@ export function saveVerifiedPeer(userId: string, fingerprint: string): void {
 
 function getFingerprintHistory(): Record<string, FingerprintHistory[]> {
   const stored = localStorage.getItem(FINGERPRINT_HISTORY_STORAGE);
-  if (!stored) {
-    return {};
-  }
+  if (!stored) return {};
 
   try {
     return JSON.parse(stored) as Record<string, FingerprintHistory[]>;
@@ -112,7 +113,7 @@ function getFingerprintHistory(): Record<string, FingerprintHistory[]> {
 
 export function isPeerVerified(userId: string, fingerprint: string): boolean {
   const peers = getVerifiedPeers();
-  return peers[userId] === fingerprint;
+  return peers[userId] === normalizeFingerprint(fingerprint);
 }
 
 export function hasPeerFingerprintChanged(
@@ -121,12 +122,13 @@ export function hasPeerFingerprintChanged(
 ): boolean {
   const peers = getVerifiedPeers();
   const stored = peers[userId];
-  return stored !== undefined && stored !== currentFingerprint;
+  return (
+    stored !== undefined && stored !== normalizeFingerprint(currentFingerprint)
+  );
 }
 
 export function getVerifiedPeerFingerprint(userId: string): string | undefined {
-  const peers = getVerifiedPeers();
-  return peers[userId];
+  return getVerifiedPeers()[userId];
 }
 
 export function saveVerifiedPeerFingerprint(

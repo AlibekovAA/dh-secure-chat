@@ -6,9 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/metrics"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/transfer"
+	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 	userdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
 	userrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/repository"
@@ -36,11 +39,12 @@ type Hub struct {
 	register               chan *Client
 	unregister             chan *Client
 	lastSeenUpdates        sync.Map
+	clientCount            atomic.Int64
 	log                    *logger.Logger
 	userRepo               userrepo.Repository
 	lastSeenUpdateInterval time.Duration
 	processor              *MessageProcessor
-	fileTracker            *FileTransferTracker
+	fileTracker            transfer.Tracker
 	circuitBreaker         *CircuitBreaker
 	idempotency            *IdempotencyTracker
 	ctx                    context.Context
@@ -64,23 +68,22 @@ type HubConfig struct {
 func NewHub(log *logger.Logger, userRepo userrepo.Repository, config HubConfig) *Hub {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	validator := NewDefaultValidator(config.MaxFileSize, config.MaxVoiceSize)
-	router := NewMessageRouter(nil, validator, log)
-
 	hub := &Hub{
 		register:               make(chan *Client),
 		unregister:             make(chan *Client),
 		log:                    log,
 		userRepo:               userRepo,
 		lastSeenUpdateInterval: config.LastSeenUpdateInterval,
-		fileTracker:            NewFileTransferTracker(config.FileTransferTimeout),
+		fileTracker:            transfer.NewTracker(config.FileTransferTimeout),
 		circuitBreaker:         NewCircuitBreaker(config.CircuitBreakerThreshold, config.CircuitBreakerTimeout, config.CircuitBreakerReset),
 		idempotency:            NewIdempotencyTracker(config.IdempotencyTTL),
 		ctx:                    ctx,
 		cancel:                 cancel,
 	}
 
-	router.hub = hub
+	validator := NewDefaultValidator(config.MaxFileSize, config.MaxVoiceSize)
+	router := NewMessageRouter(hub, validator, log)
+
 	hub.processor = NewMessageProcessor(config.ProcessorWorkers, router, log, config.ProcessorQueueSize)
 
 	go hub.fileTrackerCleanup()
@@ -111,9 +114,10 @@ func (h *Hub) Run(ctx context.Context) {
 				close(existingClient.send)
 				h.clients.Delete(client.userID)
 				metrics.DecrementActiveWebSocketConnections()
+				h.clientCount.Add(-1)
 			}
 			h.clients.Store(client.userID, client)
-			totalClients := h.countClients()
+			totalClients := h.clientCount.Add(1)
 			metrics.IncrementActiveWebSocketConnections()
 			h.log.Infof("websocket client registered user_id=%s username=%s total=%d", client.userID, client.username, totalClients)
 			h.updateLastSeenDebounced(client.userID)
@@ -131,11 +135,21 @@ func (h *Hub) shutdown() {
 		return true
 	})
 
+	shutdownMsg, err := json.Marshal(&WSMessage{Type: "shutdown"})
+	if err != nil {
+		h.log.Errorf("websocket failed to marshal shutdown message: %v", err)
+	}
+
 	for _, client := range clients {
 		client.Stop()
-		select {
-		case client.send <- []byte(`{"type":"shutdown"}`):
-		default:
+		if err == nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			select {
+			case client.send <- shutdownMsg:
+			case <-ctx.Done():
+				h.log.Warnf("websocket shutdown notification timeout user_id=%s", client.userID)
+			}
+			cancel()
 		}
 		close(client.send)
 	}
@@ -162,7 +176,7 @@ func (h *Hub) SendToUserWithContext(ctx context.Context, userID string, message 
 
 	value, ok := h.clients.Load(userID)
 	if !ok {
-		return fmt.Errorf("user %s not connected", userID)
+		return fmt.Errorf("user %s not connected: %w", userID, commonerrors.ErrUserNotConnected)
 	}
 
 	client := value.(*Client)
@@ -308,7 +322,7 @@ func (h *Hub) handleUnregister(client *Client) {
 	}
 
 	h.clients.Delete(client.userID)
-	totalClients := h.countClients()
+	totalClients := h.clientCount.Add(-1)
 	clients := make([]*Client, 0)
 	h.clients.Range(func(key, value interface{}) bool {
 		clients = append(clients, value.(*Client))
@@ -316,9 +330,11 @@ func (h *Hub) handleUnregister(client *Client) {
 	})
 
 	transfers := h.fileTracker.GetTransfersForUser(client.userID)
-	for _, transfer := range transfers {
-		h.notifyFileTransferFailed(transfer)
-		h.fileTracker.Complete(transfer.FileID)
+	for _, tr := range transfers {
+		h.notifyFileTransferFailed(tr)
+		if err := h.fileTracker.Complete(tr.FileID); err != nil {
+			h.log.Warnf("websocket failed to complete file transfer on unregister user_id=%s file_id=%s: %v", client.userID, tr.FileID, err)
+		}
 	}
 
 	client.Stop()
@@ -370,39 +386,60 @@ func (h *Hub) updateLastSeenDebounced(userID string) {
 			return h.userRepo.UpdateLastSeen(ctx, userdomain.ID(userID))
 		})
 
-		if err != nil && !errors.Is(err, ErrCircuitOpen) {
+		if err != nil && !errors.Is(err, commonerrors.ErrCircuitOpen) {
 			h.log.Warnf("websocket failed to update last_seen user_id=%s: %v", userID, err)
 		}
 	}()
 }
 
 func (h *Hub) trackFileTransfer(payload FileStartPayload) {
-	h.fileTracker.Track(payload)
+	req := transfer.TrackRequest{
+		FileID:      payload.FileID,
+		From:        payload.From,
+		To:          payload.To,
+		TotalChunks: payload.TotalChunks,
+	}
+
+	if err := h.fileTracker.Track(req); err != nil {
+		h.log.Warnf("websocket failed to track file transfer file_id=%s from=%s to=%s: %v", payload.FileID, payload.From, payload.To, err)
+	}
 }
 
 func (h *Hub) updateFileTransferProgress(fileID string, chunkIndex int) {
-	h.fileTracker.UpdateProgress(fileID, chunkIndex)
+	if err := h.fileTracker.UpdateProgress(fileID, chunkIndex); err != nil {
+		if errors.Is(err, commonerrors.ErrTransferNotFound) {
+			h.log.Debugf("websocket file transfer progress skipped (no tracking) file_id=%s chunk_index=%d", fileID, chunkIndex)
+			return
+		}
+		h.log.Warnf("websocket file transfer progress failed file_id=%s chunk_index=%d: %v", fileID, chunkIndex, err)
+	}
 }
 
 func (h *Hub) completeFileTransfer(fileID string) {
-	h.fileTracker.Complete(fileID)
+	if err := h.fileTracker.Complete(fileID); err != nil {
+		if errors.Is(err, commonerrors.ErrTransferNotFound) {
+			h.log.Debugf("websocket file transfer complete skipped (no tracking) file_id=%s", fileID)
+			return
+		}
+		h.log.Warnf("websocket failed to complete file transfer file_id=%s: %v", fileID, err)
+	}
 }
 
-func (h *Hub) notifyFileTransferFailed(transfer *FileTransfer) {
-	if transfer.To == "" {
+func (h *Hub) notifyFileTransferFailed(tr *transfer.Transfer) {
+	if tr.To == "" {
 		return
 	}
 	msg, err := marshalMessage(TypeFileComplete, FileCompletePayload{
-		To:     transfer.To,
-		From:   transfer.From,
-		FileID: transfer.FileID,
+		To:     tr.To,
+		From:   tr.From,
+		FileID: tr.FileID,
 	})
 	if err != nil {
 		h.log.Errorf("websocket failed to marshal file_failed: %v", err)
 		return
 	}
-	if err := h.SendToUserWithContext(h.ctx, transfer.To, msg); err != nil {
-		h.log.Warnf("websocket failed to notify file transfer failure to=%s file_id=%s: %v", transfer.To, transfer.FileID, err)
+	if err := h.SendToUserWithContext(h.ctx, tr.To, msg); err != nil {
+		h.log.Warnf("websocket failed to notify file transfer failure to=%s file_id=%s: %v", tr.To, tr.FileID, err)
 	}
 }
 
@@ -415,7 +452,9 @@ func (h *Hub) fileTrackerCleanup() {
 		case <-h.ctx.Done():
 			return
 		case <-ticker.C:
-			h.fileTracker.CleanupStale()
+			if removed := h.fileTracker.CleanupStale(); removed > 0 {
+				h.log.Debugf("websocket cleaned up stale file transfers count=%d", removed)
+			}
 		}
 	}
 }

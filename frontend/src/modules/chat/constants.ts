@@ -10,3 +10,5 @@ export const VOICE_MIME_TYPES = [
   'audio/webm;codecs=opus',
   'audio/ogg;codecs=opus',
 ];
+
+export const MAX_MESSAGE_LENGTH = 4000;

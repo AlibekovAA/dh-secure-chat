@@ -73,7 +73,7 @@ export function VoiceRecorder({ onRecorded, onError, disabled }: Props) {
 
     try {
       const recorder = recorderRef.current;
-      const blob = recorder.stop();
+      const blob = await recorder.stop();
       const finalDuration = recorder.getDuration();
 
       if (durationTimerRef.current) {

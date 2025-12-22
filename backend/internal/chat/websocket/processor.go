@@ -16,12 +16,12 @@ type messageTask struct {
 type MessageProcessor struct {
 	workers   int
 	queue     chan messageTask
-	router    *MessageRouter
+	router    MessageRouter
 	log       *logger.Logger
 	queueSize int
 }
 
-func NewMessageProcessor(workers int, router *MessageRouter, log *logger.Logger, queueSize int) *MessageProcessor {
+func NewMessageProcessor(workers int, router MessageRouter, log *logger.Logger, queueSize int) *MessageProcessor {
 	if queueSize <= 0 {
 		queueSize = 1000
 	}

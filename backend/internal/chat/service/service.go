@@ -2,25 +2,23 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
+	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 	identityservice "github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/service"
 	userdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
 	userrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/repository"
 )
 
-var ErrEmptyQuery = errors.New("query is empty")
-
 type ChatService struct {
 	repo            userrepo.Repository
-	identityService *identityservice.IdentityService
+	identityService identityservice.Service
 	log             *logger.Logger
 }
 
-func NewChatService(repo userrepo.Repository, identityService *identityservice.IdentityService, log *logger.Logger) *ChatService {
+func NewChatService(repo userrepo.Repository, identityService identityservice.Service, log *logger.Logger) *ChatService {
 	return &ChatService{
 		repo:            repo,
 		identityService: identityService,
@@ -39,7 +37,7 @@ func (s *ChatService) GetMe(ctx context.Context, userID string) (userdomain.User
 func (s *ChatService) SearchUsers(ctx context.Context, query string, limit int) ([]userdomain.Summary, error) {
 	q := strings.TrimSpace(query)
 	if q == "" {
-		return nil, ErrEmptyQuery
+		return nil, commonerrors.ErrEmptyQuery
 	}
 	if limit <= 0 {
 		limit = 20

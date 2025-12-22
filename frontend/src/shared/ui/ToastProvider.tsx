@@ -1,6 +1,6 @@
 import { createContext, ReactNode, useContext, useMemo, useState } from "react";
 
-type ToastKind = "success" | "error";
+type ToastKind = "success" | "error" | "warning";
 
 type Toast = {
   id: number;
@@ -55,7 +55,9 @@ export function ToastProvider({ children }: Props) {
             className={`pointer-events-auto w-72 rounded-lg border px-4 py-3 text-sm shadow-lg backdrop-blur ${
               toast.kind === "error"
                 ? "border-red-500/40 bg-red-900/80 text-red-50"
-                : "border-emerald-500/40 bg-emerald-900/80 text-emerald-50"
+                : toast.kind === "success"
+                  ? "border-emerald-500/40 bg-emerald-900/80 text-emerald-50"
+                  : "border-yellow-400/40 bg-yellow-900/80 text-yellow-50"
             }`}
           >
             <div className="flex items-start justify-between gap-2">

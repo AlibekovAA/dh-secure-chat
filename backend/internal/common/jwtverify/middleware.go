@@ -3,7 +3,6 @@ package jwtverify
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"expvar"
 	"fmt"
 	"net/http"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
+	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 )
 
@@ -116,7 +116,7 @@ func parseToken(tokenString string, secret []byte) (Claims, error) {
 	})
 	if err != nil || !parsed.Valid {
 		if err == nil {
-			err = errors.New("token is not valid")
+			err = commonerrors.ErrInvalidToken
 		}
 		return Claims{}, fmt.Errorf("failed to parse token: %w", err)
 	}

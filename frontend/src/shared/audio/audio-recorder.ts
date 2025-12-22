@@ -17,6 +17,7 @@ export class AudioRecorder {
   private duration: number = 0;
   private maxDuration: number;
   private durationTimer: number | null = null;
+  private stopResolve: ((blob: Blob | null) => void) | null = null;
 
   constructor(private options: AudioRecorderOptions = {}) {
     this.maxDuration = options.maxDuration || 5 * 60 * 1000;
@@ -58,6 +59,15 @@ export class AudioRecorder {
       this.mediaRecorder.onstop = () => {
         this.duration = Date.now() - this.startTime;
         this.stopStream();
+        const mime = this.getSupportedMimeType();
+        const blob =
+          this.chunks.length > 0 ? new Blob(this.chunks, { type: mime }) : null;
+        this.state = 'stopped';
+        const resolve = this.stopResolve;
+        this.stopResolve = null;
+        if (resolve) {
+          resolve(blob);
+        }
       };
 
       this.mediaRecorder.start(1000);
@@ -70,9 +80,9 @@ export class AudioRecorder {
     }
   }
 
-  stop(): Blob | null {
+  stop(): Promise<Blob | null> {
     if (this.state !== 'recording' || !this.mediaRecorder) {
-      return null;
+      return Promise.resolve(null);
     }
 
     this.stopDurationTimer();
@@ -82,24 +92,20 @@ export class AudioRecorder {
     }
 
     if (this.mediaRecorder.state === 'recording') {
+      const promise = new Promise<Blob | null>((resolve) => {
+        this.stopResolve = resolve;
+      });
       this.mediaRecorder.requestData();
       this.mediaRecorder.stop();
+      return promise;
     }
 
-    this.state = 'stopped';
-    this.stopStream();
-
-    if (this.chunks.length === 0) {
-      return null;
-    }
-
-    const mimeType = this.getSupportedMimeType();
-    return new Blob(this.chunks, { type: mimeType });
+    return Promise.resolve(null);
   }
 
   cancel(): void {
-    if (this.state === 'recording') {
-      this.stop();
+    if (this.state === 'recording' && this.mediaRecorder) {
+      this.mediaRecorder.stop();
     }
     this.chunks = [];
     this.state = 'idle';

@@ -9,14 +9,18 @@ import (
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 )
 
-type MessageRouter struct {
+type MessageRouter interface {
+	Route(ctx context.Context, client *Client, msg *WSMessage) error
+}
+
+type messageRouter struct {
 	hub       *Hub
 	validator MessageValidator
 	log       *logger.Logger
 }
 
-func NewMessageRouter(hub *Hub, validator MessageValidator, log *logger.Logger) *MessageRouter {
-	return &MessageRouter{
+func NewMessageRouter(hub *Hub, validator MessageValidator, log *logger.Logger) MessageRouter {
+	return &messageRouter{
 		hub:       hub,
 		validator: validator,
 		log:       log,
@@ -36,7 +40,7 @@ func (p *ReactionPayload) SetFrom(from string)      { p.From = from }
 func (p *MessagePayload) SetFrom(from string)       { p.From = from }
 func (p *MessageDeletePayload) SetFrom(from string) { p.From = from }
 
-func (r *MessageRouter) Route(ctx context.Context, client *Client, msg *WSMessage) error {
+func (r *messageRouter) Route(ctx context.Context, client *Client, msg *WSMessage) error {
 	switch msg.Type {
 	case TypeEphemeralKey:
 		return r.routeWithModifiedPayload(ctx, client, msg, &EphemeralKeyPayload{}, "ephemeral_key", true)
@@ -101,7 +105,7 @@ func (r *MessageRouter) Route(ctx context.Context, client *Client, msg *WSMessag
 	}
 }
 
-func (r *MessageRouter) routeSimple(ctx context.Context, client *Client, msg *WSMessage, payload payloadWithTo, msgType string, requireOnline bool, fromUserID string) error {
+func (r *messageRouter) routeSimple(ctx context.Context, client *Client, msg *WSMessage, payload payloadWithTo, msgType string, requireOnline bool, fromUserID string) error {
 	if err := json.Unmarshal(msg.Payload, payload); err != nil {
 		r.log.Warnf("websocket invalid %s payload user_id=%s: %v", msgType, client.userID, err)
 		return fmt.Errorf("invalid %s payload: %w", msgType, err)
@@ -113,7 +117,7 @@ func (r *MessageRouter) routeSimple(ctx context.Context, client *Client, msg *WS
 	return nil
 }
 
-func (r *MessageRouter) routeWithModifiedPayload(ctx context.Context, client *Client, msg *WSMessage, payload payloadWithTo, msgType string, requireOnline bool) error {
+func (r *messageRouter) routeWithModifiedPayload(ctx context.Context, client *Client, msg *WSMessage, payload payloadWithTo, msgType string, requireOnline bool) error {
 	if err := json.Unmarshal(msg.Payload, payload); err != nil {
 		r.log.Warnf("websocket invalid %s payload user_id=%s: %v", msgType, client.userID, err)
 		metrics.IncrementWebSocketError("invalid_" + msgType + "_payload")
@@ -137,7 +141,7 @@ func (r *MessageRouter) routeWithModifiedPayload(ctx context.Context, client *Cl
 	return nil
 }
 
-func (r *MessageRouter) routeFileStart(ctx context.Context, client *Client, msg *WSMessage) error {
+func (r *messageRouter) routeFileStart(ctx context.Context, client *Client, msg *WSMessage) error {
 	var payload FileStartPayload
 	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
 		r.log.Warnf("websocket invalid file_start payload user_id=%s: %v", client.userID, err)

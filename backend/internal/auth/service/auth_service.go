@@ -14,6 +14,7 @@ import (
 	authdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/domain"
 	authrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/repository"
 	commoncrypto "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/crypto"
+	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/jwtverify"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 	identityservice "github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/service"
@@ -23,7 +24,7 @@ import (
 
 type AuthService struct {
 	repo             userrepo.Repository
-	identityService  *identityservice.IdentityService
+	identityService  identityservice.Service
 	refreshTokenRepo authrepo.RefreshTokenRepository
 	revokedTokenRepo authrepo.RevokedTokenRepository
 	hasher           commoncrypto.PasswordHasher
@@ -31,16 +32,22 @@ type AuthService struct {
 	jwtSecret        []byte
 	now              func() time.Time
 	log              *logger.Logger
+	accessTokenTTL   time.Duration
+	refreshTokenTTL  time.Duration
+	maxRefreshTokens int
 }
 
 func NewAuthService(
 	repo userrepo.Repository,
-	identityService *identityservice.IdentityService,
+	identityService identityservice.Service,
 	refreshTokenRepo authrepo.RefreshTokenRepository,
 	revokedTokenRepo authrepo.RevokedTokenRepository,
 	hasher commoncrypto.PasswordHasher,
 	idGenerator commoncrypto.IDGenerator,
 	jwtSecret string,
+	accessTokenTTL time.Duration,
+	refreshTokenTTL time.Duration,
+	maxRefreshTokens int,
 	log *logger.Logger,
 ) *AuthService {
 	return &AuthService{
@@ -53,6 +60,9 @@ func NewAuthService(
 		jwtSecret:        []byte(jwtSecret),
 		now:              time.Now,
 		log:              log,
+		accessTokenTTL:   accessTokenTTL,
+		refreshTokenTTL:  refreshTokenTTL,
+		maxRefreshTokens: maxRefreshTokens,
 	}
 }
 
@@ -102,7 +112,7 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (AuthRe
 
 	err = s.repo.Create(ctx, user)
 	if err != nil {
-		if errors.Is(err, userrepo.ErrUsernameAlreadyExists) {
+		if errors.Is(err, commonerrors.ErrUsernameAlreadyExists) {
 			s.log.Warnf("register failed username=%s: already exists", input.Username)
 			return AuthResult{}, ErrUsernameTaken
 		}
@@ -119,7 +129,7 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (AuthRe
 			if delErr := s.repo.Delete(ctx, user.ID); delErr != nil {
 				s.log.Errorf("register failed username=%s: failed to delete user after identity key error: %v", input.Username, delErr)
 			}
-			if errors.Is(err, identityservice.ErrInvalidPublicKey) {
+			if errors.Is(err, commonerrors.ErrInvalidPublicKey) {
 				return AuthResult{}, err
 			}
 			s.log.Errorf("register failed username=%s: failed to save identity key: %v", input.Username, err)
@@ -294,7 +304,7 @@ func (s *AuthService) RevokeAccessToken(ctx context.Context, jti string, userID 
 		return nil
 	}
 
-	expiresAt := s.now().Add(15 * time.Minute)
+	expiresAt := s.now().Add(s.accessTokenTTL)
 	if err := s.revokedTokenRepo.Revoke(ctx, jti, userID, expiresAt); err != nil {
 		s.log.Errorf("revoke access token failed jti=%s user_id=%s: %v", jti, userID, err)
 		return err
@@ -329,7 +339,7 @@ func (s *AuthService) issueAccessToken(user userdomain.User) (string, string, er
 		return "", "", err
 	}
 
-	expiresAt := s.now().Add(15 * time.Minute)
+	expiresAt := s.now().Add(s.accessTokenTTL)
 	claims := jwt.MapClaims{
 		"sub": string(user.ID),
 		"usr": user.Username,
@@ -349,15 +359,13 @@ func (s *AuthService) issueAccessToken(user userdomain.User) (string, string, er
 }
 
 func (s *AuthService) issueRefreshToken(ctx context.Context, user userdomain.User) (authdomain.RefreshToken, error) {
-	const maxRefreshTokensPerUser = 5
-
 	count, err := s.refreshTokenRepo.CountByUserID(ctx, string(user.ID))
 	if err != nil {
 		s.log.Errorf("failed to count refresh tokens user_id=%s: %v", user.ID, err)
 		return authdomain.RefreshToken{}, err
 	}
 
-	if count >= maxRefreshTokensPerUser {
+	if count >= s.maxRefreshTokens {
 		if err := s.refreshTokenRepo.DeleteOldestByUserID(ctx, string(user.ID)); err != nil {
 			s.log.Warnf("failed to delete oldest refresh token user_id=%s: %v", user.ID, err)
 		}
@@ -375,7 +383,7 @@ func (s *AuthService) issueRefreshToken(ctx context.Context, user userdomain.Use
 		return authdomain.RefreshToken{}, err
 	}
 
-	expiresAt := s.now().Add(7 * 24 * time.Hour)
+	expiresAt := s.now().Add(s.refreshTokenTTL)
 
 	stored := authdomain.RefreshToken{
 		ID:        id,

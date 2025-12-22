@@ -1,15 +1,16 @@
 package http
 
 import (
-	"errors"
 	"strings"
 
 	"github.com/google/uuid"
+
+	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 )
 
 func ValidateUUID(s string) error {
 	if s == "" {
-		return errors.New("uuid cannot be empty")
+		return commonerrors.ErrEmptyUUID
 	}
 	_, err := uuid.Parse(s)
 	return err

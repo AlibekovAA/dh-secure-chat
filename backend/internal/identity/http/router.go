@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	commonhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/http"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/service"
@@ -98,7 +99,7 @@ func (h *Handler) handleIdentityRequest(
 
 	result, err := handler(ctx, userID)
 	if err != nil {
-		if errors.Is(err, service.ErrIdentityKeyNotFound) {
+		if errors.Is(err, commonerrors.ErrIdentityKeyNotFound) {
 			h.log.Warnf("identity/%s failed user_id=%s: not found", operation, userID)
 			commonhttp.WriteError(w, http.StatusNotFound, "identity key not found")
 			return

@@ -7,15 +7,18 @@ import (
 	"errors"
 	"fmt"
 
+	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 	identitydomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/domain"
 	identityrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/repository"
 )
 
-var (
-	ErrIdentityKeyNotFound = errors.New("identity key not found")
-	ErrInvalidPublicKey    = errors.New("invalid public key")
-)
+type Service interface {
+	CreateIdentityKey(ctx context.Context, userID string, publicKey []byte) error
+	GetPublicKey(ctx context.Context, userID string) ([]byte, error)
+	GetIdentityKey(ctx context.Context, userID string) (identitydomain.IdentityKey, error)
+	GetFingerprint(ctx context.Context, userID string) (string, error)
+}
 
 type IdentityService struct {
 	repo identityrepo.Repository
@@ -32,12 +35,12 @@ func NewIdentityService(repo identityrepo.Repository, log *logger.Logger) *Ident
 func (s *IdentityService) CreateIdentityKey(ctx context.Context, userID string, publicKey []byte) error {
 	if len(publicKey) == 0 {
 		s.log.Warnf("create identity key failed user_id=%s: empty public key", userID)
-		return ErrInvalidPublicKey
+		return commonerrors.ErrInvalidPublicKey
 	}
 
 	if len(publicKey) < 50 || len(publicKey) > 200 {
 		s.log.Warnf("create identity key failed user_id=%s: invalid public key length %d bytes (expected SPKI format 50-200 bytes)", userID, len(publicKey))
-		return ErrInvalidPublicKey
+		return commonerrors.ErrInvalidPublicKey
 	}
 
 	key := identitydomain.IdentityKey{
@@ -59,9 +62,9 @@ func (s *IdentityService) GetPublicKey(ctx context.Context, userID string) ([]by
 
 	key, err := s.repo.FindByUserID(ctx, userID)
 	if err != nil {
-		if errors.Is(err, identityrepo.ErrIdentityKeyNotFound) {
+		if errors.Is(err, commonerrors.ErrIdentityKeyNotFound) {
 			s.log.Warnf("get identity key failed user_id=%s: not found", userID)
-			return nil, ErrIdentityKeyNotFound
+			return nil, commonerrors.ErrIdentityKeyNotFound
 		}
 		s.log.Errorf("get identity key failed user_id=%s: %v", userID, err)
 		return nil, fmt.Errorf("failed to get identity key: %w", err)
@@ -73,9 +76,9 @@ func (s *IdentityService) GetPublicKey(ctx context.Context, userID string) ([]by
 func (s *IdentityService) GetIdentityKey(ctx context.Context, userID string) (identitydomain.IdentityKey, error) {
 	key, err := s.repo.FindByUserID(ctx, userID)
 	if err != nil {
-		if errors.Is(err, identityrepo.ErrIdentityKeyNotFound) {
+		if errors.Is(err, commonerrors.ErrIdentityKeyNotFound) {
 			s.log.Warnf("get identity key failed user_id=%s: not found", userID)
-			return identitydomain.IdentityKey{}, ErrIdentityKeyNotFound
+			return identitydomain.IdentityKey{}, commonerrors.ErrIdentityKeyNotFound
 		}
 		s.log.Errorf("get identity key failed user_id=%s: %v", userID, err)
 		return identitydomain.IdentityKey{}, fmt.Errorf("failed to get identity key: %w", err)
@@ -89,9 +92,9 @@ func (s *IdentityService) GetFingerprint(ctx context.Context, userID string) (st
 
 	key, err := s.repo.FindByUserID(ctx, userID)
 	if err != nil {
-		if errors.Is(err, identityrepo.ErrIdentityKeyNotFound) {
+		if errors.Is(err, commonerrors.ErrIdentityKeyNotFound) {
 			s.log.Warnf("get identity fingerprint failed user_id=%s: not found", userID)
-			return "", ErrIdentityKeyNotFound
+			return "", commonerrors.ErrIdentityKeyNotFound
 		}
 		s.log.Errorf("get identity fingerprint failed user_id=%s: %v", userID, err)
 		return "", fmt.Errorf("failed to get identity fingerprint: %w", err)

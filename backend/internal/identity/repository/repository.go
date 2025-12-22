@@ -2,11 +2,11 @@ package repository
 
 import (
 	"context"
-	"errors"
 
 	"github.com/jackc/pgx/v4/pgxpool"
 
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/db"
+	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/domain"
 )
 
@@ -42,10 +42,8 @@ func (r *PgRepository) FindByUserID(ctx context.Context, userID string) (domain.
 
 	var key domain.IdentityKey
 	err := row.Scan(&key.UserID, &key.PublicKey, &key.CreatedAt)
-	if err := db.HandleQueryError(err, ErrIdentityKeyNotFound, "find identity key"); err != nil {
+	if err := db.HandleQueryError(err, commonerrors.ErrIdentityKeyNotFound, "find identity key"); err != nil {
 		return domain.IdentityKey{}, err
 	}
 	return key, nil
 }
-
-var ErrIdentityKeyNotFound = errors.New("identity key not found")

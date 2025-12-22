@@ -14,10 +14,10 @@ import (
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/service"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/websocket"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/config"
+	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	commonhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/http"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/jwtverify"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
-	identityrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/repository"
 	userdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
 )
 
@@ -112,7 +112,7 @@ func (h *Handler) searchUsers(w http.ResponseWriter, r *http.Request) {
 
 	users, err := h.chat.SearchUsers(ctx, query, limit)
 	if err != nil {
-		if errors.Is(err, service.ErrEmptyQuery) {
+		if errors.Is(err, commonerrors.ErrEmptyQuery) {
 			h.log.Warnf("chat/users search failed query=%q: empty query", query)
 			commonhttp.WriteError(w, http.StatusBadRequest, "query is empty")
 		} else {
@@ -151,7 +151,7 @@ func (h *Handler) getIdentityKey(w http.ResponseWriter, r *http.Request) {
 
 	pubKey, err := h.chat.GetIdentityKey(ctx, userID)
 	if err != nil {
-		if errors.Is(err, identityrepo.ErrIdentityKeyNotFound) {
+		if errors.Is(err, commonerrors.ErrIdentityKeyNotFound) {
 			h.log.Warnf("chat/identity-key failed user_id=%s: not found", userID)
 			commonhttp.WriteError(w, http.StatusNotFound, "identity key not found")
 		} else {

@@ -45,6 +45,7 @@ export type MessagePayload = {
   message_id: string;
   ciphertext: string;
   nonce: string;
+  reply_to_message_id?: string;
 };
 
 export type SessionEstablishedPayload = {
@@ -105,4 +106,5 @@ export type MessageDeletePayload = {
   to: string;
   from?: string;
   message_id: string;
+  scope?: 'me' | 'all';
 };

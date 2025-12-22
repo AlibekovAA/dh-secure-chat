@@ -1,39 +1,42 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"strconv"
 	"time"
-)
 
-var (
-	ErrMissingRequiredEnv = errors.New("missing required environment variable")
-	ErrInvalidJWTSecret   = errors.New("JWT_SECRET must be at least 32 bytes")
+	"github.com/go-playground/validator/v10"
+
+	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 )
 
 type AuthConfig struct {
-	HTTPPort       string
-	DatabaseURL    string
-	JWTSecret      string
-	RequestTimeout time.Duration
+	HTTPPort                string        `validate:"required"`
+	DatabaseURL             string        `validate:"required,url"`
+	JWTSecret               string        `validate:"required"`
+	RequestTimeout          time.Duration `validate:"gt=0"`
+	AccessTokenTTL          time.Duration `validate:"gt=0"`
+	RefreshTokenTTL         time.Duration `validate:"gt=0"`
+	MaxRefreshTokensPerUser int           `validate:"gt=0"`
 }
 
 type ChatConfig struct {
-	HTTPPort               string
-	DatabaseURL            string
-	JWTSecret              string
-	WebSocketWriteWait     time.Duration
-	WebSocketPongWait      time.Duration
-	WebSocketPingPeriod    time.Duration
-	WebSocketMaxMsgSize    int64
-	WebSocketSendBufSize   int
-	WebSocketAuthTimeout   time.Duration
-	LastSeenUpdateInterval time.Duration
-	RequestTimeout         time.Duration
-	SearchTimeout          time.Duration
+	HTTPPort               string        `validate:"required"`
+	DatabaseURL            string        `validate:"required,url"`
+	JWTSecret              string        `validate:"required"`
+	WebSocketWriteWait     time.Duration `validate:"gt=0"`
+	WebSocketPongWait      time.Duration `validate:"gt=0"`
+	WebSocketPingPeriod    time.Duration `validate:"gt=0"`
+	WebSocketMaxMsgSize    int64         `validate:"gt=0"`
+	WebSocketSendBufSize   int           `validate:"gt=0"`
+	WebSocketAuthTimeout   time.Duration `validate:"gt=0"`
+	LastSeenUpdateInterval time.Duration `validate:"gt=0"`
+	RequestTimeout         time.Duration `validate:"gt=0"`
+	SearchTimeout          time.Duration `validate:"gt=0"`
 }
+
+var validate = validator.New()
 
 func LoadAuthConfig() (AuthConfig, error) {
 	jwtSecret, err := mustEnv("JWT_SECRET")
@@ -50,12 +53,25 @@ func LoadAuthConfig() (AuthConfig, error) {
 		return AuthConfig{}, err
 	}
 
-	return AuthConfig{
-		HTTPPort:       getEnv("AUTH_HTTP_PORT", "8081"),
-		DatabaseURL:    databaseURL,
-		JWTSecret:      jwtSecret,
-		RequestTimeout: getDurationEnv("AUTH_REQUEST_TIMEOUT", 5*time.Second),
-	}, nil
+	cfg := AuthConfig{
+		HTTPPort:                getEnv("AUTH_HTTP_PORT", "8081"),
+		DatabaseURL:             databaseURL,
+		JWTSecret:               jwtSecret,
+		RequestTimeout:          getDurationEnv("AUTH_REQUEST_TIMEOUT", 5*time.Second),
+		AccessTokenTTL:          getDurationEnv("AUTH_ACCESS_TOKEN_TTL", 15*time.Minute),
+		RefreshTokenTTL:         getDurationEnv("AUTH_REFRESH_TOKEN_TTL", 7*24*time.Hour),
+		MaxRefreshTokensPerUser: getIntEnv("AUTH_MAX_REFRESH_TOKENS_PER_USER", 5),
+	}
+
+	if err := validate.Struct(cfg); err != nil {
+		return AuthConfig{}, fmt.Errorf("invalid auth config: %w", err)
+	}
+
+	if err := validateJWTSecret(jwtSecret); err != nil {
+		return AuthConfig{}, err
+	}
+
+	return cfg, nil
 }
 
 func LoadChatConfig() (ChatConfig, error) {
@@ -73,7 +89,7 @@ func LoadChatConfig() (ChatConfig, error) {
 		return ChatConfig{}, err
 	}
 
-	return ChatConfig{
+	cfg := ChatConfig{
 		HTTPPort:               getEnv("CHAT_HTTP_PORT", "8082"),
 		DatabaseURL:            databaseURL,
 		JWTSecret:              jwtSecret,
@@ -86,12 +102,22 @@ func LoadChatConfig() (ChatConfig, error) {
 		LastSeenUpdateInterval: getDurationEnv("CHAT_LAST_SEEN_INTERVAL", 1*time.Minute),
 		RequestTimeout:         getDurationEnv("CHAT_REQUEST_TIMEOUT", 5*time.Second),
 		SearchTimeout:          getDurationEnv("CHAT_SEARCH_TIMEOUT", 10*time.Second),
-	}, nil
+	}
+
+	if err := validate.Struct(cfg); err != nil {
+		return ChatConfig{}, fmt.Errorf("invalid chat config: %w", err)
+	}
+
+	if err := validateJWTSecret(jwtSecret); err != nil {
+		return ChatConfig{}, err
+	}
+
+	return cfg, nil
 }
 
 func validateJWTSecret(secret string) error {
 	if len(secret) < 32 {
-		return fmt.Errorf("%w: got %d bytes", ErrInvalidJWTSecret, len(secret))
+		return fmt.Errorf("%w: got %d bytes", commonerrors.ErrInvalidJWTSecret, len(secret))
 	}
 	return nil
 }
@@ -106,7 +132,7 @@ func getEnv(key, fallback string) string {
 func mustEnv(key string) (string, error) {
 	v, ok := os.LookupEnv(key)
 	if !ok || v == "" {
-		return "", fmt.Errorf("%w: %s", ErrMissingRequiredEnv, key)
+		return "", fmt.Errorf("%w: %s", commonerrors.ErrMissingRequiredEnv, key)
 	}
 	return v, nil
 }

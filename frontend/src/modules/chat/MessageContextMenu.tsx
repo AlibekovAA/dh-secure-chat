@@ -7,7 +7,9 @@ type Props = {
   canEdit: boolean;
   onCopy: () => void;
   onReact: () => void;
-  onDelete?: () => void;
+  onReply?: () => void;
+  onDeleteForMe?: () => void;
+  onDeleteForAll?: () => void;
   onClose: () => void;
 };
 
@@ -18,7 +20,9 @@ export function MessageContextMenu({
   canEdit,
   onCopy,
   onReact,
-  onDelete,
+  onReply,
+  onDeleteForMe,
+  onDeleteForAll,
   onClose,
 }: Props) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -91,15 +95,39 @@ export function MessageContextMenu({
         <span>Отреагировать</span>
       </button>
 
-      {isOwn && onDelete && (
+      {onReply && (
         <button
           onClick={() => {
-            onDelete();
+            onReply();
+            onClose();
+          }}
+          className="w-full text-left px-4 py-2 text-sm text-emerald-50 hover:bg-emerald-500/20 transition-colors"
+        >
+          <span>Ответить</span>
+        </button>
+      )}
+
+      {isOwn && onDeleteForMe && (
+        <button
+          onClick={() => {
+          onDeleteForMe();
             onClose();
           }}
           className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-500/20 transition-colors"
         >
-          <span>Удалить</span>
+        <span>Удалить только у себя</span>
+      </button>
+      )}
+
+      {isOwn && onDeleteForAll && (
+      <button
+        onClick={() => {
+          onDeleteForAll();
+          onClose();
+        }}
+        className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-500/20 transition-colors"
+      >
+        <span>Удалить у всех</span>
         </button>
       )}
     </div>

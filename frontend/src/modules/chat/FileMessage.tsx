@@ -6,6 +6,7 @@ type Props = {
   size: number;
   blob?: Blob;
   isOwn: boolean;
+  onDownloadStateChange?: (active: boolean) => void;
 };
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
@@ -27,7 +28,14 @@ function getFileIcon(mimeType: string): string {
   return '📎';
 }
 
-export function FileMessage({ filename, mimeType, size, blob, isOwn }: Props) {
+export function FileMessage({
+  filename,
+  mimeType,
+  size,
+  blob,
+  isOwn,
+  onDownloadStateChange,
+}: Props) {
   const [imageError, setImageError] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
 
@@ -48,14 +56,19 @@ export function FileMessage({ filename, mimeType, size, blob, isOwn }: Props) {
   const handleDownload = () => {
     if (!blob) return;
 
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    onDownloadStateChange?.(true);
+    try {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } finally {
+      onDownloadStateChange?.(false);
+    }
   };
 
   return (

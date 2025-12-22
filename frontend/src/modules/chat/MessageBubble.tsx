@@ -9,7 +9,9 @@ type Props = {
   message: ChatMessage;
   myUserId: string;
   onReaction: (messageId: string, emoji: string, action: 'add' | 'remove') => void;
-  onDelete?: (messageId: string) => void;
+  onDelete?: (messageId: string, scope: 'me' | 'all') => void;
+  onMediaActiveChange?: (active: boolean) => void;
+  onReply?: (message: ChatMessage) => void;
 };
 
 export function MessageBubble({
@@ -17,6 +19,8 @@ export function MessageBubble({
   myUserId,
   onReaction,
   onDelete,
+  onMediaActiveChange,
+  onReply,
 }: Props) {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [emojiPicker, setEmojiPicker] = useState<{ x: number; y: number } | null>(null);
@@ -83,19 +87,47 @@ export function MessageBubble({
               : 'bg-emerald-900/20 border border-emerald-700/40 text-emerald-100'
           }`}
           onContextMenu={handleContextMenu}
+          data-message-id={message.id}
         >
+          {message.replyTo && (
+            <button
+              type="button"
+              className="mb-1 rounded border border-emerald-700/60 bg-black/60 px-2 py-1 text-[11px] text-emerald-300 text-left hover:bg-emerald-900/60 transition-colors"
+              onClick={() => {
+                const targetId = message.replyTo?.id;
+                if (!targetId) return;
+                const el = document.querySelector<HTMLElement>(
+                  `[data-message-id="${targetId}"]`,
+                );
+                el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }}
+            >
+              <span className="truncate block">
+                Ответ на:{' '}
+                {message.replyTo.text
+                  ? message.replyTo.text
+                  : message.replyTo.hasVoice
+                    ? 'Голосовое сообщение'
+                    : message.replyTo.hasFile
+                      ? 'Файл'
+                      : 'сообщение'}
+              </span>
+            </button>
+          )}
+
           {message.text && (
             <p className="text-sm whitespace-pre-wrap break-words">
               {message.text}
             </p>
           )}
-              {message.voice && (
-                <VoiceMessage
-                  duration={message.voice.duration}
-                  blob={message.voice.blob}
-                  isOwn={message.isOwn}
-                />
-              )}
+          {message.voice && (
+            <VoiceMessage
+              duration={message.voice.duration}
+              blob={message.voice.blob}
+              isOwn={message.isOwn}
+              onPlaybackChange={onMediaActiveChange}
+            />
+          )}
           {message.file && !message.voice && (
             <FileMessage
               filename={message.file.filename}
@@ -103,6 +135,7 @@ export function MessageBubble({
               size={message.file.size}
               blob={message.file.blob}
               isOwn={message.isOwn}
+              onDownloadStateChange={onMediaActiveChange}
             />
           )}
 
@@ -138,17 +171,6 @@ export function MessageBubble({
                 minute: '2-digit',
               })}
             </p>
-            <button
-              onClick={() =>
-                setEmojiPicker({
-                  x: messageRef.current?.getBoundingClientRect().right || 0,
-                  y: messageRef.current?.getBoundingClientRect().top || 0,
-                })
-              }
-              className="opacity-0 group-hover:opacity-100 text-emerald-500/60 hover:text-emerald-500/80 text-xs transition-opacity"
-            >
-              😊
-            </button>
           </div>
         </div>
       </div>
@@ -161,7 +183,9 @@ export function MessageBubble({
           canEdit={false}
           onCopy={handleCopy}
           onReact={handleReact}
-          onDelete={message.isOwn ? () => onDelete?.(message.id) : undefined}
+          onReply={onReply ? () => onReply(message) : undefined}
+          onDeleteForMe={message.isOwn ? () => onDelete?.(message.id, 'me') : undefined}
+          onDeleteForAll={message.isOwn ? () => onDelete?.(message.id, 'all') : undefined}
           onClose={() => setContextMenu(null)}
         />
       )}
