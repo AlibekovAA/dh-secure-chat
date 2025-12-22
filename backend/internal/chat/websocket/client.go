@@ -9,6 +9,7 @@ import (
 
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/jwtverify"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
+	prommetrics "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/prometheus"
 )
 
 type Client struct {
@@ -90,9 +91,21 @@ func (c *Client) readPump() {
 		if err != nil {
 			if gorillaWS.IsUnexpectedCloseError(err, gorillaWS.CloseGoingAway, gorillaWS.CloseAbnormalClosure) {
 				if c.authenticated {
-					c.log.Warnf("websocket read error user_id=%s username=%s: %v", c.userID, c.username, err)
+					c.log.WithFields(c.ctx, logger.Fields{
+						"user_id":  c.userID,
+						"username": c.username,
+						"action":   "ws_read_error",
+					}).Warnf("websocket read error: %v", err)
+					prommetrics.ChatWebSocketDisconnections.WithLabelValues("read_error").Inc()
 				} else {
-					c.log.Warnf("websocket read error (unauthenticated): %v", err)
+					c.log.WithFields(c.ctx, logger.Fields{
+						"action": "ws_read_error_unauthenticated",
+					}).Warnf("websocket read error: %v", err)
+					prommetrics.ChatWebSocketDisconnections.WithLabelValues("read_error_unauthenticated").Inc()
+				}
+			} else {
+				if c.authenticated {
+					prommetrics.ChatWebSocketDisconnections.WithLabelValues("normal_close").Inc()
 				}
 			}
 			return
@@ -101,30 +114,43 @@ func (c *Client) readPump() {
 		var msg WSMessage
 		if err := json.Unmarshal(messageBytes, &msg); err != nil {
 			if c.authenticated {
-				c.log.Warnf("websocket invalid message user_id=%s username=%s: %v", c.userID, c.username, err)
+				c.log.WithFields(c.ctx, logger.Fields{
+					"user_id":  c.userID,
+					"username": c.username,
+					"action":   "ws_invalid_message",
+				}).Warnf("websocket invalid message: %v", err)
 			} else {
-				c.log.Warnf("websocket invalid message (unauthenticated): %v", err)
+				c.log.WithFields(c.ctx, logger.Fields{
+					"action": "ws_invalid_message_unauthenticated",
+				}).Warnf("websocket invalid message: %v", err)
 			}
 			continue
 		}
 
 		if !c.authenticated {
 			if msg.Type != TypeAuth {
-				c.log.Warnf("websocket unauthenticated client sent non-auth message type=%s", msg.Type)
+				c.log.WithFields(c.ctx, logger.Fields{
+					"type":   string(msg.Type),
+					"action": "ws_unauthorized_message",
+				}).Warn("websocket unauthenticated client sent non-auth message")
 				c.conn.WriteMessage(gorillaWS.CloseMessage, gorillaWS.FormatCloseMessage(gorillaWS.ClosePolicyViolation, "authentication required"))
 				break
 			}
 
 			var authPayload AuthPayload
 			if err := json.Unmarshal(msg.Payload, &authPayload); err != nil {
-				c.log.Warnf("websocket invalid auth payload: %v", err)
+				c.log.WithFields(c.ctx, logger.Fields{
+					"action": "ws_invalid_auth_payload",
+				}).Warnf("websocket invalid auth payload: %v", err)
 				c.conn.WriteMessage(gorillaWS.CloseMessage, gorillaWS.FormatCloseMessage(gorillaWS.CloseInvalidFramePayloadData, "invalid auth payload"))
 				break
 			}
 
 			claims, err := jwtverify.ParseToken(authPayload.Token, c.jwtSecret)
 			if err != nil {
-				c.log.Warnf("websocket authentication failed: %v", err)
+				c.log.WithFields(c.ctx, logger.Fields{
+					"action": "ws_auth_failed",
+				}).Warnf("websocket authentication failed: %v", err)
 				c.conn.WriteMessage(gorillaWS.CloseMessage, gorillaWS.FormatCloseMessage(gorillaWS.ClosePolicyViolation, "invalid token"))
 				break
 			}
@@ -132,12 +158,18 @@ func (c *Client) readPump() {
 			if c.revokedTokenChecker != nil && claims.JTI != "" {
 				revoked, err := c.revokedTokenChecker.IsRevoked(c.ctx, claims.JTI)
 				if err != nil {
-					c.log.Errorf("websocket authentication failed: failed to check revoked token jti=%s: %v", claims.JTI, err)
+					c.log.WithFields(c.ctx, logger.Fields{
+						"jti":    claims.JTI,
+						"action": "ws_auth_revoked_check_failed",
+					}).Errorf("websocket authentication failed: failed to check revoked token: %v", err)
 					c.conn.WriteMessage(gorillaWS.CloseMessage, gorillaWS.FormatCloseMessage(gorillaWS.CloseInternalServerErr, "internal error"))
 					break
 				}
 				if revoked {
-					c.log.Warnf("websocket authentication failed: token revoked jti=%s", claims.JTI)
+					c.log.WithFields(c.ctx, logger.Fields{
+						"jti":    claims.JTI,
+						"action": "ws_auth_token_revoked",
+					}).Warn("websocket authentication failed: token revoked")
 					c.conn.WriteMessage(gorillaWS.CloseMessage, gorillaWS.FormatCloseMessage(gorillaWS.ClosePolicyViolation, "token revoked"))
 					break
 				}
@@ -157,12 +189,19 @@ func (c *Client) readPump() {
 				select {
 				case c.send <- authResponseBytes:
 				default:
-					c.log.Warnf("websocket auth response send buffer full user_id=%s", c.userID)
+					c.log.WithFields(c.ctx, logger.Fields{
+						"user_id": c.userID,
+						"action":  "ws_auth_response_buffer_full",
+					}).Warn("websocket auth response send buffer full")
 				}
 			}
 
 			c.hub.Register(c)
-			c.log.Infof("websocket client authenticated user_id=%s username=%s", c.userID, c.username)
+			c.log.WithFields(c.ctx, logger.Fields{
+				"user_id":  c.userID,
+				"username": c.username,
+				"action":   "ws_authenticated",
+			}).Info("websocket client authenticated")
 			continue
 		}
 

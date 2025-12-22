@@ -84,22 +84,34 @@ type AuthResult struct {
 }
 
 func (s *AuthService) Register(ctx context.Context, input RegisterInput) (AuthResult, error) {
-	s.log.Infof("register attempt username=%s", input.Username)
+	s.log.WithFields(ctx, logger.Fields{
+		"username": input.Username,
+		"action":   "register_attempt",
+	}).Info("register attempt")
 
 	if err := validateCredentials(input.Username, input.Password); err != nil {
-		s.log.Warnf("register validation failed username=%s: %v", input.Username, err)
+		s.log.WithFields(ctx, logger.Fields{
+			"username": input.Username,
+			"action":   "register_validation_failed",
+		}).Warnf("register validation failed: %v", err)
 		return AuthResult{}, err
 	}
 
 	hash, err := s.hasher.Hash(input.Password)
 	if err != nil {
-		s.log.Errorf("register failed username=%s: password hash error: %v", input.Username, err)
+		s.log.WithFields(ctx, logger.Fields{
+			"username": input.Username,
+			"action":   "register_hash_failed",
+		}).Errorf("register failed: password hash error: %v", err)
 		return AuthResult{}, err
 	}
 
 	id, err := s.idGenerator.NewID()
 	if err != nil {
-		s.log.Errorf("register failed username=%s: id generation error: %v", input.Username, err)
+		s.log.WithFields(ctx, logger.Fields{
+			"username": input.Username,
+			"action":   "register_id_generation_failed",
+		}).Errorf("register failed: id generation error: %v", err)
 		return AuthResult{}, err
 	}
 
@@ -113,10 +125,16 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (AuthRe
 	err = s.repo.Create(ctx, user)
 	if err != nil {
 		if errors.Is(err, commonerrors.ErrUsernameAlreadyExists) {
-			s.log.Warnf("register failed username=%s: already exists", input.Username)
+			s.log.WithFields(ctx, logger.Fields{
+				"username": input.Username,
+				"action":   "register_username_exists",
+			}).Warn("register failed: already exists")
 			return AuthResult{}, ErrUsernameTaken
 		}
-		s.log.Errorf("register failed username=%s: %v", input.Username, err)
+		s.log.WithFields(ctx, logger.Fields{
+			"username": input.Username,
+			"action":   "register_create_failed",
+		}).Errorf("register failed: %v", err)
 		return AuthResult{}, &AuthError{
 			Code:    "DB_ERROR",
 			Message: "failed to create user",
@@ -127,23 +145,39 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (AuthRe
 	if len(input.IdentityPubKey) > 0 {
 		if err := s.identityService.CreateIdentityKey(ctx, string(user.ID), input.IdentityPubKey); err != nil {
 			if delErr := s.repo.Delete(ctx, user.ID); delErr != nil {
-				s.log.Errorf("register failed username=%s: failed to delete user after identity key error: %v", input.Username, delErr)
+				s.log.WithFields(ctx, logger.Fields{
+					"username": input.Username,
+					"user_id":  string(user.ID),
+					"action":   "register_delete_user_failed",
+				}).Errorf("register failed: failed to delete user after identity key error: %v", delErr)
 			}
 			if errors.Is(err, commonerrors.ErrInvalidPublicKey) {
 				return AuthResult{}, err
 			}
-			s.log.Errorf("register failed username=%s: failed to save identity key: %v", input.Username, err)
+			s.log.WithFields(ctx, logger.Fields{
+				"username": input.Username,
+				"user_id":  string(user.ID),
+				"action":   "register_identity_key_failed",
+			}).Errorf("register failed: failed to save identity key: %v", err)
 			return AuthResult{}, fmt.Errorf("failed to save identity key: %w", err)
 		}
 	}
 
 	accessToken, refresh, err := s.issueTokens(ctx, user)
 	if err != nil {
-		s.log.Errorf("register failed username=%s: token issue error: %v", input.Username, err)
+		s.log.WithFields(ctx, logger.Fields{
+			"username": input.Username,
+			"user_id":  string(user.ID),
+			"action":   "register_token_issue_failed",
+		}).Errorf("register failed: token issue error: %v", err)
 		return AuthResult{}, err
 	}
 
-	s.log.Infof("register success username=%s user_id=%s", user.Username, user.ID)
+	s.log.WithFields(ctx, logger.Fields{
+		"username": user.Username,
+		"user_id":  string(user.ID),
+		"action":   "register_success",
+	}).Info("register success")
 
 	return AuthResult{
 		AccessToken:      accessToken,
@@ -153,20 +187,32 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (AuthRe
 }
 
 func (s *AuthService) Login(ctx context.Context, input LoginInput) (AuthResult, error) {
-	s.log.Infof("login attempt username=%s", input.Username)
+	s.log.WithFields(ctx, logger.Fields{
+		"username": input.Username,
+		"action":   "login_attempt",
+	}).Info("login attempt")
 
 	if err := validateCredentials(input.Username, input.Password); err != nil {
-		s.log.Warnf("login validation failed username=%s: %v", input.Username, err)
+		s.log.WithFields(ctx, logger.Fields{
+			"username": input.Username,
+			"action":   "login_validation_failed",
+		}).Warnf("login validation failed: %v", err)
 		return AuthResult{}, err
 	}
 
 	user, err := s.repo.FindByUsername(ctx, input.Username)
 	if err != nil {
 		if errors.Is(err, userrepo.ErrUserNotFound) {
-			s.log.Warnf("login failed username=%s: not found", input.Username)
+			s.log.WithFields(ctx, logger.Fields{
+				"username": input.Username,
+				"action":   "login_user_not_found",
+			}).Warn("login failed: not found")
 			return AuthResult{}, ErrInvalidCredentials
 		}
-		s.log.Errorf("login failed username=%s: %v", input.Username, err)
+		s.log.WithFields(ctx, logger.Fields{
+			"username": input.Username,
+			"action":   "login_fetch_failed",
+		}).Errorf("login failed: %v", err)
 		return AuthResult{}, &AuthError{
 			Code:    "DB_ERROR",
 			Message: "failed to fetch user",
@@ -175,17 +221,28 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (AuthResult, 
 	}
 
 	if err := s.hasher.Compare(user.PasswordHash, input.Password); err != nil {
-		s.log.Warnf("login failed username=%s: invalid password", input.Username)
+		s.log.WithFields(ctx, logger.Fields{
+			"username": input.Username,
+			"action":   "login_invalid_password",
+		}).Warn("login failed: invalid password")
 		return AuthResult{}, ErrInvalidCredentials
 	}
 
 	accessToken, refresh, err := s.issueTokens(ctx, user)
 	if err != nil {
-		s.log.Errorf("login failed username=%s: token issue error: %v", input.Username, err)
+		s.log.WithFields(ctx, logger.Fields{
+			"username": input.Username,
+			"user_id":  string(user.ID),
+			"action":   "login_token_issue_failed",
+		}).Errorf("login failed: token issue error: %v", err)
 		return AuthResult{}, err
 	}
 
-	s.log.Infof("login success username=%s user_id=%s", user.Username, user.ID)
+	s.log.WithFields(ctx, logger.Fields{
+		"username": user.Username,
+		"user_id":  string(user.ID),
+		"action":   "login_success",
+	}).Info("login success")
 
 	return AuthResult{
 		AccessToken:      accessToken,
@@ -194,8 +251,10 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (AuthResult, 
 	}, nil
 }
 
-func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken string) (AuthResult, error) {
-	s.log.Infof("refresh token attempt")
+func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken string, clientIP string) (AuthResult, error) {
+	s.log.WithFields(ctx, logger.Fields{
+		"action": "refresh_token_attempt",
+	}).Info("refresh token attempt")
 
 	if refreshToken == "" {
 		return AuthResult{}, ErrInvalidRefreshToken
@@ -205,7 +264,9 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken strin
 
 	tx, err := s.refreshTokenRepo.BeginTx(ctx)
 	if err != nil {
-		s.log.Errorf("refresh token failed to begin tx: %v", err)
+		s.log.WithFields(ctx, logger.Fields{
+			"action": "refresh_token_begin_tx_failed",
+		}).Errorf("refresh token failed to begin tx: %v", err)
 		return AuthResult{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
@@ -213,22 +274,39 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken strin
 	stored, err := tx.FindByTokenHashForUpdate(ctx, hash)
 	if err != nil {
 		if errors.Is(err, authrepo.ErrRefreshTokenNotFound) {
-			s.log.Warnf("refresh token failed: not found")
+			fields := logger.Fields{
+				"action": "refresh_token_not_found",
+			}
+			if clientIP != "" {
+				fields["client_ip"] = clientIP
+			}
+			s.log.WithFields(ctx, fields).Warn("refresh token failed: not found")
 			return AuthResult{}, ErrInvalidRefreshToken
 		}
-		s.log.Errorf("refresh token lookup failed: %v", err)
+		s.log.WithFields(ctx, logger.Fields{
+			"action": "refresh_token_lookup_failed",
+		}).Errorf("refresh token lookup failed: %v", err)
 		return AuthResult{}, err
 	}
 
 	if s.now().After(stored.ExpiresAt) {
-		s.log.Warnf("refresh token expired user_id=%s", stored.UserID)
-		refreshTokensExpired.Add(1)
+		s.log.WithFields(ctx, logger.Fields{
+			"user_id": stored.UserID,
+			"action":  "refresh_token_expired",
+		}).Warn("refresh token expired")
+		incrementRefreshTokensExpired()
 		if err := tx.DeleteByTokenHash(ctx, hash); err != nil {
-			s.log.Errorf("refresh token failed to delete expired token user_id=%s: %v", stored.UserID, err)
+			s.log.WithFields(ctx, logger.Fields{
+				"user_id": stored.UserID,
+				"action":  "refresh_token_delete_expired_failed",
+			}).Errorf("refresh token failed to delete expired token: %v", err)
 			return AuthResult{}, err
 		}
 		if err := tx.Commit(ctx); err != nil {
-			s.log.Errorf("refresh token failed to commit delete expired user_id=%s: %v", stored.UserID, err)
+			s.log.WithFields(ctx, logger.Fields{
+				"user_id": stored.UserID,
+				"action":  "refresh_token_commit_delete_expired_failed",
+			}).Errorf("refresh token failed to commit delete expired: %v", err)
 			return AuthResult{}, err
 		}
 		return AuthResult{}, ErrRefreshTokenExpired
@@ -236,30 +314,48 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken strin
 
 	user, err := s.repo.FindByID(ctx, userdomain.ID(stored.UserID))
 	if err != nil {
-		s.log.Errorf("refresh token failed: user lookup error user_id=%s: %v", stored.UserID, err)
+		s.log.WithFields(ctx, logger.Fields{
+			"user_id": stored.UserID,
+			"action":  "refresh_token_user_lookup_failed",
+		}).Errorf("refresh token failed: user lookup error: %v", err)
 		return AuthResult{}, err
 	}
 
 	if err := tx.DeleteByTokenHash(ctx, hash); err != nil {
-		s.log.Errorf("refresh token failed to delete old token user_id=%s: %v", stored.UserID, err)
+		s.log.WithFields(ctx, logger.Fields{
+			"user_id": stored.UserID,
+			"action":  "refresh_token_delete_old_failed",
+		}).Errorf("refresh token failed to delete old token: %v", err)
 		return AuthResult{}, err
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		s.log.Errorf("refresh token failed to commit delete old token user_id=%s: %v", stored.UserID, err)
+		s.log.WithFields(ctx, logger.Fields{
+			"user_id": stored.UserID,
+			"action":  "refresh_token_commit_delete_old_failed",
+		}).Errorf("refresh token failed to commit delete old token: %v", err)
 		return AuthResult{}, err
 	}
 
 	accessToken, refresh, err := s.issueTokens(ctx, user)
 	if err != nil {
-		s.log.Errorf("refresh token failed to issue new tokens user_id=%s: %v", stored.UserID, err)
+		s.log.WithFields(ctx, logger.Fields{
+			"user_id": stored.UserID,
+			"action":  "refresh_token_issue_failed",
+		}).Errorf("refresh token failed to issue new tokens: %v", err)
 		return AuthResult{}, err
 	}
 
-	s.log.Infof("refresh token used user_id=%s", stored.UserID)
-	s.log.Infof("refresh token success user_id=%s", stored.UserID)
+	s.log.WithFields(ctx, logger.Fields{
+		"user_id": stored.UserID,
+		"action":  "refresh_token_used",
+	}).Info("refresh token used")
+	s.log.WithFields(ctx, logger.Fields{
+		"user_id": stored.UserID,
+		"action":  "refresh_token_success",
+	}).Info("refresh token success")
 
-	refreshTokensUsed.Add(1)
+	incrementRefreshTokensUsed()
 
 	return AuthResult{
 		AccessToken:      accessToken,
@@ -280,7 +376,9 @@ func (s *AuthService) RevokeRefreshToken(ctx context.Context, refreshToken strin
 		if errors.Is(err, authrepo.ErrRefreshTokenNotFound) {
 			return nil
 		}
-		s.log.Errorf("revoke refresh token lookup failed: %v", err)
+		s.log.WithFields(ctx, logger.Fields{
+			"action": "revoke_refresh_token_lookup_failed",
+		}).Errorf("revoke refresh token lookup failed: %v", err)
 		return err
 	}
 
@@ -288,13 +386,19 @@ func (s *AuthService) RevokeRefreshToken(ctx context.Context, refreshToken strin
 		if errors.Is(err, authrepo.ErrRefreshTokenNotFound) {
 			return nil
 		}
-		s.log.Errorf("revoke refresh token failed: %v", err)
+		s.log.WithFields(ctx, logger.Fields{
+			"user_id": stored.UserID,
+			"action":  "revoke_refresh_token_failed",
+		}).Errorf("revoke refresh token failed: %v", err)
 		return err
 	}
 
-	s.log.Infof("refresh token revoked user_id=%s", stored.UserID)
+	s.log.WithFields(ctx, logger.Fields{
+		"user_id": stored.UserID,
+		"action":  "refresh_token_revoked",
+	}).Info("refresh token revoked")
 
-	refreshTokensRevoked.Add(1)
+	incrementRefreshTokensRevoked()
 
 	return nil
 }
@@ -306,12 +410,20 @@ func (s *AuthService) RevokeAccessToken(ctx context.Context, jti string, userID 
 
 	expiresAt := s.now().Add(s.accessTokenTTL)
 	if err := s.revokedTokenRepo.Revoke(ctx, jti, userID, expiresAt); err != nil {
-		s.log.Errorf("revoke access token failed jti=%s user_id=%s: %v", jti, userID, err)
+		s.log.WithFields(ctx, logger.Fields{
+			"jti":     jti,
+			"user_id": userID,
+			"action":  "revoke_access_token_failed",
+		}).Errorf("revoke access token failed: %v", err)
 		return err
 	}
 
-	accessTokensRevoked.Add(1)
-	s.log.Infof("access token revoked jti=%s user_id=%s", jti, userID)
+	incrementAccessTokensRevoked()
+	s.log.WithFields(ctx, logger.Fields{
+		"jti":     jti,
+		"user_id": userID,
+		"action":  "access_token_revoked",
+	}).Info("access token revoked")
 	return nil
 }
 
@@ -354,20 +466,26 @@ func (s *AuthService) issueAccessToken(user userdomain.User) (string, string, er
 		return "", "", err
 	}
 
-	accessTokensIssued.Add(1)
+	incrementAccessTokensIssued()
 	return tokenString, jti, nil
 }
 
 func (s *AuthService) issueRefreshToken(ctx context.Context, user userdomain.User) (authdomain.RefreshToken, error) {
 	count, err := s.refreshTokenRepo.CountByUserID(ctx, string(user.ID))
 	if err != nil {
-		s.log.Errorf("failed to count refresh tokens user_id=%s: %v", user.ID, err)
+		s.log.WithFields(ctx, logger.Fields{
+			"user_id": string(user.ID),
+			"action":  "count_refresh_tokens_failed",
+		}).Errorf("failed to count refresh tokens: %v", err)
 		return authdomain.RefreshToken{}, err
 	}
 
 	if count >= s.maxRefreshTokens {
 		if err := s.refreshTokenRepo.DeleteOldestByUserID(ctx, string(user.ID)); err != nil {
-			s.log.Warnf("failed to delete oldest refresh token user_id=%s: %v", user.ID, err)
+			s.log.WithFields(ctx, logger.Fields{
+				"user_id": string(user.ID),
+				"action":  "delete_oldest_refresh_token_failed",
+			}).Warnf("failed to delete oldest refresh token: %v", err)
 		}
 	}
 
@@ -397,7 +515,7 @@ func (s *AuthService) issueRefreshToken(ctx context.Context, user userdomain.Use
 		return authdomain.RefreshToken{}, err
 	}
 
-	refreshTokensIssued.Add(1)
+	incrementRefreshTokensIssued()
 
 	return authdomain.RefreshToken{
 		ID:        stored.ID,

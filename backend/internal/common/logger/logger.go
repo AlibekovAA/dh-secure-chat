@@ -8,10 +8,14 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
+	"strings"
 	"sync"
 
 	"gopkg.in/natefinch/lumberjack.v2"
 )
+
+type Fields map[string]interface{}
 
 type LogLevel int
 
@@ -90,6 +94,10 @@ func (l *Logger) log(level LogLevel, msg string) {
 }
 
 func (l *Logger) logWithContext(level LogLevel, ctx context.Context, msg string) {
+	l.logWithFields(level, ctx, msg, nil)
+}
+
+func (l *Logger) logWithFields(level LogLevel, ctx context.Context, msg string, fields Fields) {
 	l.mu.RLock()
 	currentLevel := l.level
 	service := l.serviceName
@@ -106,10 +114,30 @@ func (l *Logger) logWithContext(level LogLevel, ctx context.Context, msg string)
 		prefix = fmt.Sprintf("[%s]", prefix)
 	}
 
+	var fieldParts []string
+
 	if ctx != nil {
-		if traceID, ok := ctx.Value("trace_id").(string); ok && traceID != "" {
-			prefix = fmt.Sprintf("%s [trace_id=%s]", prefix, traceID)
+		type contextKey string
+		const traceIDKey contextKey = "trace_id"
+		if traceID, ok := ctx.Value(traceIDKey).(string); ok && traceID != "" {
+			fieldParts = append(fieldParts, fmt.Sprintf("trace_id=%s", traceID))
 		}
+	}
+
+	if len(fields) > 0 {
+		keys := make([]string, 0, len(fields))
+		for k := range fields {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+
+		for _, k := range keys {
+			fieldParts = append(fieldParts, fmt.Sprintf("%s=%v", k, fields[k]))
+		}
+	}
+
+	if len(fieldParts) > 0 {
+		prefix = fmt.Sprintf("%s [%s]", prefix, strings.Join(fieldParts, " "))
 	}
 
 	_, file, line, ok := runtime.Caller(3)
@@ -159,13 +187,54 @@ func (l *Logger) Fatalf(format string, args ...any) {
 	os.Exit(1)
 }
 
+func (l *Logger) WithFields(ctx context.Context, fields Fields) *Entry {
+	return &Entry{
+		logger: l,
+		ctx:    ctx,
+		fields: fields,
+	}
+}
+
+type Entry struct {
+	logger *Logger
+	ctx    context.Context
+	fields Fields
+}
+
+func (e *Entry) Debug(msg string)    { e.logger.logWithFields(DEBUG, e.ctx, msg, e.fields) }
+func (e *Entry) Info(msg string)     { e.logger.logWithFields(INFO, e.ctx, msg, e.fields) }
+func (e *Entry) Warn(msg string)     { e.logger.logWithFields(WARNING, e.ctx, msg, e.fields) }
+func (e *Entry) Error(msg string)    { e.logger.logWithFields(ERROR, e.ctx, msg, e.fields) }
+func (e *Entry) Critical(msg string) { e.logger.logWithFields(CRITICAL, e.ctx, msg, e.fields) }
+
+func (e *Entry) Debugf(format string, args ...any) {
+	e.logger.logWithFields(DEBUG, e.ctx, fmt.Sprintf(format, args...), e.fields)
+}
+
+func (e *Entry) Infof(format string, args ...any) {
+	e.logger.logWithFields(INFO, e.ctx, fmt.Sprintf(format, args...), e.fields)
+}
+
+func (e *Entry) Warnf(format string, args ...any) {
+	e.logger.logWithFields(WARNING, e.ctx, fmt.Sprintf(format, args...), e.fields)
+}
+
+func (e *Entry) Errorf(format string, args ...any) {
+	e.logger.logWithFields(ERROR, e.ctx, fmt.Sprintf(format, args...), e.fields)
+}
+
+func (e *Entry) Criticalf(format string, args ...any) {
+	e.logger.logWithFields(CRITICAL, e.ctx, fmt.Sprintf(format, args...), e.fields)
+}
+
 func parseLevel(value string) LogLevel {
+	value = strings.TrimSpace(strings.ToUpper(value))
 	switch value {
 	case "DEBUG":
 		return DEBUG
 	case "INFO":
 		return INFO
-	case "WARNING":
+	case "WARNING", "WARN":
 		return WARNING
 	case "ERROR":
 		return ERROR

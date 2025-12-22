@@ -69,6 +69,13 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
   }, [messages.length, scrollToBottom]);
 
   useEffect(() => {
+    if (isPeerTyping && isSessionActive && !isChatBlocked) {
+      const timer = setTimeout(scrollToBottom, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isPeerTyping, isSessionActive, isChatBlocked, scrollToBottom]);
+
+  useEffect(() => {
     if (
       inputRef.current &&
       !isChatBlocked &&
@@ -151,6 +158,7 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
       try {
         if (imagePreview) {
           await sendFile(imagePreview.file);
+          showToast('Изображение отправлено', 'success');
           handleRemovePreview();
         } else {
           await sendMessage(messageText.trim(), replyTo?.id);
@@ -360,14 +368,14 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
   }, [onClose, showFingerprintModal]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="w-full max-w-2xl h-[80vh] flex flex-col bg-black border border-emerald-700 rounded-xl overflow-hidden animate-[fadeIn_0.3s_ease-out,slideUp_0.3s_ease-out]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm smooth-transition" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="w-full max-w-2xl h-[80vh] flex flex-col bg-black border border-emerald-700 rounded-xl overflow-hidden modal-enter glow-emerald" style={{ willChange: 'transform, opacity' }}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-emerald-700/60 bg-black/80">
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="text-emerald-400 hover:text-emerald-200 transition-colors"
+              className="text-emerald-400 hover:text-emerald-200 smooth-transition button-press rounded-md p-1 hover:bg-emerald-900/40"
               aria-label="Закрыть чат"
             >
               <svg
@@ -385,7 +393,7 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
               </svg>
             </button>
             <div>
-              <h2 className="text-sm font-semibold text-emerald-300">{peer.username}</h2>
+              <h2 className="text-sm font-semibold text-emerald-300 tracking-tight">{peer.username}</h2>
               <div className="flex items-center gap-2 mt-0.5">
                 {isSessionActive ? (
                   <>
@@ -443,7 +451,7 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 scrollbar-custom">
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 scrollbar-custom relative">
           {isLoading && (
             <div className="flex items-center justify-center py-8">
               <div className="flex flex-col items-center gap-3">
@@ -475,14 +483,14 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
 
           {isPeerTyping && isSessionActive && !isChatBlocked && (
             <div className="flex justify-start animate-[fadeIn_0.2s_ease-out]">
-              <div className="max-w-[75%] rounded-lg px-3 py-2 bg-emerald-900/20 border border-emerald-700/40">
+              <div className="max-w-[75%] rounded-lg px-3 py-2 bg-emerald-900/20 border border-emerald-700/40 smooth-transition">
                 <div className="flex items-center gap-1.5">
                   <div className="flex gap-1">
-                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400/80 animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400/80 animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400/80 animate-bounce" style={{ animationDelay: '300ms' }} />
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400/80 animate-typing" style={{ animationDelay: '0ms' }} />
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400/80 animate-typing" style={{ animationDelay: '150ms' }} />
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400/80 animate-typing" style={{ animationDelay: '300ms' }} />
                   </div>
-                  <span className="text-xs text-emerald-400/80 italic">печатает...</span>
+                  <span className="text-xs text-emerald-400/80 italic leading-relaxed">печатает...</span>
                 </div>
               </div>
             </div>
@@ -599,6 +607,7 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
                 if (!isSessionActive || isChatBlocked) return;
                 try {
                   await sendVoice(file, duration);
+                  showToast('Голосовое сообщение отправлено', 'success');
                 } catch {
                   showToast('Ошибка отправки голосового сообщения', 'error');
                 }
@@ -640,7 +649,7 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
                 type="button"
                 onClick={handleFileButtonClick}
                 disabled={!isSessionActive || isSendingFile || isChatBlocked}
-                className="absolute right-2 rounded-md bg-emerald-900/40 hover:bg-emerald-900/60 disabled:bg-emerald-900/20 disabled:cursor-not-allowed text-emerald-300 p-1.5 transition-colors flex items-center justify-center h-7 w-7"
+                className="absolute right-2 rounded-md bg-emerald-900/40 hover:bg-emerald-900/60 disabled:bg-emerald-900/20 disabled:cursor-not-allowed text-emerald-300 p-1.5 smooth-transition button-press flex items-center justify-center h-7 w-7"
                 style={{ top: '50%', transform: 'translateY(-50%)' }}
                 title="Прикрепить файл"
               >
@@ -666,7 +675,7 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
             <button
               type="submit"
               disabled={(!messageText.trim() && !imagePreview) || !isSessionActive || isSending}
-              className="rounded-md bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-700 disabled:cursor-not-allowed text-sm font-medium px-4 h-10 text-black transition-colors flex items-center justify-center min-w-[80px]"
+              className="rounded-md bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-700 disabled:cursor-not-allowed text-sm font-medium px-4 h-10 text-black smooth-transition button-press glow-emerald-hover flex items-center justify-center min-w-[80px]"
             >
               {isSending ? (
                 <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />

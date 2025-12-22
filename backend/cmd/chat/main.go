@@ -2,12 +2,13 @@ package main
 
 import (
 	"context"
-	"expvar"
 	"net/http"
 	"os"
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	authrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/repository"
 	chathttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/http"
@@ -94,7 +95,7 @@ func main() {
 
 	restMux := http.NewServeMux()
 	restMux.HandleFunc("/health", commonhttp.HealthHandler(log))
-	restMux.Handle("/debug/vars", expvar.Handler())
+	restMux.Handle("/metrics", promhttp.Handler())
 
 	identityHandler := identityhttp.NewHandler(identityService, log)
 

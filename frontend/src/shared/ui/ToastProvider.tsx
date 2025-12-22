@@ -52,12 +52,12 @@ export function ToastProvider({ children }: Props) {
         {toasts.map(toast => (
           <div
             key={toast.id}
-            className={`pointer-events-auto w-72 rounded-lg border px-4 py-3 text-sm shadow-lg backdrop-blur ${
+            className={`pointer-events-auto w-72 rounded-lg border px-4 py-3 text-sm shadow-lg backdrop-blur-sm toast-enter smooth-transition ${
               toast.kind === "error"
-                ? "border-red-500/40 bg-red-900/80 text-red-50"
+                ? "border-red-500/40 bg-red-900/80 text-red-50 glow-emerald-hover"
                 : toast.kind === "success"
-                  ? "border-emerald-500/40 bg-emerald-900/80 text-emerald-50"
-                  : "border-yellow-400/40 bg-yellow-900/80 text-yellow-50"
+                  ? "border-emerald-500/40 bg-emerald-900/80 text-emerald-50 glow-emerald-hover"
+                  : "border-yellow-400/40 bg-yellow-900/80 text-yellow-50 glow-emerald-hover"
             }`}
           >
             <div className="flex items-start justify-between gap-2">

@@ -103,10 +103,10 @@ export function AuthForm({ onAuthenticated }: Props) {
         <button
           type="button"
           onClick={() => switchMode("login", true)}
-          className={`flex-1 py-2 text-sm font-medium ${
+          className={`flex-1 py-2 text-sm font-medium smooth-transition button-press ${
             mode === "login"
               ? "bg-emerald-600 text-black"
-              : "bg-black text-emerald-400"
+              : "bg-black text-emerald-400 hover:bg-emerald-900/40"
           }`}
         >
           Вход
@@ -114,10 +114,10 @@ export function AuthForm({ onAuthenticated }: Props) {
         <button
           type="button"
           onClick={() => switchMode("register", true)}
-          className={`flex-1 py-2 text-sm font-medium ${
+          className={`flex-1 py-2 text-sm font-medium smooth-transition button-press ${
             mode === "register"
               ? "bg-emerald-600 text-black"
-              : "bg-black text-emerald-400"
+              : "bg-black text-emerald-400 hover:bg-emerald-900/40"
           }`}
         >
           Регистрация
@@ -192,7 +192,7 @@ export function AuthForm({ onAuthenticated }: Props) {
         <button
           type="submit"
           disabled={submitting}
-          className="w-full rounded-md bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-700 text-sm font-medium py-2 text-black transition-colors"
+          className="w-full rounded-md bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-700 text-sm font-medium py-2 text-black smooth-transition button-press glow-emerald-hover"
         >
           {submitting
             ? mode === "login"

@@ -26,6 +26,7 @@ func NewPgRevokedTokenRepository(pool *pgxpool.Pool) *PgRevokedTokenRepository {
 }
 
 func (r *PgRevokedTokenRepository) Revoke(ctx context.Context, jti string, userID string, expiresAt time.Time) error {
+	start := time.Now()
 	_, err := r.pool.Exec(
 		ctx,
 		`INSERT INTO revoked_tokens (jti, user_id, expires_at, revoked_at)
@@ -35,10 +36,11 @@ func (r *PgRevokedTokenRepository) Revoke(ctx context.Context, jti string, userI
 		userID,
 		expiresAt,
 	)
-	return db.HandleExecError(err, "revoke token")
+	return db.HandleExecError(err, "revoke token", start)
 }
 
 func (r *PgRevokedTokenRepository) IsRevoked(ctx context.Context, jti string) (bool, error) {
+	start := time.Now()
 	row := r.pool.QueryRow(
 		ctx,
 		`SELECT EXISTS(
@@ -51,20 +53,24 @@ func (r *PgRevokedTokenRepository) IsRevoked(ctx context.Context, jti string) (b
 	var exists bool
 	if err := row.Scan(&exists); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			db.MeasureQueryDuration("check revoked token", start)
 			return false, nil
 		}
-		return false, db.HandleQueryError(err, nil, "check revoked token")
+		return false, db.HandleQueryError(err, nil, "check revoked token", start)
 	}
+	db.MeasureQueryDuration("check revoked token", start)
 	return exists, nil
 }
 
 func (r *PgRevokedTokenRepository) DeleteExpired(ctx context.Context) (int64, error) {
+	start := time.Now()
 	res, err := r.pool.Exec(
 		ctx,
 		`DELETE FROM revoked_tokens WHERE expires_at < NOW()`,
 	)
 	if err != nil {
-		return 0, db.HandleExecError(err, "delete expired revoked tokens")
+		return 0, db.HandleExecError(err, "delete expired revoked tokens", start)
 	}
+	db.MeasureQueryDuration("delete expired revoked tokens", start)
 	return res.RowsAffected(), nil
 }

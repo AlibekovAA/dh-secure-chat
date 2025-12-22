@@ -1,17 +1,11 @@
 package db
 
 import (
-	"expvar"
 	"time"
 
 	"github.com/jackc/pgx/v4/pgxpool"
-)
 
-var (
-	dbPoolAcquiredConns = expvar.NewInt("db_pool_acquired_connections")
-	dbPoolIdleConns     = expvar.NewInt("db_pool_idle_connections")
-	dbPoolMaxConns      = expvar.NewInt("db_pool_max_connections")
-	dbPoolTotalConns    = expvar.NewInt("db_pool_total_connections")
+	prommetrics "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/prometheus"
 )
 
 func StartPoolMetrics(pool *pgxpool.Pool, interval time.Duration) {
@@ -23,10 +17,15 @@ func StartPoolMetrics(pool *pgxpool.Pool, interval time.Duration) {
 	go func() {
 		for range ticker.C {
 			stats := pool.Stat()
-			dbPoolAcquiredConns.Set(int64(stats.AcquiredConns()))
-			dbPoolIdleConns.Set(int64(stats.IdleConns()))
-			dbPoolMaxConns.Set(int64(stats.MaxConns()))
-			dbPoolTotalConns.Set(int64(stats.TotalConns()))
+			acquired := int64(stats.AcquiredConns())
+			idle := int64(stats.IdleConns())
+			max := int64(stats.MaxConns())
+			total := int64(stats.TotalConns())
+
+			prommetrics.DBPoolAcquiredConnections.Set(float64(acquired))
+			prommetrics.DBPoolIdleConnections.Set(float64(idle))
+			prommetrics.DBPoolMaxConnections.Set(float64(max))
+			prommetrics.DBPoolTotalConnections.Set(float64(total))
 		}
 	}()
 }

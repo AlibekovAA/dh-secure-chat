@@ -63,6 +63,86 @@ export async function importPublicKey(base64: string): Promise<CryptoKey> {
 }
 
 const IDENTITY_KEY_STORAGE = 'identity_private_key';
+const MASTER_KEY_STORAGE = 'identity_master_key';
+
+async function getOrCreateMasterKey(): Promise<CryptoKey> {
+  const stored = sessionStorage.getItem(MASTER_KEY_STORAGE);
+  if (stored) {
+    const keyData = Uint8Array.from(atob(stored), (c) => c.charCodeAt(0));
+    return await crypto.subtle.importKey(
+      'raw',
+      keyData,
+      { name: 'AES-GCM' },
+      false,
+      ['encrypt', 'decrypt'],
+    );
+  }
+
+  const masterKey = crypto.getRandomValues(new Uint8Array(32));
+  const key = await crypto.subtle.importKey(
+    'raw',
+    masterKey,
+    { name: 'AES-GCM' },
+    false,
+    ['encrypt', 'decrypt'],
+  );
+
+  const exported = await crypto.subtle.exportKey('raw', key);
+  sessionStorage.setItem(
+    MASTER_KEY_STORAGE,
+    btoa(String.fromCharCode(...new Uint8Array(exported))),
+  );
+  return key;
+}
+
+async function encryptKeyData(data: string): Promise<string> {
+  try {
+    const masterKey = await getOrCreateMasterKey();
+    const dataBytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
+    const nonce = crypto.getRandomValues(new Uint8Array(12));
+
+    const encrypted = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv: nonce },
+      masterKey,
+      dataBytes,
+    );
+
+    const encryptedArray = new Uint8Array(encrypted);
+    const combined = new Uint8Array(nonce.length + encryptedArray.length);
+    combined.set(nonce, 0);
+    combined.set(encryptedArray, nonce.length);
+
+    return btoa(String.fromCharCode(...combined));
+  } catch {
+    return data;
+  }
+}
+
+async function decryptKeyData(encryptedData: string): Promise<string | null> {
+  try {
+    const masterKey = await getOrCreateMasterKey();
+    const combined = Uint8Array.from(atob(encryptedData), (c) =>
+      c.charCodeAt(0),
+    );
+
+    if (combined.length < 13) {
+      return null;
+    }
+
+    const nonce = combined.slice(0, 12);
+    const encrypted = combined.slice(12);
+
+    const decrypted = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: nonce },
+      masterKey,
+      encrypted,
+    );
+
+    return btoa(String.fromCharCode(...new Uint8Array(decrypted)));
+  } catch {
+    return null;
+  }
+}
 
 async function saveToIndexedDB(key: string, data: string): Promise<void> {
   try {
@@ -93,7 +173,8 @@ export async function saveIdentityPrivateKey(
 ): Promise<void> {
   const exported = await crypto.subtle.exportKey('pkcs8', privateKey);
   const base64 = btoa(String.fromCharCode(...new Uint8Array(exported)));
-  await saveToIndexedDB(IDENTITY_KEY_STORAGE, base64);
+  const encrypted = await encryptKeyData(base64);
+  await saveToIndexedDB(IDENTITY_KEY_STORAGE, encrypted);
 }
 
 export async function loadIdentityPrivateKey(): Promise<CryptoKey | null> {
@@ -103,7 +184,17 @@ export async function loadIdentityPrivateKey(): Promise<CryptoKey | null> {
   }
 
   try {
-    const binary = Uint8Array.from(atob(stored), (c) => c.charCodeAt(0));
+    let decrypted: string | null = null;
+
+    try {
+      decrypted = await decryptKeyData(stored);
+    } catch {}
+
+    if (!decrypted) {
+      decrypted = stored;
+    }
+
+    const binary = Uint8Array.from(atob(decrypted), (c) => c.charCodeAt(0));
     return await crypto.subtle.importKey(
       'pkcs8',
       binary,

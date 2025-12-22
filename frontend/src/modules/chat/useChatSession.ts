@@ -86,6 +86,7 @@ export type ChatMessage = {
     text?: string;
     hasFile?: boolean;
     hasVoice?: boolean;
+    isOwn?: boolean;
   };
 };
 
@@ -288,6 +289,7 @@ export function useChatSession({
               text: target.text,
               hasFile: !!target.file,
               hasVoice: !!target.voice,
+              isOwn: target.isOwn,
             };
           }
         }
@@ -757,6 +759,7 @@ export function useChatSession({
                 text: target.text,
                 hasFile: !!target.file,
                 hasVoice: !!target.voice,
+                isOwn: target.isOwn,
               };
             }
           }

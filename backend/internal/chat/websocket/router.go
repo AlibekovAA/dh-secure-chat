@@ -57,7 +57,11 @@ func (r *messageRouter) Route(ctx context.Context, client *Client, msg *WSMessag
 	case TypeFileChunk:
 		var payload FileChunkPayload
 		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
-			r.log.Warnf("websocket invalid file_chunk payload user_id=%s: %v", client.userID, err)
+			r.log.WithFields(ctx, logger.Fields{
+				"user_id": client.userID,
+				"type":    "file_chunk",
+				"action":  "ws_invalid_payload",
+			}).Warnf("websocket invalid file_chunk payload: %v", err)
 			metrics.IncrementWebSocketError("invalid_file_chunk_payload")
 			return fmt.Errorf("invalid file_chunk payload: %w", err)
 		}
@@ -74,7 +78,11 @@ func (r *messageRouter) Route(ctx context.Context, client *Client, msg *WSMessag
 	case TypeFileComplete:
 		var payload FileCompletePayload
 		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
-			r.log.Warnf("websocket invalid file_complete payload user_id=%s: %v", client.userID, err)
+			r.log.WithFields(ctx, logger.Fields{
+				"user_id": client.userID,
+				"type":    "file_complete",
+				"action":  "ws_invalid_payload",
+			}).Warnf("websocket invalid file_complete payload: %v", err)
 			return fmt.Errorf("invalid file_complete payload: %w", err)
 		}
 		payload.From = client.userID
@@ -99,7 +107,11 @@ func (r *messageRouter) Route(ctx context.Context, client *Client, msg *WSMessag
 		return r.routeWithModifiedPayload(ctx, client, msg, &MessageDeletePayload{}, "message_delete", true)
 
 	default:
-		r.log.Warnf("websocket unknown message type user_id=%s type=%s", client.userID, msg.Type)
+		r.log.WithFields(ctx, logger.Fields{
+			"user_id": client.userID,
+			"type":    string(msg.Type),
+			"action":  "ws_unknown_message_type",
+		}).Warn("websocket unknown message type")
 		metrics.IncrementWebSocketError("unknown_message_type")
 		return fmt.Errorf("unknown message type: %s", msg.Type)
 	}
@@ -107,7 +119,11 @@ func (r *messageRouter) Route(ctx context.Context, client *Client, msg *WSMessag
 
 func (r *messageRouter) routeSimple(ctx context.Context, client *Client, msg *WSMessage, payload payloadWithTo, msgType string, requireOnline bool, fromUserID string) error {
 	if err := json.Unmarshal(msg.Payload, payload); err != nil {
-		r.log.Warnf("websocket invalid %s payload user_id=%s: %v", msgType, client.userID, err)
+		r.log.WithFields(ctx, logger.Fields{
+			"user_id": client.userID,
+			"type":    msgType,
+			"action":  "ws_invalid_payload",
+		}).Warnf("websocket invalid payload: %v", err)
 		return fmt.Errorf("invalid %s payload: %w", msgType, err)
 	}
 
@@ -119,7 +135,11 @@ func (r *messageRouter) routeSimple(ctx context.Context, client *Client, msg *WS
 
 func (r *messageRouter) routeWithModifiedPayload(ctx context.Context, client *Client, msg *WSMessage, payload payloadWithTo, msgType string, requireOnline bool) error {
 	if err := json.Unmarshal(msg.Payload, payload); err != nil {
-		r.log.Warnf("websocket invalid %s payload user_id=%s: %v", msgType, client.userID, err)
+		r.log.WithFields(ctx, logger.Fields{
+			"user_id": client.userID,
+			"type":    msgType,
+			"action":  "ws_invalid_payload",
+		}).Warnf("websocket invalid payload: %v", err)
 		metrics.IncrementWebSocketError("invalid_" + msgType + "_payload")
 		return fmt.Errorf("invalid %s payload: %w", msgType, err)
 	}
@@ -130,7 +150,11 @@ func (r *messageRouter) routeWithModifiedPayload(ctx context.Context, client *Cl
 
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
-		r.log.Warnf("websocket failed to marshal %s payload user_id=%s: %v", msgType, client.userID, err)
+		r.log.WithFields(ctx, logger.Fields{
+			"user_id": client.userID,
+			"type":    msgType,
+			"action":  "ws_marshal_failed",
+		}).Warnf("websocket failed to marshal payload: %v", err)
 		return fmt.Errorf("failed to marshal payload: %w", err)
 	}
 
@@ -144,13 +168,21 @@ func (r *messageRouter) routeWithModifiedPayload(ctx context.Context, client *Cl
 func (r *messageRouter) routeFileStart(ctx context.Context, client *Client, msg *WSMessage) error {
 	var payload FileStartPayload
 	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
-		r.log.Warnf("websocket invalid file_start payload user_id=%s: %v", client.userID, err)
+		r.log.WithFields(ctx, logger.Fields{
+			"user_id": client.userID,
+			"type":    "file_start",
+			"action":  "ws_invalid_payload",
+		}).Warnf("websocket invalid file_start payload: %v", err)
 		metrics.IncrementWebSocketError("invalid_file_start_payload")
 		return fmt.Errorf("invalid file_start payload: %w", err)
 	}
 
 	if err := r.validator.ValidateFileStart(payload); err != nil {
-		r.log.Warnf("websocket file_start validation failed user_id=%s: %v", client.userID, err)
+		r.log.WithFields(ctx, logger.Fields{
+			"user_id": client.userID,
+			"file_id": payload.FileID,
+			"action":  "ws_file_validation_failed",
+		}).Warnf("websocket file_start validation failed: %v", err)
 		metrics.IncrementWebSocketError("file_validation_failed")
 		return fmt.Errorf("file validation failed: %w", err)
 	}
@@ -158,7 +190,11 @@ func (r *messageRouter) routeFileStart(ctx context.Context, client *Client, msg 
 	payload.From = client.userID
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
-		r.log.Warnf("websocket failed to marshal file_start payload user_id=%s: %v", client.userID, err)
+		r.log.WithFields(ctx, logger.Fields{
+			"user_id": client.userID,
+			"file_id": payload.FileID,
+			"action":  "ws_file_marshal_failed",
+		}).Warnf("websocket failed to marshal file_start payload: %v", err)
 		return fmt.Errorf("failed to marshal payload: %w", err)
 	}
 
@@ -167,7 +203,13 @@ func (r *messageRouter) routeFileStart(ctx context.Context, client *Client, msg 
 		Payload: payloadBytes,
 	}
 
-	r.log.Debugf("websocket file_start from=%s to=%s file_id=%s filename=%s", client.userID, payload.To, payload.FileID, payload.Filename)
+	r.log.WithFields(ctx, logger.Fields{
+		"from":     client.userID,
+		"to":       payload.To,
+		"file_id":  payload.FileID,
+		"filename": payload.Filename,
+		"action":   "ws_file_start",
+	}).Debug("websocket file_start")
 
 	if r.hub.forwardMessage(ctx, forwardMsg, &payload, true, client.userID) {
 		metrics.IncrementWebSocketFile()

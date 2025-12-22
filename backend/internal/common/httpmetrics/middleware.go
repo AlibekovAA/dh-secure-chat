@@ -1,18 +1,17 @@
 package httpmetrics
 
 import (
-	"expvar"
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+
+	prommetrics "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/prometheus"
 )
 
 type Collector struct {
-	totalRequests      *expvar.Int
-	inFlightRequests   *expvar.Int
-	requestDurationMs  *expvar.Map
-	lastRequestStatus  *expvar.Map
-	lastRequestSeconds *expvar.Map
+	prefix string
 }
 
 type statusRecorder struct {
@@ -27,31 +26,48 @@ func (r *statusRecorder) WriteHeader(code int) {
 
 func New(prefix string) *Collector {
 	return &Collector{
-		totalRequests:      expvar.NewInt(prefix + "_requests_total"),
-		inFlightRequests:   expvar.NewInt(prefix + "_requests_in_flight"),
-		requestDurationMs:  expvar.NewMap(prefix + "_request_duration_ms"),
-		lastRequestStatus:  expvar.NewMap(prefix + "_last_status_by_path"),
-		lastRequestSeconds: expvar.NewMap(prefix + "_last_duration_seconds_by_path"),
+		prefix: prefix,
 	}
 }
 
 func (c *Collector) Wrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		c.inFlightRequests.Add(1)
-		c.totalRequests.Add(1)
+		method := r.Method
+		path := r.URL.Path
 
-		pathKey := r.Method + " " + r.URL.Path
+		var promRequestsTotal *prometheus.CounterVec
+		var promRequestsInFlight prometheus.Gauge
+		var promRequestDuration *prometheus.HistogramVec
+
+		if c.prefix == "auth" {
+			promRequestsTotal = prommetrics.AuthRequestsTotal
+			promRequestsInFlight = prommetrics.AuthRequestsInFlight
+			promRequestDuration = prommetrics.AuthRequestDurationSeconds
+		} else if c.prefix == "chat" {
+			promRequestsTotal = prommetrics.ChatRequestsTotal
+			promRequestsInFlight = prommetrics.ChatRequestsInFlight
+			promRequestDuration = prommetrics.ChatRequestDurationSeconds
+		}
+
+		if promRequestsTotal != nil {
+			promRequestsTotal.WithLabelValues(method, path).Inc()
+		}
+		if promRequestsInFlight != nil {
+			promRequestsInFlight.Inc()
+		}
 
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r)
 
-		c.inFlightRequests.Add(-1)
-
 		elapsed := time.Since(start)
 		statusClass := fmt.Sprintf("%dxx", rec.status/100)
-		c.requestDurationMs.Add(pathKey, elapsed.Milliseconds())
-		c.lastRequestStatus.Set(pathKey, expvar.Func(func() any { return statusClass }))
-		c.lastRequestSeconds.Set(pathKey, expvar.Func(func() any { return elapsed.Seconds() }))
+
+		if promRequestsInFlight != nil {
+			promRequestsInFlight.Dec()
+		}
+		if promRequestDuration != nil {
+			promRequestDuration.WithLabelValues(method, path, statusClass).Observe(elapsed.Seconds())
+		}
 	})
 }

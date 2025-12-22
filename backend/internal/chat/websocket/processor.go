@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
+	prommetrics "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/prometheus"
 )
 
 type messageTask struct {
@@ -48,12 +49,20 @@ func (p *MessageProcessor) worker() {
 }
 
 func (p *MessageProcessor) process(ctx context.Context, client *Client, msg *WSMessage) {
+	start := time.Now()
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	if err := p.router.Route(ctx, client, msg); err != nil {
-		p.log.Warnf("websocket message processing failed user_id=%s type=%s: %v", client.userID, msg.Type, err)
+		p.log.WithFields(ctx, logger.Fields{
+			"user_id": client.userID,
+			"type":    string(msg.Type),
+			"action":  "ws_message_processing_failed",
+		}).Warnf("websocket message processing failed: %v", err)
 	}
+
+	duration := time.Since(start).Seconds()
+	prommetrics.ChatWebSocketMessageProcessingDurationSeconds.WithLabelValues(string(msg.Type)).Observe(duration)
 }
 
 func (p *MessageProcessor) Submit(ctx context.Context, client *Client, msg *WSMessage) {
@@ -65,8 +74,14 @@ func (p *MessageProcessor) Submit(ctx context.Context, client *Client, msg *WSMe
 
 	select {
 	case p.queue <- task:
+		prommetrics.ChatWebSocketMessageProcessorQueueSize.Set(float64(len(p.queue)))
 	default:
-		p.log.Warnf("websocket message queue full user_id=%s type=%s", client.userID, msg.Type)
+		p.log.WithFields(ctx, logger.Fields{
+			"user_id": client.userID,
+			"type":    string(msg.Type),
+			"action":  "ws_queue_full",
+		}).Warn("websocket message queue full")
+		prommetrics.ChatWebSocketMessageProcessorQueueSize.Set(float64(len(p.queue)))
 	}
 }
 

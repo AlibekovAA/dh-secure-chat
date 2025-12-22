@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"sync"
 	"time"
+
+	prommetrics "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/prometheus"
 )
 
 type idempotencyResult struct {
@@ -37,10 +39,11 @@ func (t *IdempotencyTracker) generateOperationID(userID string, msgType MessageT
 	return hex.EncodeToString(hash[:])
 }
 
-func (t *IdempotencyTracker) Execute(operationID string, fn func() (interface{}, error)) (interface{}, error) {
+func (t *IdempotencyTracker) Execute(operationID string, msgType MessageType, fn func() (interface{}, error)) (interface{}, error) {
 	if result, ok := t.operations.Load(operationID); ok {
 		res := result.(*idempotencyResult)
 		if time.Now().Before(res.expiresAt) {
+			prommetrics.ChatWebSocketIdempotencyDuplicates.WithLabelValues(string(msgType)).Inc()
 			return res.result, res.err
 		}
 		t.operations.Delete(operationID)

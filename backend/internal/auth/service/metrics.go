@@ -1,12 +1,29 @@
 package service
 
-import "expvar"
-
-var (
-	refreshTokensIssued  = expvar.NewInt("refresh_tokens_issued")
-	refreshTokensUsed    = expvar.NewInt("refresh_tokens_used")
-	refreshTokensRevoked = expvar.NewInt("refresh_tokens_revoked")
-	refreshTokensExpired = expvar.NewInt("refresh_tokens_expired")
-	accessTokensRevoked  = expvar.NewInt("access_tokens_revoked")
-	accessTokensIssued   = expvar.NewInt("access_tokens_issued")
+import (
+	prommetrics "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/prometheus"
 )
+
+func incrementRefreshTokensIssued() {
+	prommetrics.RefreshTokensIssued.Inc()
+}
+
+func incrementRefreshTokensUsed() {
+	prommetrics.RefreshTokensUsed.Inc()
+}
+
+func incrementRefreshTokensRevoked() {
+	prommetrics.RefreshTokensRevoked.Inc()
+}
+
+func incrementRefreshTokensExpired() {
+	prommetrics.RefreshTokensExpired.Inc()
+}
+
+func incrementAccessTokensRevoked() {
+	prommetrics.AccessTokensRevoked.Inc()
+}
+
+func incrementAccessTokensIssued() {
+	prommetrics.AccessTokensIssued.Inc()
+}

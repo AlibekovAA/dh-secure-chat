@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useLayoutEffect, useState, useMemo } from 'react';
 
 type Props = {
   x: number;
@@ -13,6 +13,9 @@ type Props = {
   onClose: () => void;
 };
 
+const MENU_ESTIMATED_WIDTH = 180;
+const MENU_ESTIMATED_HEIGHT = 200;
+
 export function MessageContextMenu({
   x,
   y,
@@ -26,9 +29,128 @@ export function MessageContextMenu({
   onClose,
 }: Props) {
   const menuRef = useRef<HTMLDivElement>(null);
-  const [position, setPosition] = useState({ x, y });
+  const containerRef = useRef<HTMLElement | null>(null);
 
-  useEffect(() => {
+  const initialPosition = useMemo(() => {
+    const chatContainer = document.querySelector('[class*="overflow-y-auto"][class*="relative"]') as HTMLElement;
+    containerRef.current = chatContainer;
+
+    if (chatContainer) {
+      const containerRect = chatContainer.getBoundingClientRect();
+      const padding = 8;
+
+      let adjustedX = x;
+      let adjustedY = y;
+
+      if (adjustedX + MENU_ESTIMATED_WIDTH > containerRect.width - padding) {
+        adjustedX = containerRect.width - MENU_ESTIMATED_WIDTH - padding;
+      }
+      if (adjustedX < padding) {
+        adjustedX = padding;
+      }
+
+      if (adjustedY + MENU_ESTIMATED_HEIGHT > containerRect.height - padding) {
+        adjustedY = containerRect.height - MENU_ESTIMATED_HEIGHT - padding;
+      }
+      if (adjustedY < padding) {
+        adjustedY = padding;
+      }
+
+      return { x: adjustedX, y: adjustedY, isRelative: true };
+    } else {
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const padding = 8;
+
+      let adjustedX = x;
+      let adjustedY = y;
+
+      if (x + MENU_ESTIMATED_WIDTH > viewportWidth - padding) {
+        adjustedX = viewportWidth - MENU_ESTIMATED_WIDTH - padding;
+      }
+      if (x < padding) {
+        adjustedX = padding;
+      }
+
+      if (y + MENU_ESTIMATED_HEIGHT > viewportHeight - padding) {
+        adjustedY = viewportHeight - MENU_ESTIMATED_HEIGHT - padding;
+      }
+      if (y < padding) {
+        adjustedY = padding;
+      }
+
+      return { x: adjustedX, y: adjustedY, isRelative: false };
+    }
+  }, [x, y]);
+
+  const [position, setPosition] = useState(() => ({ x: initialPosition.x, y: initialPosition.y }));
+  const [isRelativeToContainer, setIsRelativeToContainer] = useState(initialPosition.isRelative);
+
+  useLayoutEffect(() => {
+    if (menuRef.current) {
+      const menuRect = menuRef.current.getBoundingClientRect();
+      const chatContainer = containerRef.current || menuRef.current.closest('[class*="overflow-y-auto"]') as HTMLElement;
+
+      if (chatContainer) {
+        const containerRect = chatContainer.getBoundingClientRect();
+        const padding = 8;
+
+        let adjustedX = x;
+        let adjustedY = y;
+
+        if (adjustedX + menuRect.width > containerRect.width - padding) {
+          adjustedX = containerRect.width - menuRect.width - padding;
+        }
+        if (adjustedX < padding) {
+          adjustedX = padding;
+        }
+
+        if (adjustedY + menuRect.height > containerRect.height - padding) {
+          adjustedY = containerRect.height - menuRect.height - padding;
+        }
+        if (adjustedY < padding) {
+          adjustedY = padding;
+        }
+
+        if (adjustedX !== position.x || adjustedY !== position.y) {
+          setPosition({ x: adjustedX, y: adjustedY });
+        }
+        if (!isRelativeToContainer) {
+          setIsRelativeToContainer(true);
+        }
+      } else {
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        const padding = 8;
+
+        let adjustedX = x;
+        let adjustedY = y;
+
+        if (x + menuRect.width > viewportWidth - padding) {
+          adjustedX = viewportWidth - menuRect.width - padding;
+        }
+        if (x < padding) {
+          adjustedX = padding;
+        }
+
+        if (y + menuRect.height > viewportHeight - padding) {
+          adjustedY = viewportHeight - menuRect.height - padding;
+        }
+        if (y < padding) {
+          adjustedY = padding;
+        }
+
+        if (adjustedX !== position.x || adjustedY !== position.y) {
+          setPosition({ x: adjustedX, y: adjustedY });
+        }
+        if (isRelativeToContainer) {
+          setIsRelativeToContainer(false);
+        }
+      }
+    }
+  }, [x, y, position.x, position.y, isRelativeToContainer]);
+
+  useLayoutEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         onClose();
@@ -44,35 +166,20 @@ export function MessageContextMenu({
     document.addEventListener('mousedown', handleClickOutside);
     document.addEventListener('keydown', handleEscape);
 
-    if (menuRef.current) {
-      const rect = menuRef.current.getBoundingClientRect();
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
-
-      let adjustedX = x;
-      let adjustedY = y;
-
-      if (x + rect.width > viewportWidth) {
-        adjustedX = viewportWidth - rect.width - 10;
-      }
-      if (y + rect.height > viewportHeight) {
-        adjustedY = viewportHeight - rect.height - 10;
-      }
-
-      setPosition({ x: adjustedX, y: adjustedY });
-    }
-
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleEscape);
     };
-  }, [x, y, onClose]);
+  }, [onClose]);
 
   return (
     <div
       ref={menuRef}
-      className="fixed z-50 bg-black/95 border border-emerald-500/40 rounded-lg shadow-lg py-1 min-w-[160px]"
-      style={{ left: `${position.x}px`, top: `${position.y}px` }}
+      className={`z-50 bg-black/95 border border-emerald-500/40 rounded-lg shadow-lg py-1 min-w-[160px] ${isRelativeToContainer ? 'absolute' : 'fixed'}`}
+      style={{
+        left: `${position.x}px`,
+        top: `${position.y}px`
+      }}
       onClick={(e) => e.stopPropagation()}
     >
       <button

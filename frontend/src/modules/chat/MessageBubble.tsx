@@ -8,6 +8,7 @@ import { EmojiPicker } from './EmojiPicker';
 type Props = {
   message: ChatMessage;
   myUserId: string;
+  peerUsername?: string;
   onReaction: (messageId: string, emoji: string, action: 'add' | 'remove') => void;
   onDelete?: (messageId: string, scope: 'me' | 'all') => void;
   onMediaActiveChange?: (active: boolean) => void;
@@ -17,6 +18,7 @@ type Props = {
 export function MessageBubble({
   message,
   myUserId,
+  peerUsername,
   onReaction,
   onDelete,
   onMediaActiveChange,
@@ -28,7 +30,16 @@ export function MessageBubble({
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-    setContextMenu({ x: e.clientX, y: e.clientY });
+    const chatContainer = (e.currentTarget.closest('[class*="overflow-y-auto"]') as HTMLElement) || null;
+
+    if (chatContainer) {
+      const containerRect = chatContainer.getBoundingClientRect();
+      const x = e.clientX - containerRect.left;
+      const y = e.clientY - containerRect.top;
+      setContextMenu({ x, y });
+    } else {
+      setContextMenu({ x: e.clientX, y: e.clientY });
+    }
   };
 
   const handleCopy = () => {
@@ -39,7 +50,12 @@ export function MessageBubble({
 
   const handleReact = () => {
     if (contextMenu) {
-      setEmojiPicker({ x: contextMenu.x, y: contextMenu.y - 200 });
+      const chatContainer = document.querySelector('[class*="overflow-y-auto"][class*="relative"]') as HTMLElement;
+      if (chatContainer) {
+        setEmojiPicker({ x: contextMenu.x, y: contextMenu.y - 220 });
+      } else {
+        setEmojiPicker({ x: contextMenu.x, y: contextMenu.y - 220 });
+      }
     }
   };
 
@@ -63,7 +79,7 @@ export function MessageBubble({
           }`}
         >
           <p className="text-sm italic">Сообщение удалено</p>
-          <p className="text-[10px] text-emerald-500/40 mt-1">
+          <p className="text-xs text-emerald-500/40 mt-1 leading-relaxed">
             {new Date(message.timestamp).toLocaleTimeString('ru-RU', {
               hour: '2-digit',
               minute: '2-digit',
@@ -79,20 +95,22 @@ export function MessageBubble({
       <div
         ref={messageRef}
         className={`flex ${message.isOwn ? 'justify-end' : 'justify-start'} animate-[fadeIn_0.2s_ease-out] group`}
+        style={{ willChange: 'opacity' }}
       >
         <div
-          className={`max-w-[75%] rounded-lg px-3 py-2 ${
+          className={`max-w-[75%] rounded-lg overflow-hidden smooth-transition ${
             message.isOwn
-              ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-50'
-              : 'bg-emerald-900/20 border border-emerald-700/40 text-emerald-100'
+              ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-50 hover:bg-emerald-500/25 hover:border-emerald-500/50'
+              : 'bg-emerald-900/20 border border-emerald-700/40 text-emerald-100 hover:bg-emerald-900/25 hover:border-emerald-700/50'
           }`}
+          style={{ willChange: 'background-color, border-color' }}
           onContextMenu={handleContextMenu}
           data-message-id={message.id}
         >
           {message.replyTo && (
             <button
               type="button"
-              className="mb-1 rounded border border-emerald-700/60 bg-black/60 px-2 py-1 text-[11px] text-emerald-300 text-left hover:bg-emerald-900/60 transition-colors"
+              className="w-full text-left border-l-4 border-emerald-400/60 bg-emerald-900/10 hover:bg-emerald-900/20 transition-colors"
               onClick={() => {
                 const targetId = message.replyTo?.id;
                 if (!targetId) return;
@@ -102,75 +120,81 @@ export function MessageBubble({
                 el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
               }}
             >
-              <span className="truncate block">
-                Ответ на:{' '}
-                {message.replyTo.text
-                  ? message.replyTo.text
-                  : message.replyTo.hasVoice
-                    ? 'Голосовое сообщение'
-                    : message.replyTo.hasFile
-                      ? 'Файл'
-                      : 'сообщение'}
-              </span>
+              <div className="pl-3 pr-3 py-1.5">
+                <p className="text-xs font-medium text-emerald-400/90 mb-0.5">
+                  {message.replyTo.isOwn ? 'Вы' : peerUsername || 'Собеседник'}
+                </p>
+                <p className="text-xs text-emerald-200/70 line-clamp-2 break-words">
+                  {message.replyTo.text
+                    ? message.replyTo.text
+                    : message.replyTo.hasVoice
+                      ? '🎤 Голосовое сообщение'
+                      : message.replyTo.hasFile
+                        ? '📎 Файл'
+                        : 'Сообщение'}
+                </p>
+              </div>
             </button>
           )}
 
-          {message.text && (
-            <p className="text-sm whitespace-pre-wrap break-words">
-              {message.text}
-            </p>
-          )}
-          {message.voice && (
-            <VoiceMessage
-              duration={message.voice.duration}
-              blob={message.voice.blob}
-              isOwn={message.isOwn}
-              onPlaybackChange={onMediaActiveChange}
-            />
-          )}
-          {message.file && !message.voice && (
-            <FileMessage
-              filename={message.file.filename}
-              mimeType={message.file.mimeType}
-              size={message.file.size}
-              blob={message.file.blob}
-              isOwn={message.isOwn}
-              onDownloadStateChange={onMediaActiveChange}
-            />
-          )}
+          <div className="px-3 pb-2 pt-2">
+            {message.text && (
+              <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">
+                {message.text}
+              </p>
+            )}
+            {message.voice && (
+              <VoiceMessage
+                duration={message.voice.duration}
+                blob={message.voice.blob}
+                isOwn={message.isOwn}
+                onPlaybackChange={onMediaActiveChange}
+              />
+            )}
+            {message.file && !message.voice && (
+              <FileMessage
+                filename={message.file.filename}
+                mimeType={message.file.mimeType}
+                size={message.file.size}
+                blob={message.file.blob}
+                isOwn={message.isOwn}
+                onDownloadStateChange={onMediaActiveChange}
+              />
+            )}
 
-          {message.reactions && Object.keys(message.reactions).length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-2">
-              {Object.entries(message.reactions).map(([emoji, userIds]) => {
-                if (userIds.length === 0) return null;
-                const hasReacted = userIds.includes(myUserId);
-                return (
-                  <button
-                    key={emoji}
-                    onClick={() =>
-                      onReaction(message.id, emoji, hasReacted ? 'remove' : 'add')
-                    }
-                    className={`px-2 py-0.5 rounded text-xs flex items-center gap-1 transition-colors ${
-                      hasReacted
-                        ? 'bg-emerald-500/40 border border-emerald-500/60'
-                        : 'bg-black/40 border border-emerald-500/20 hover:bg-emerald-500/20'
-                    }`}
-                  >
-                    <span>{emoji}</span>
-                    <span className="text-emerald-500/80">{userIds.length}</span>
-                  </button>
-                );
-              })}
+            {message.reactions && Object.keys(message.reactions).length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-2">
+                {Object.entries(message.reactions).map(([emoji, userIds]) => {
+                  if (userIds.length === 0) return null;
+                  const hasReacted = userIds.includes(myUserId);
+                  return (
+                    <button
+                      key={emoji}
+                      onClick={() =>
+                        onReaction(message.id, emoji, hasReacted ? 'remove' : 'add')
+                      }
+                      className={`px-2 py-0.5 rounded text-xs flex items-center gap-1 transition-colors ${
+                        hasReacted
+                          ? 'bg-emerald-500/40 border border-emerald-500/60'
+                          : 'bg-black/40 border border-emerald-500/20 hover:bg-emerald-500/20'
+                      }`}
+                    >
+                      <span>{emoji}</span>
+                      <span className="text-emerald-500/80">{userIds.length}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="flex items-center justify-between mt-1">
+              <p className="text-xs text-emerald-500/60 leading-relaxed">
+                {new Date(message.timestamp).toLocaleTimeString('ru-RU', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </p>
             </div>
-          )}
-
-          <div className="flex items-center justify-between mt-1">
-            <p className="text-[10px] text-emerald-500/60">
-              {new Date(message.timestamp).toLocaleTimeString('ru-RU', {
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
-            </p>
           </div>
         </div>
       </div>

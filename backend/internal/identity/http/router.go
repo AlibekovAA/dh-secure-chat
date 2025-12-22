@@ -83,14 +83,21 @@ func (h *Handler) handleIdentityRequest(
 
 	userID, ok := commonhttp.ExtractUserIDFromPath(urlPath)
 	if !ok || userID == "" {
-		h.log.Warnf("identity/%s failed: empty user_id", operation)
+		h.log.WithFields(r.Context(), logger.Fields{
+			"operation": operation,
+			"action":    "identity_empty_user_id",
+		}).Warn("identity request failed: empty user_id")
 		commonhttp.WriteError(w, http.StatusBadRequest, "user_id is required")
 		return
 	}
 
 	userID = strings.TrimSuffix(userID, suffix)
 	if err := commonhttp.ValidateUUID(userID); err != nil {
-		h.log.Warnf("identity/%s failed: invalid user_id format user_id=%s", operation, userID)
+		h.log.WithFields(r.Context(), logger.Fields{
+			"operation": operation,
+			"user_id":   userID,
+			"action":    "identity_invalid_user_id_format",
+		}).Warn("identity request failed: invalid user_id format")
 		commonhttp.WriteError(w, http.StatusBadRequest, "invalid user_id format (must be UUID)")
 		return
 	}
@@ -100,15 +107,27 @@ func (h *Handler) handleIdentityRequest(
 	result, err := handler(ctx, userID)
 	if err != nil {
 		if errors.Is(err, commonerrors.ErrIdentityKeyNotFound) {
-			h.log.Warnf("identity/%s failed user_id=%s: not found", operation, userID)
+			h.log.WithFields(ctx, logger.Fields{
+				"operation": operation,
+				"user_id":   userID,
+				"action":    "identity_not_found",
+			}).Warn("identity request failed: not found")
 			commonhttp.WriteError(w, http.StatusNotFound, "identity key not found")
 			return
 		}
-		h.log.Errorf("identity/%s failed user_id=%s: %v", operation, userID, err)
+		h.log.WithFields(ctx, logger.Fields{
+			"operation": operation,
+			"user_id":   userID,
+			"action":    "identity_failed",
+		}).Errorf("identity request failed: %v", err)
 		commonhttp.WriteError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 
-	h.log.Infof("identity/%s success user_id=%s", operation, userID)
+	h.log.WithFields(ctx, logger.Fields{
+		"operation": operation,
+		"user_id":   userID,
+		"action":    "identity_success",
+	}).Info("identity request success")
 	commonhttp.WriteJSON(w, http.StatusOK, result)
 }

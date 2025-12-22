@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v4/pgxpool"
 
@@ -24,16 +25,18 @@ func NewPgRepository(pool *pgxpool.Pool) *PgRepository {
 }
 
 func (r *PgRepository) Create(ctx context.Context, key domain.IdentityKey) error {
+	start := time.Now()
 	_, err := r.pool.Exec(
 		ctx,
 		`INSERT INTO identity_keys (user_id, public_key) VALUES ($1, $2)`,
 		key.UserID,
 		key.PublicKey,
 	)
-	return db.HandleExecError(err, "create identity key")
+	return db.HandleExecError(err, "create identity key", start)
 }
 
 func (r *PgRepository) FindByUserID(ctx context.Context, userID string) (domain.IdentityKey, error) {
+	start := time.Now()
 	row := r.pool.QueryRow(
 		ctx,
 		`SELECT user_id, public_key, created_at FROM identity_keys WHERE user_id = $1`,
@@ -42,7 +45,7 @@ func (r *PgRepository) FindByUserID(ctx context.Context, userID string) (domain.
 
 	var key domain.IdentityKey
 	err := row.Scan(&key.UserID, &key.PublicKey, &key.CreatedAt)
-	if err := db.HandleQueryError(err, commonerrors.ErrIdentityKeyNotFound, "find identity key"); err != nil {
+	if err := db.HandleQueryError(err, commonerrors.ErrIdentityKeyNotFound, "find identity key", start); err != nil {
 		return domain.IdentityKey{}, err
 	}
 	return key, nil

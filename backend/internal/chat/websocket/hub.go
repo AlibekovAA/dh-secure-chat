@@ -13,6 +13,7 @@ import (
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/transfer"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
+	prommetrics "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/prometheus"
 	userdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
 	userrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/repository"
 )
@@ -109,7 +110,11 @@ func (h *Hub) Run(ctx context.Context) {
 		case client := <-h.register:
 			if existing, ok := h.clients.Load(client.userID); ok {
 				existingClient := existing.(*Client)
-				h.log.Infof("websocket closing existing connection user_id=%s username=%s", existingClient.userID, existingClient.username)
+				h.log.WithFields(client.ctx, logger.Fields{
+					"user_id":  existingClient.userID,
+					"username": existingClient.username,
+					"action":   "ws_close_existing",
+				}).Info("websocket closing existing connection")
 				existingClient.Stop()
 				close(existingClient.send)
 				h.clients.Delete(client.userID)
@@ -119,7 +124,12 @@ func (h *Hub) Run(ctx context.Context) {
 			h.clients.Store(client.userID, client)
 			totalClients := h.clientCount.Add(1)
 			metrics.IncrementActiveWebSocketConnections()
-			h.log.Infof("websocket client registered user_id=%s username=%s total=%d", client.userID, client.username, totalClients)
+			h.log.WithFields(client.ctx, logger.Fields{
+				"user_id":  client.userID,
+				"username": client.username,
+				"total":    totalClients,
+				"action":   "ws_register",
+			}).Info("websocket client registered")
 			h.updateLastSeenDebounced(client.userID)
 
 		case client := <-h.unregister:
@@ -137,7 +147,9 @@ func (h *Hub) shutdown() {
 
 	shutdownMsg, err := json.Marshal(&WSMessage{Type: "shutdown"})
 	if err != nil {
-		h.log.Errorf("websocket failed to marshal shutdown message: %v", err)
+		h.log.WithFields(h.ctx, logger.Fields{
+			"action": "ws_shutdown_marshal",
+		}).Errorf("websocket failed to marshal shutdown message: %v", err)
 	}
 
 	for _, client := range clients {
@@ -147,7 +159,10 @@ func (h *Hub) shutdown() {
 			select {
 			case client.send <- shutdownMsg:
 			case <-ctx.Done():
-				h.log.Warnf("websocket shutdown notification timeout user_id=%s", client.userID)
+				h.log.WithFields(ctx, logger.Fields{
+					"user_id": client.userID,
+					"action":  "ws_shutdown_timeout",
+				}).Warn("websocket shutdown notification timeout")
 			}
 			cancel()
 		}
@@ -159,7 +174,10 @@ func (h *Hub) shutdown() {
 		return true
 	})
 
-	h.log.Infof("websocket hub shutdown completed clients=%d", len(clients))
+	h.log.WithFields(h.ctx, logger.Fields{
+		"clients": len(clients),
+		"action":  "ws_hub_shutdown",
+	}).Info("websocket hub shutdown completed")
 }
 
 func (h *Hub) SendToUser(userID string, message *WSMessage) bool {
@@ -182,16 +200,25 @@ func (h *Hub) SendToUserWithContext(ctx context.Context, userID string, message 
 	client := value.(*Client)
 	messageBytes, err := json.Marshal(message)
 	if err != nil {
-		h.log.Errorf("websocket marshal error: %v", err)
+		h.log.WithFields(ctx, logger.Fields{
+			"user_id": userID,
+			"action":  "ws_marshal",
+			"type":    string(message.Type),
+		}).Errorf("websocket marshal error: %v", err)
 		return fmt.Errorf("marshal error: %w", err)
 	}
-	if h.sendWithRetry(client.send, messageBytes, userID, string(message.Type)) {
+	if h.sendWithRetry(client.send, messageBytes, userID, string(message.Type), ctx) {
+		h.log.WithFields(ctx, logger.Fields{
+			"user_id": userID,
+			"action":  "ws_send",
+			"type":    string(message.Type),
+		}).Info("message sent")
 		return nil
 	}
 	return fmt.Errorf("failed to send message to user %s", userID)
 }
 
-func (h *Hub) sendWithRetry(sendChan chan []byte, messageBytes []byte, userID, messageType string) bool {
+func (h *Hub) sendWithRetry(sendChan chan []byte, messageBytes []byte, userID, messageType string, ctx context.Context) bool {
 	const maxRetries = 3
 	const baseDelay = 10 * time.Millisecond
 	const maxDelay = 100 * time.Millisecond
@@ -200,7 +227,11 @@ func (h *Hub) sendWithRetry(sendChan chan []byte, messageBytes []byte, userID, m
 	case sendChan <- messageBytes:
 		return true
 	default:
-		h.log.Warnf("websocket send buffer full user_id=%s type=%s, attempting retry", userID, messageType)
+		h.log.WithFields(ctx, logger.Fields{
+			"user_id": userID,
+			"action":  "ws_send_retry",
+			"type":    messageType,
+		}).Warn("websocket send buffer full, attempting retry")
 	}
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
@@ -232,22 +263,18 @@ func (h *Hub) sendWithRetry(sendChan chan []byte, messageBytes []byte, userID, m
 		}
 	}
 
-	h.log.Warnf("websocket failed to send after %d retries user_id=%s type=%s", maxRetries, userID, messageType)
+	h.log.WithFields(ctx, logger.Fields{
+		"user_id": userID,
+		"action":  "ws_send_failed",
+		"type":    messageType,
+		"retries": maxRetries,
+	}).Warnf("websocket failed to send after %d retries", maxRetries)
 	return false
 }
 
 func (h *Hub) IsUserOnline(userID string) bool {
 	_, ok := h.clients.Load(userID)
 	return ok
-}
-
-func (h *Hub) countClients() int {
-	count := 0
-	h.clients.Range(func(key, value interface{}) bool {
-		count++
-		return true
-	})
-	return count
 }
 
 type payloadWithTo interface {
@@ -269,48 +296,120 @@ func (h *Hub) forwardMessage(ctx context.Context, msg *WSMessage, payload payloa
 	to := payload.GetTo()
 	if to == "" {
 		if fromUserID != "" {
-			h.log.Warnf("websocket message missing 'to' field from=%s type=%s", fromUserID, msg.Type)
+			h.log.WithFields(ctx, logger.Fields{
+				"user_id": fromUserID,
+				"type":    string(msg.Type),
+				"action":  "ws_message_missing_to",
+			}).Warn("websocket message missing 'to' field")
 		}
 		return false
 	}
 
 	if fromUserID != "" && to == fromUserID {
-		h.log.Warnf("websocket message to self from=%s type=%s", fromUserID, msg.Type)
+		h.log.WithFields(ctx, logger.Fields{
+			"user_id": fromUserID,
+			"type":    string(msg.Type),
+			"action":  "ws_message_to_self",
+		}).Warn("websocket message to self")
 		return false
 	}
 
 	if requireOnline && !h.IsUserOnline(to) {
 		if fromUserID != "" {
 			if err := h.sendPeerOffline(ctx, fromUserID, to); err != nil {
-				h.log.Errorf("websocket failed to send peer_offline from=%s to=%s: %v", fromUserID, to, err)
+				h.log.WithFields(ctx, logger.Fields{
+					"from":   fromUserID,
+					"to":     to,
+					"action": "ws_peer_offline_send",
+				}).Errorf("websocket failed to send peer_offline: %v", err)
 			}
 		}
-		h.log.Infof("websocket message to offline user from=%s to=%s type=%s", fromUserID, to, msg.Type)
+		h.log.WithFields(ctx, logger.Fields{
+			"from":   fromUserID,
+			"to":     to,
+			"type":   string(msg.Type),
+			"action": "ws_message_offline",
+		}).Info("websocket message to offline user")
 		return false
 	}
 
 	if err := h.SendToUserWithContext(ctx, to, msg); err != nil {
 		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-			h.log.Warnf("websocket failed to forward message from=%s to=%s type=%s: %v", fromUserID, to, msg.Type, err)
+			h.log.WithFields(ctx, logger.Fields{
+				"from":   fromUserID,
+				"to":     to,
+				"type":   string(msg.Type),
+				"action": "ws_forward_failed",
+			}).Warnf("websocket failed to forward message: %v", err)
 		}
 		return false
 	}
 
-	h.log.Debugf("websocket message forwarded from=%s to=%s type=%s", fromUserID, to, msg.Type)
+	h.log.WithFields(ctx, logger.Fields{
+		"from":   fromUserID,
+		"to":     to,
+		"type":   string(msg.Type),
+		"action": "ws_message_forwarded",
+	}).Debug("websocket message forwarded")
 	return true
 }
 
 func (h *Hub) HandleMessage(client *Client, msg *WSMessage) {
-	if msg.Type == TypeEphemeralKey {
+	switch msg.Type {
+	case TypeEphemeralKey:
 		operationID := h.idempotency.generateOperationID(client.userID, msg.Type, msg.Payload)
-		_, err := h.idempotency.Execute(operationID, func() (interface{}, error) {
+		_, err := h.idempotency.Execute(operationID, msg.Type, func() (interface{}, error) {
 			h.processor.Submit(client.ctx, client, msg)
 			return nil, nil
 		})
 		if err != nil {
-			h.log.Warnf("websocket idempotency check failed user_id=%s: %v", client.userID, err)
+			h.log.WithFields(client.ctx, logger.Fields{
+				"user_id": client.userID,
+				"type":    string(msg.Type),
+				"action":  "ws_idempotency_failed",
+			}).Warnf("websocket idempotency check failed: %v", err)
 		}
 		return
+
+	case TypeMessage:
+		var payload MessagePayload
+		if err := json.Unmarshal(msg.Payload, &payload); err == nil && payload.MessageID != "" {
+			operationID := h.idempotency.generateOperationID(client.userID+":"+payload.MessageID, msg.Type, msg.Payload)
+			_, err := h.idempotency.Execute(operationID, msg.Type, func() (interface{}, error) {
+				h.processor.Submit(client.ctx, client, msg)
+				return nil, nil
+			})
+			if err != nil {
+				h.log.WithFields(client.ctx, logger.Fields{
+					"user_id":    client.userID,
+					"message_id": payload.MessageID,
+					"type":       string(msg.Type),
+					"action":     "ws_idempotency_failed",
+				}).Warnf("websocket idempotency check failed: %v", err)
+			}
+			return
+		}
+
+	case TypeFileChunk:
+		var payload FileChunkPayload
+		if err := json.Unmarshal(msg.Payload, &payload); err == nil && payload.FileID != "" {
+			chunkKey := fmt.Sprintf("%s:%s:%d", client.userID, payload.FileID, payload.ChunkIndex)
+			operationID := h.idempotency.generateOperationID(chunkKey, msg.Type, msg.Payload)
+			_, err := h.idempotency.Execute(operationID, msg.Type, func() (interface{}, error) {
+				h.processor.Submit(client.ctx, client, msg)
+				return nil, nil
+			})
+			if err != nil {
+				h.log.WithFields(client.ctx, logger.Fields{
+					"user_id":     client.userID,
+					"file_id":     payload.FileID,
+					"chunk_index": payload.ChunkIndex,
+					"type":        string(msg.Type),
+					"action":      "ws_idempotency_failed",
+				}).Warnf("websocket idempotency check failed: %v", err)
+			}
+			return
+		}
 	}
 
 	h.processor.Submit(client.ctx, client, msg)
@@ -333,18 +432,31 @@ func (h *Hub) handleUnregister(client *Client) {
 	for _, tr := range transfers {
 		h.notifyFileTransferFailed(tr)
 		if err := h.fileTracker.Complete(tr.FileID); err != nil {
-			h.log.Warnf("websocket failed to complete file transfer on unregister user_id=%s file_id=%s: %v", client.userID, tr.FileID, err)
+			h.log.WithFields(client.ctx, logger.Fields{
+				"user_id": client.userID,
+				"file_id": tr.FileID,
+				"action":  "ws_file_complete_on_unregister",
+			}).Warnf("websocket failed to complete file transfer on unregister: %v", err)
 		}
 	}
 
 	client.Stop()
 	close(client.send)
 	metrics.DecrementActiveWebSocketConnections()
-	h.log.Infof("websocket client unregistered user_id=%s username=%s total=%d", client.userID, client.username, totalClients)
+	prommetrics.ChatWebSocketDisconnections.WithLabelValues("unregister").Inc()
+	h.log.WithFields(client.ctx, logger.Fields{
+		"user_id":  client.userID,
+		"username": client.username,
+		"total":    totalClients,
+		"action":   "ws_unregister",
+	}).Info("websocket client unregistered")
 
 	msg, err := marshalMessage(TypePeerDisconnected, PeerDisconnectedPayload{PeerID: client.userID})
 	if err != nil {
-		h.log.Errorf("websocket marshal peer_disconnected failed user_id=%s: %v", client.userID, err)
+		h.log.WithFields(client.ctx, logger.Fields{
+			"user_id": client.userID,
+			"action":  "ws_marshal_peer_disconnected",
+		}).Errorf("websocket marshal peer_disconnected failed: %v", err)
 		return
 	}
 	msgBytes, _ := json.Marshal(msg)
@@ -387,7 +499,10 @@ func (h *Hub) updateLastSeenDebounced(userID string) {
 		})
 
 		if err != nil && !errors.Is(err, commonerrors.ErrCircuitOpen) {
-			h.log.Warnf("websocket failed to update last_seen user_id=%s: %v", userID, err)
+			h.log.WithFields(ctx, logger.Fields{
+				"user_id": userID,
+				"action":  "ws_update_last_seen",
+			}).Warnf("websocket failed to update last_seen: %v", err)
 		}
 	}()
 }
@@ -401,27 +516,63 @@ func (h *Hub) trackFileTransfer(payload FileStartPayload) {
 	}
 
 	if err := h.fileTracker.Track(req); err != nil {
-		h.log.Warnf("websocket failed to track file transfer file_id=%s from=%s to=%s: %v", payload.FileID, payload.From, payload.To, err)
+		h.log.WithFields(h.ctx, logger.Fields{
+			"file_id": payload.FileID,
+			"from":    payload.From,
+			"to":      payload.To,
+			"action":  "ws_file_track",
+		}).Warnf("websocket failed to track file transfer: %v", err)
+		prommetrics.ChatWebSocketFileTransferFailures.WithLabelValues("track_failed").Inc()
 	}
 }
 
 func (h *Hub) updateFileTransferProgress(fileID string, chunkIndex int) {
 	if err := h.fileTracker.UpdateProgress(fileID, chunkIndex); err != nil {
 		if errors.Is(err, commonerrors.ErrTransferNotFound) {
-			h.log.Debugf("websocket file transfer progress skipped (no tracking) file_id=%s chunk_index=%d", fileID, chunkIndex)
+			h.log.WithFields(h.ctx, logger.Fields{
+				"file_id":     fileID,
+				"chunk_index": chunkIndex,
+				"action":      "ws_file_progress_skipped",
+			}).Debug("websocket file transfer progress skipped (no tracking)")
 			return
 		}
-		h.log.Warnf("websocket file transfer progress failed file_id=%s chunk_index=%d: %v", fileID, chunkIndex, err)
+		h.log.WithFields(h.ctx, logger.Fields{
+			"file_id":     fileID,
+			"chunk_index": chunkIndex,
+			"action":      "ws_file_progress_failed",
+		}).Warnf("websocket file transfer progress failed: %v", err)
 	}
 }
 
 func (h *Hub) completeFileTransfer(fileID string) {
+	transfers := h.fileTracker.GetTransfersForUser("")
+	var tr *transfer.Transfer
+	for _, t := range transfers {
+		if t.FileID == fileID {
+			tr = t
+			break
+		}
+	}
+
 	if err := h.fileTracker.Complete(fileID); err != nil {
 		if errors.Is(err, commonerrors.ErrTransferNotFound) {
-			h.log.Debugf("websocket file transfer complete skipped (no tracking) file_id=%s", fileID)
+			h.log.WithFields(h.ctx, logger.Fields{
+				"file_id": fileID,
+				"action":  "ws_file_complete_skipped",
+			}).Debug("websocket file transfer complete skipped (no tracking)")
 			return
 		}
-		h.log.Warnf("websocket failed to complete file transfer file_id=%s: %v", fileID, err)
+		h.log.WithFields(h.ctx, logger.Fields{
+			"file_id": fileID,
+			"action":  "ws_file_complete_failed",
+		}).Warnf("websocket failed to complete file transfer: %v", err)
+		prommetrics.ChatWebSocketFileTransferFailures.WithLabelValues("complete_failed").Inc()
+		return
+	}
+
+	if tr != nil {
+		duration := time.Since(tr.StartedAt).Seconds()
+		prommetrics.ChatWebSocketFileTransferDurationSeconds.WithLabelValues("success").Observe(duration)
 	}
 }
 
@@ -429,17 +580,29 @@ func (h *Hub) notifyFileTransferFailed(tr *transfer.Transfer) {
 	if tr.To == "" {
 		return
 	}
+
+	duration := time.Since(tr.StartedAt).Seconds()
+	prommetrics.ChatWebSocketFileTransferDurationSeconds.WithLabelValues("failed").Observe(duration)
+	prommetrics.ChatWebSocketFileTransferFailures.WithLabelValues("timeout_or_disconnect").Inc()
+
 	msg, err := marshalMessage(TypeFileComplete, FileCompletePayload{
 		To:     tr.To,
 		From:   tr.From,
 		FileID: tr.FileID,
 	})
 	if err != nil {
-		h.log.Errorf("websocket failed to marshal file_failed: %v", err)
+		h.log.WithFields(h.ctx, logger.Fields{
+			"file_id": tr.FileID,
+			"action":  "ws_file_failed_marshal",
+		}).Errorf("websocket failed to marshal file_failed: %v", err)
 		return
 	}
 	if err := h.SendToUserWithContext(h.ctx, tr.To, msg); err != nil {
-		h.log.Warnf("websocket failed to notify file transfer failure to=%s file_id=%s: %v", tr.To, tr.FileID, err)
+		h.log.WithFields(h.ctx, logger.Fields{
+			"to":      tr.To,
+			"file_id": tr.FileID,
+			"action":  "ws_file_failed_notify",
+		}).Warnf("websocket failed to notify file transfer failure: %v", err)
 	}
 }
 

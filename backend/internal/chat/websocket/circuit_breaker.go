@@ -6,6 +6,7 @@ import (
 	"time"
 
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
+	prommetrics "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/prometheus"
 )
 
 type CircuitBreaker struct {
@@ -14,6 +15,7 @@ type CircuitBreaker struct {
 	threshold   int32
 	timeout     time.Duration
 	resetAfter  time.Duration
+	name        string
 }
 
 func NewCircuitBreaker(threshold int32, timeout, resetAfter time.Duration) *CircuitBreaker {
@@ -21,6 +23,7 @@ func NewCircuitBreaker(threshold int32, timeout, resetAfter time.Duration) *Circ
 		threshold:  threshold,
 		timeout:    timeout,
 		resetAfter: resetAfter,
+		name:       "last_seen_update",
 	}
 	cb.lastFailure.Store(time.Time{})
 	return cb
@@ -28,25 +31,30 @@ func NewCircuitBreaker(threshold int32, timeout, resetAfter time.Duration) *Circ
 
 func (cb *CircuitBreaker) isOpen() bool {
 	if cb.failures.Load() < cb.threshold {
+		prommetrics.CircuitBreakerState.WithLabelValues(cb.name).Set(0)
 		return false
 	}
 
 	lastFailure := cb.lastFailure.Load().(time.Time)
 	if lastFailure.IsZero() {
+		prommetrics.CircuitBreakerState.WithLabelValues(cb.name).Set(0)
 		return false
 	}
 
 	if time.Since(lastFailure) > cb.resetAfter {
 		cb.reset()
+		prommetrics.CircuitBreakerState.WithLabelValues(cb.name).Set(0)
 		return false
 	}
 
+	prommetrics.CircuitBreakerState.WithLabelValues(cb.name).Set(1)
 	return true
 }
 
 func (cb *CircuitBreaker) recordFailure() {
 	cb.failures.Add(1)
 	cb.lastFailure.Store(time.Now())
+	prommetrics.CircuitBreakerFailures.WithLabelValues(cb.name).Inc()
 }
 
 func (cb *CircuitBreaker) reset() {

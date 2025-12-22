@@ -35,6 +35,23 @@ type Handler struct {
 	requestTimeout time.Duration
 }
 
+func getClientIP(r *http.Request) string {
+	ip := r.Header.Get("X-Real-IP")
+	if ip == "" {
+		ip = r.Header.Get("X-Forwarded-For")
+		if idx := strings.Index(ip, ","); idx != -1 {
+			ip = strings.TrimSpace(ip[:idx])
+		}
+	}
+	if ip == "" {
+		ip = r.RemoteAddr
+		if idx := strings.LastIndex(ip, ":"); idx != -1 {
+			ip = ip[:idx]
+		}
+	}
+	return ip
+}
+
 func NewHandler(auth *service.AuthService, cfg config.AuthConfig, log *logger.Logger) http.Handler {
 	h := &Handler{
 		auth:           auth,
@@ -117,8 +134,9 @@ func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
+	clientIP := getClientIP(r)
 
-	result, err := h.auth.RefreshAccessToken(ctx, cookie.Value)
+	result, err := h.auth.RefreshAccessToken(ctx, cookie.Value, clientIP)
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidRefreshToken) || errors.Is(err, service.ErrRefreshTokenExpired) {
 			commonhttp.WriteError(w, http.StatusUnauthorized, "invalid refresh token")

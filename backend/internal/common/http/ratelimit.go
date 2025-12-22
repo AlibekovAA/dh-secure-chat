@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"golang.org/x/time/rate"
+
+	prommetrics "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/prometheus"
 )
 
 type RateLimiter struct {
@@ -69,6 +71,7 @@ func (rl *RateLimiter) Middleware() func(http.Handler) http.Handler {
 			key := getClientKey(r)
 
 			if !rl.Allow(key) {
+				prommetrics.RateLimitBlocked.WithLabelValues(r.URL.Path, "general").Inc()
 				WriteError(w, http.StatusTooManyRequests, "rate limit exceeded")
 				return
 			}
@@ -119,15 +122,31 @@ func NewStrictRateLimiter() *StrictRateLimiter {
 
 func (srl *StrictRateLimiter) MiddlewareForPath(path string) func(http.Handler) http.Handler {
 	var limiter *RateLimiter
+	var limiterType string
 
 	switch path {
 	case "/api/auth/login":
 		limiter = srl.loginLimiter
+		limiterType = "login"
 	case "/api/auth/register":
 		limiter = srl.registerLimiter
+		limiterType = "register"
 	default:
 		limiter = srl.generalLimiter
+		limiterType = "general"
 	}
 
-	return limiter.Middleware()
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			key := getClientKey(r)
+
+			if !limiter.Allow(key) {
+				prommetrics.RateLimitBlocked.WithLabelValues(path, limiterType).Inc()
+				WriteError(w, http.StatusTooManyRequests, "rate limit exceeded")
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
 }

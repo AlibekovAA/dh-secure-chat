@@ -44,7 +44,11 @@ func (s *ChatService) SearchUsers(ctx context.Context, query string, limit int) 
 	}
 	users, err := s.repo.SearchByUsername(ctx, q, limit)
 	if err != nil {
-		s.log.Errorf("search users failed query=%q limit=%d: %v", q, limit, err)
+		s.log.WithFields(ctx, logger.Fields{
+			"query":  q,
+			"limit":  limit,
+			"action": "search_users_failed",
+		}).Errorf("search users failed: %v", err)
 		return nil, fmt.Errorf("search users query=%q limit=%d: %w", q, limit, err)
 	}
 	return users, nil

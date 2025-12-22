@@ -34,12 +34,19 @@ func NewIdentityService(repo identityrepo.Repository, log *logger.Logger) *Ident
 
 func (s *IdentityService) CreateIdentityKey(ctx context.Context, userID string, publicKey []byte) error {
 	if len(publicKey) == 0 {
-		s.log.Warnf("create identity key failed user_id=%s: empty public key", userID)
+		s.log.WithFields(ctx, logger.Fields{
+			"user_id": userID,
+			"action":  "create_identity_key_empty",
+		}).Warn("create identity key failed: empty public key")
 		return commonerrors.ErrInvalidPublicKey
 	}
 
 	if len(publicKey) < 50 || len(publicKey) > 200 {
-		s.log.Warnf("create identity key failed user_id=%s: invalid public key length %d bytes (expected SPKI format 50-200 bytes)", userID, len(publicKey))
+		s.log.WithFields(ctx, logger.Fields{
+			"user_id":    userID,
+			"key_length": len(publicKey),
+			"action":     "create_identity_key_invalid_length",
+		}).Warnf("create identity key failed: invalid public key length %d bytes (expected SPKI format 50-200 bytes)", len(publicKey))
 		return commonerrors.ErrInvalidPublicKey
 	}
 
@@ -49,24 +56,39 @@ func (s *IdentityService) CreateIdentityKey(ctx context.Context, userID string, 
 	}
 
 	if err := s.repo.Create(ctx, key); err != nil {
-		s.log.Errorf("create identity key failed user_id=%s: %v", userID, err)
+		s.log.WithFields(ctx, logger.Fields{
+			"user_id": userID,
+			"action":  "create_identity_key_failed",
+		}).Errorf("create identity key failed: %v", err)
 		return fmt.Errorf("failed to create identity key: %w", err)
 	}
 
-	s.log.Infof("identity key created user_id=%s", userID)
+	s.log.WithFields(ctx, logger.Fields{
+		"user_id": userID,
+		"action":  "identity_key_created",
+	}).Info("identity key created")
 	return nil
 }
 
 func (s *IdentityService) GetPublicKey(ctx context.Context, userID string) ([]byte, error) {
-	s.log.Debugf("identity key requested user_id=%s", userID)
+	s.log.WithFields(ctx, logger.Fields{
+		"user_id": userID,
+		"action":  "get_identity_key_requested",
+	}).Debug("identity key requested")
 
 	key, err := s.repo.FindByUserID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, commonerrors.ErrIdentityKeyNotFound) {
-			s.log.Warnf("get identity key failed user_id=%s: not found", userID)
+			s.log.WithFields(ctx, logger.Fields{
+				"user_id": userID,
+				"action":  "get_identity_key_not_found",
+			}).Warn("get identity key failed: not found")
 			return nil, commonerrors.ErrIdentityKeyNotFound
 		}
-		s.log.Errorf("get identity key failed user_id=%s: %v", userID, err)
+		s.log.WithFields(ctx, logger.Fields{
+			"user_id": userID,
+			"action":  "get_identity_key_failed",
+		}).Errorf("get identity key failed: %v", err)
 		return nil, fmt.Errorf("failed to get identity key: %w", err)
 	}
 
@@ -77,10 +99,16 @@ func (s *IdentityService) GetIdentityKey(ctx context.Context, userID string) (id
 	key, err := s.repo.FindByUserID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, commonerrors.ErrIdentityKeyNotFound) {
-			s.log.Warnf("get identity key failed user_id=%s: not found", userID)
+			s.log.WithFields(ctx, logger.Fields{
+				"user_id": userID,
+				"action":  "get_identity_key_not_found",
+			}).Warn("get identity key failed: not found")
 			return identitydomain.IdentityKey{}, commonerrors.ErrIdentityKeyNotFound
 		}
-		s.log.Errorf("get identity key failed user_id=%s: %v", userID, err)
+		s.log.WithFields(ctx, logger.Fields{
+			"user_id": userID,
+			"action":  "get_identity_key_failed",
+		}).Errorf("get identity key failed: %v", err)
 		return identitydomain.IdentityKey{}, fmt.Errorf("failed to get identity key: %w", err)
 	}
 
@@ -88,15 +116,24 @@ func (s *IdentityService) GetIdentityKey(ctx context.Context, userID string) (id
 }
 
 func (s *IdentityService) GetFingerprint(ctx context.Context, userID string) (string, error) {
-	s.log.Debugf("identity fingerprint requested user_id=%s", userID)
+	s.log.WithFields(ctx, logger.Fields{
+		"user_id": userID,
+		"action":  "get_fingerprint_requested",
+	}).Debug("identity fingerprint requested")
 
 	key, err := s.repo.FindByUserID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, commonerrors.ErrIdentityKeyNotFound) {
-			s.log.Warnf("get identity fingerprint failed user_id=%s: not found", userID)
+			s.log.WithFields(ctx, logger.Fields{
+				"user_id": userID,
+				"action":  "get_fingerprint_not_found",
+			}).Warn("get identity fingerprint failed: not found")
 			return "", commonerrors.ErrIdentityKeyNotFound
 		}
-		s.log.Errorf("get identity fingerprint failed user_id=%s: %v", userID, err)
+		s.log.WithFields(ctx, logger.Fields{
+			"user_id": userID,
+			"action":  "get_fingerprint_failed",
+		}).Errorf("get identity fingerprint failed: %v", err)
 		return "", fmt.Errorf("failed to get identity fingerprint: %w", err)
 	}
 

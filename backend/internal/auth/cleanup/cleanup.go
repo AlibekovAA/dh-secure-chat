@@ -2,23 +2,18 @@ package cleanup
 
 import (
 	"context"
-	"expvar"
 	"time"
 
 	authrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/repository"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
-)
-
-var (
-	refreshTokensCleanupDeleted = expvar.NewInt("refresh_tokens_cleanup_deleted")
-	revokedTokensCleanupDeleted = expvar.NewInt("revoked_tokens_cleanup_deleted")
+	prommetrics "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/prometheus"
 )
 
 type ExpiredDeleter interface {
 	DeleteExpired(ctx context.Context) (int64, error)
 }
 
-func StartCleanup(ctx context.Context, repo ExpiredDeleter, log *logger.Logger, repoName string, metric *expvar.Int) {
+func StartCleanup(ctx context.Context, repo ExpiredDeleter, log *logger.Logger, repoName string) {
 	ticker := time.NewTicker(time.Hour)
 	defer ticker.Stop()
 
@@ -33,8 +28,10 @@ func StartCleanup(ctx context.Context, repo ExpiredDeleter, log *logger.Logger, 
 				continue
 			}
 			if deleted > 0 {
-				if metric != nil {
-					metric.Add(deleted)
+				if repoName == "refresh token" {
+					prommetrics.RefreshTokensCleanupDeleted.Add(float64(deleted))
+				} else if repoName == "revoked token" {
+					prommetrics.RevokedTokensCleanupDeleted.Add(float64(deleted))
 				}
 				log.Infof("%s cleanup: deleted %d expired tokens", repoName, deleted)
 			}
@@ -43,9 +40,9 @@ func StartCleanup(ctx context.Context, repo ExpiredDeleter, log *logger.Logger, 
 }
 
 func StartRefreshTokenCleanup(ctx context.Context, repo authrepo.RefreshTokenRepository, log *logger.Logger) {
-	StartCleanup(ctx, repo, log, "refresh token", refreshTokensCleanupDeleted)
+	StartCleanup(ctx, repo, log, "refresh token")
 }
 
 func StartRevokedTokenCleanup(ctx context.Context, repo authrepo.RevokedTokenRepository, log *logger.Logger) {
-	StartCleanup(ctx, repo, log, "revoked token", revokedTokensCleanupDeleted)
+	StartCleanup(ctx, repo, log, "revoked token")
 }

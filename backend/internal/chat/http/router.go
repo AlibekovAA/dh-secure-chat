@@ -49,8 +49,9 @@ func NewHandler(chat *service.ChatService, hub websocket.HubInterface, cfg confi
 		cfg:       cfg,
 		pool:      pool,
 		upgrader: gorillaWS.Upgrader{
-			ReadBufferSize:  1024,
-			WriteBufferSize: 1024,
+			ReadBufferSize:    1024,
+			WriteBufferSize:   1024,
+			EnableCompression: true,
 			CheckOrigin: func(r *http.Request) bool {
 				origin := r.Header.Get("Origin")
 				if origin == "" {
@@ -86,11 +87,17 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.chat.GetMe(ctx, claims.UserID)
 	if err != nil {
-		h.log.Errorf("chat/me failed user_id=%s: %v", claims.UserID, err)
+		h.log.WithFields(ctx, logger.Fields{
+			"user_id": claims.UserID,
+			"action":  "chat_me_failed",
+		}).Errorf("chat/me failed: %v", err)
 		commonhttp.WriteError(w, http.StatusInternalServerError, "failed to load profile")
 		return
 	}
-	h.log.Infof("chat/me success user_id=%s", claims.UserID)
+	h.log.WithFields(ctx, logger.Fields{
+		"user_id": claims.UserID,
+		"action":  "chat_me_success",
+	}).Info("chat/me success")
 	commonhttp.WriteJSON(w, http.StatusOK, meResponse{
 		ID:       string(user.ID),
 		Username: user.Username,
@@ -113,16 +120,28 @@ func (h *Handler) searchUsers(w http.ResponseWriter, r *http.Request) {
 	users, err := h.chat.SearchUsers(ctx, query, limit)
 	if err != nil {
 		if errors.Is(err, commonerrors.ErrEmptyQuery) {
-			h.log.Warnf("chat/users search failed query=%q: empty query", query)
+			h.log.WithFields(ctx, logger.Fields{
+				"query":  query,
+				"action": "chat_users_search_empty",
+			}).Warn("chat/users search failed: empty query")
 			commonhttp.WriteError(w, http.StatusBadRequest, "query is empty")
 		} else {
-			h.log.Errorf("chat/users search failed query=%q limit=%d: %v", query, limit, err)
+			h.log.WithFields(ctx, logger.Fields{
+				"query":  query,
+				"limit":  limit,
+				"action": "chat_users_search_failed",
+			}).Errorf("chat/users search failed: %v", err)
 			commonhttp.WriteError(w, http.StatusInternalServerError, "failed to search users")
 		}
 		return
 	}
 
-	h.log.Infof("chat/users search success query=%q limit=%d results=%d", query, limit, len(users))
+	h.log.WithFields(ctx, logger.Fields{
+		"query":   query,
+		"limit":   limit,
+		"results": len(users),
+		"action":  "chat_users_search_success",
+	}).Info("chat/users search success")
 	resp := toUserResponses(users)
 	commonhttp.WriteJSON(w, http.StatusOK, resp)
 }
@@ -140,37 +159,52 @@ func (h *Handler) getIdentityKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx := r.Context()
+
 	userID = strings.TrimSuffix(userID, "/identity-key")
 	if err := commonhttp.ValidateUUID(userID); err != nil {
-		h.log.Warnf("chat/identity-key failed: invalid user_id format user_id=%s", userID)
+		h.log.WithFields(ctx, logger.Fields{
+			"user_id": userID,
+			"action":  "chat_identity_key_invalid_format",
+		}).Warn("chat/identity-key failed: invalid user_id format")
 		commonhttp.WriteError(w, http.StatusBadRequest, "invalid user_id format (must be UUID)")
 		return
 	}
 
-	ctx := r.Context()
-
 	pubKey, err := h.chat.GetIdentityKey(ctx, userID)
 	if err != nil {
 		if errors.Is(err, commonerrors.ErrIdentityKeyNotFound) {
-			h.log.Warnf("chat/identity-key failed user_id=%s: not found", userID)
+			h.log.WithFields(ctx, logger.Fields{
+				"user_id": userID,
+				"action":  "chat_identity_key_not_found",
+			}).Warn("chat/identity-key failed: not found")
 			commonhttp.WriteError(w, http.StatusNotFound, "identity key not found")
 		} else {
-			h.log.Errorf("chat/identity-key failed user_id=%s: %v", userID, err)
+			h.log.WithFields(ctx, logger.Fields{
+				"user_id": userID,
+				"action":  "chat_identity_key_failed",
+			}).Errorf("chat/identity-key failed: %v", err)
 			commonhttp.WriteError(w, http.StatusInternalServerError, "failed to get identity key")
 		}
 		return
 	}
 
-	h.log.Infof("chat/identity-key success user_id=%s", userID)
+	h.log.WithFields(ctx, logger.Fields{
+		"user_id": userID,
+		"action":  "chat_identity_key_success",
+	}).Info("chat/identity-key success")
 	commonhttp.WriteJSON(w, http.StatusOK, map[string]string{
 		"public_key": base64.StdEncoding.EncodeToString(pubKey),
 	})
 }
 
 func (h *Handler) handleWebSocket(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	conn, err := h.upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		h.log.Errorf("websocket upgrade failed: %v", err)
+		h.log.WithFields(ctx, logger.Fields{
+			"action": "ws_upgrade_failed",
+		}).Errorf("websocket upgrade failed: %v", err)
 		return
 	}
 

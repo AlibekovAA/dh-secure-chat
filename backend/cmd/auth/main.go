@@ -2,10 +2,11 @@ package main
 
 import (
 	"context"
-	"expvar"
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	authcleanup "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/cleanup"
 	authhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/http"
@@ -68,7 +69,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("/", handler)
-	mux.Handle("/debug/vars", expvar.Handler())
+	mux.Handle("/metrics", promhttp.Handler())
 
 	rateLimiter := commonhttp.NewStrictRateLimiter()
 	metrics := httpmetrics.New("auth")

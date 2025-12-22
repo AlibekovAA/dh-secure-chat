@@ -7,18 +7,43 @@ import (
 
 type MessageValidator interface {
 	ValidateFileStart(p FileStartPayload) error
-	ValidateAudio(mimeType string, size int64) error
 }
 
 type DefaultValidator struct {
-	maxFileSize  int64
-	maxVoiceSize int64
+	maxFileSize      int64
+	maxVoiceSize     int64
+	allowedMimeTypes map[string]bool
 }
 
 func NewDefaultValidator(maxFileSize, maxVoiceSize int64) *DefaultValidator {
+	allowedMimeTypes := map[string]bool{
+		"image/jpeg":         true,
+		"image/jpg":          true,
+		"image/png":          true,
+		"image/gif":          true,
+		"image/webp":         true,
+		"image/svg+xml":      true,
+		"application/pdf":    true,
+		"application/msword": true,
+		"application/vnd.openxmlformats-officedocument.wordprocessingml.document": true,
+		"application/vnd.ms-excel": true,
+		"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":         true,
+		"application/vnd.ms-powerpoint":                                             true,
+		"application/vnd.openxmlformats-officedocument.presentationml.presentation": true,
+		"text/plain":                   true,
+		"text/csv":                     true,
+		"text/markdown":                true,
+		"application/zip":              true,
+		"application/x-rar-compressed": true,
+		"application/x-tar":            true,
+		"application/gzip":             true,
+		"application/octet-stream":     true,
+	}
+
 	return &DefaultValidator{
-		maxFileSize:  maxFileSize,
-		maxVoiceSize: maxVoiceSize,
+		maxFileSize:      maxFileSize,
+		maxVoiceSize:     maxVoiceSize,
+		allowedMimeTypes: allowedMimeTypes,
 	}
 }
 
@@ -45,18 +70,10 @@ func (v *DefaultValidator) ValidateFileStart(p FileStartPayload) error {
 		if !isValidAudioMimeType(p.MimeType) {
 			return fmt.Errorf("invalid audio mime type %s", p.MimeType)
 		}
-	}
-
-	return nil
-}
-
-func (v *DefaultValidator) ValidateAudio(mimeType string, size int64) error {
-	if !isValidAudioMimeType(mimeType) {
-		return fmt.Errorf("invalid audio mime type %s", mimeType)
-	}
-
-	if size > v.maxVoiceSize {
-		return fmt.Errorf("audio size %d exceeds maximum %d", size, v.maxVoiceSize)
+	} else {
+		if !v.allowedMimeTypes[p.MimeType] {
+			return fmt.Errorf("mime type not allowed: %s", p.MimeType)
+		}
 	}
 
 	return nil

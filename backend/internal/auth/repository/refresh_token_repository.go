@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	pgx "github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
@@ -36,6 +37,7 @@ func NewPgRefreshTokenRepository(pool *pgxpool.Pool) *PgRefreshTokenRepository {
 }
 
 func (r *PgRefreshTokenRepository) Create(ctx context.Context, token authdomain.RefreshToken) error {
+	start := time.Now()
 	_, err := r.pool.Exec(
 		ctx,
 		`INSERT INTO refresh_tokens (id, token_hash, user_id, expires_at, created_at)
@@ -46,10 +48,11 @@ func (r *PgRefreshTokenRepository) Create(ctx context.Context, token authdomain.
 		token.ExpiresAt,
 		token.CreatedAt,
 	)
-	return db.HandleExecError(err, "create refresh token")
+	return db.HandleExecError(err, "create refresh token", start)
 }
 
 func (r *PgRefreshTokenRepository) FindByTokenHash(ctx context.Context, hash string) (authdomain.RefreshToken, error) {
+	start := time.Now()
 	row := r.pool.QueryRow(
 		ctx,
 		`SELECT id, token_hash, user_id, expires_at, created_at
@@ -60,22 +63,24 @@ func (r *PgRefreshTokenRepository) FindByTokenHash(ctx context.Context, hash str
 
 	var token authdomain.RefreshToken
 	err := row.Scan(&token.ID, &token.TokenHash, &token.UserID, &token.ExpiresAt, &token.CreatedAt)
-	if err := db.HandleQueryError(err, ErrRefreshTokenNotFound, "find refresh token"); err != nil {
+	if err := db.HandleQueryError(err, ErrRefreshTokenNotFound, "find refresh token", start); err != nil {
 		return authdomain.RefreshToken{}, err
 	}
 	return token, nil
 }
 
 func (r *PgRefreshTokenRepository) DeleteByTokenHash(ctx context.Context, hash string) error {
+	start := time.Now()
 	_, err := r.pool.Exec(
 		ctx,
 		`DELETE FROM refresh_tokens WHERE token_hash = $1`,
 		hash,
 	)
-	return db.HandleExecError(err, "delete refresh token")
+	return db.HandleExecError(err, "delete refresh token", start)
 }
 
 func (r *PgRefreshTokenRepository) CountByUserID(ctx context.Context, userID string) (int, error) {
+	start := time.Now()
 	row := r.pool.QueryRow(
 		ctx,
 		`SELECT COUNT(*) FROM refresh_tokens WHERE user_id = $1`,
@@ -84,12 +89,14 @@ func (r *PgRefreshTokenRepository) CountByUserID(ctx context.Context, userID str
 
 	var count int
 	if err := row.Scan(&count); err != nil {
-		return 0, db.HandleQueryError(err, nil, "count refresh tokens")
+		return 0, db.HandleQueryError(err, nil, "count refresh tokens", start)
 	}
+	db.MeasureQueryDuration("count refresh tokens", start)
 	return count, nil
 }
 
 func (r *PgRefreshTokenRepository) DeleteOldestByUserID(ctx context.Context, userID string) error {
+	start := time.Now()
 	_, err := r.pool.Exec(
 		ctx,
 		`DELETE FROM refresh_tokens
@@ -102,25 +109,29 @@ func (r *PgRefreshTokenRepository) DeleteOldestByUserID(ctx context.Context, use
 		 )`,
 		userID,
 	)
-	return db.HandleExecError(err, "delete oldest refresh token")
+	return db.HandleExecError(err, "delete oldest refresh token", start)
 }
 
 func (r *PgRefreshTokenRepository) DeleteExpired(ctx context.Context) (int64, error) {
+	start := time.Now()
 	res, err := r.pool.Exec(
 		ctx,
 		`DELETE FROM refresh_tokens WHERE expires_at < NOW()`,
 	)
 	if err != nil {
-		return 0, db.HandleExecError(err, "delete expired refresh tokens")
+		return 0, db.HandleExecError(err, "delete expired refresh tokens", start)
 	}
+	db.MeasureQueryDuration("delete expired refresh tokens", start)
 	return res.RowsAffected(), nil
 }
 
 func (r *PgRefreshTokenRepository) BeginTx(ctx context.Context) (RefreshTokenTx, error) {
+	start := time.Now()
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
-		return nil, db.HandleExecError(err, "begin refresh token tx")
+		return nil, db.HandleExecError(err, "begin refresh token tx", start)
 	}
+	db.MeasureQueryDuration("begin refresh token tx", start)
 	return &pgRefreshTokenTx{tx: tx}, nil
 }
 
@@ -129,6 +140,7 @@ type pgRefreshTokenTx struct {
 }
 
 func (t *pgRefreshTokenTx) FindByTokenHashForUpdate(ctx context.Context, hash string) (authdomain.RefreshToken, error) {
+	start := time.Now()
 	row := t.tx.QueryRow(
 		ctx,
 		`SELECT id, token_hash, user_id, expires_at, created_at
@@ -140,19 +152,20 @@ func (t *pgRefreshTokenTx) FindByTokenHashForUpdate(ctx context.Context, hash st
 
 	var token authdomain.RefreshToken
 	err := row.Scan(&token.ID, &token.TokenHash, &token.UserID, &token.ExpiresAt, &token.CreatedAt)
-	if err := db.HandleQueryError(err, ErrRefreshTokenNotFound, "find refresh token in tx"); err != nil {
+	if err := db.HandleQueryError(err, ErrRefreshTokenNotFound, "find refresh token in tx", start); err != nil {
 		return authdomain.RefreshToken{}, err
 	}
 	return token, nil
 }
 
 func (t *pgRefreshTokenTx) DeleteByTokenHash(ctx context.Context, hash string) error {
+	start := time.Now()
 	_, err := t.tx.Exec(
 		ctx,
 		`DELETE FROM refresh_tokens WHERE token_hash = $1`,
 		hash,
 	)
-	return db.HandleExecError(err, "delete refresh token in tx")
+	return db.HandleExecError(err, "delete refresh token in tx", start)
 }
 
 func (t *pgRefreshTokenTx) Commit(ctx context.Context) error {

@@ -108,4 +108,4 @@ go-vet:
 	@echo "Running go vet..."
 	cd backend && go vet ./...
 
-format: go-fmt
+format:  go-vet go-fmt

@@ -3,7 +3,6 @@ package jwtverify
 import (
 	"context"
 	"encoding/json"
-	"expvar"
 	"fmt"
 	"net/http"
 	"strings"
@@ -12,13 +11,20 @@ import (
 
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
+	prommetrics "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/prometheus"
 )
 
-var (
-	jwtValidationsTotal   = expvar.NewInt("jwt_validations_total")
-	jwtValidationsFailed  = expvar.NewInt("jwt_validations_failed")
-	jwtRevokedChecksTotal = expvar.NewInt("jwt_revoked_checks_total")
-)
+func incrementJWTValidationsTotal() {
+	prommetrics.JWTValidationsTotal.Inc()
+}
+
+func incrementJWTValidationsFailed() {
+	prommetrics.JWTValidationsFailed.Inc()
+}
+
+func incrementJWTRevokedChecksTotal() {
+	prommetrics.JWTRevokedChecksTotal.Inc()
+}
 
 type RevokedTokenChecker interface {
 	IsRevoked(ctx context.Context, jti string) (bool, error)
@@ -47,34 +53,34 @@ func Middleware(secret string, log *logger.Logger, checker RevokedTokenChecker) 
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			raw := r.Header.Get("Authorization")
 			if raw == "" || !strings.HasPrefix(raw, "Bearer ") {
-				jwtValidationsTotal.Add(1)
-				jwtValidationsFailed.Add(1)
+				incrementJWTValidationsTotal()
+				incrementJWTValidationsFailed()
 				log.Warnf("jwt auth failed path=%s: missing or invalid authorization header", r.URL.Path)
 				writeError(w, http.StatusUnauthorized, "missing or invalid authorization")
 				return
 			}
 
 			tokenString := strings.TrimPrefix(raw, "Bearer ")
-			jwtValidationsTotal.Add(1)
+			incrementJWTValidationsTotal()
 			claims, err := parseToken(tokenString, secretBytes)
 			if err != nil {
-				jwtValidationsFailed.Add(1)
+				incrementJWTValidationsFailed()
 				log.Warnf("jwt auth failed path=%s: %v", r.URL.Path, err)
 				writeError(w, http.StatusUnauthorized, "invalid token")
 				return
 			}
 
 			if checker != nil && claims.JTI != "" {
-				jwtRevokedChecksTotal.Add(1)
+				incrementJWTRevokedChecksTotal()
 				revoked, err := checker.IsRevoked(r.Context(), claims.JTI)
 				if err != nil {
-					jwtValidationsFailed.Add(1)
+					incrementJWTValidationsFailed()
 					log.Errorf("jwt auth failed path=%s: failed to check revoked token jti=%s: %v", r.URL.Path, claims.JTI, err)
 					writeError(w, http.StatusInternalServerError, "internal error")
 					return
 				}
 				if revoked {
-					jwtValidationsFailed.Add(1)
+					incrementJWTValidationsFailed()
 					log.Warnf("jwt auth failed path=%s: token revoked jti=%s", r.URL.Path, claims.JTI)
 					writeError(w, http.StatusUnauthorized, "token revoked")
 					return

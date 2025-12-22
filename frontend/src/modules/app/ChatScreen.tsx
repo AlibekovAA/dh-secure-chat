@@ -58,7 +58,7 @@ export function ChatScreen({
     setCurrentPage(1);
   }, [searchQuery, searchResults.length]);
   return (
-    <div className="min-h-screen flex flex-col bg-black text-emerald-50">
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-black via-emerald-950/10 to-black text-emerald-50">
       <header className="flex items-center justify-between px-4 py-3 border-b border-emerald-700/60">
         <div>
           <h1 className="text-xl font-semibold text-emerald-400">dh-secure-chat</h1>
@@ -76,7 +76,7 @@ export function ChatScreen({
           <button
             type="button"
             onClick={onLogout}
-            className="text-emerald-400 hover:text-emerald-200 underline underline-offset-4"
+            className="text-emerald-400 hover:text-emerald-200 underline underline-offset-4 smooth-transition button-press rounded px-2 py-1 hover:bg-emerald-900/40"
           >
             Выйти
           </button>
@@ -85,16 +85,16 @@ export function ChatScreen({
 
       <main className="flex-1 flex items-center justify-center px-4 py-6">
         <div className="w-full max-w-4xl grid gap-6 md:grid-cols-2">
-          <section className="rounded-xl bg-black/80 border border-emerald-700 px-5 py-4 text-sm text-emerald-200">
+          <section className="rounded-xl glass-effect px-5 py-4 text-sm text-emerald-200 smooth-transition hover:border-emerald-600/60">
             <h2 className="text-sm font-semibold text-emerald-300 mb-2">Профиль</h2>
             <p className="text-xs text-emerald-500/80 mb-1">Имя: {profile?.username ?? "…"}</p>
-            <p className="text-xs text-emerald-500/80 break-all mb-3">ID: {profile?.id ?? "…"}</p>
+            <p className="text-xs text-emerald-500/80 break-all mb-3 font-mono">ID: {profile?.id ?? "…"}</p>
             <p className="text-xs text-emerald-500/70">
               Выберите собеседника, чтобы начать защищённый диалог.
             </p>
           </section>
 
-          <section className="rounded-xl bg-black/80 border border-emerald-700 px-5 py-4 text-sm text-emerald-200">
+          <section className="rounded-xl glass-effect px-5 py-4 text-sm text-emerald-200 smooth-transition hover:border-emerald-600/60">
             <h2 className="text-sm font-semibold text-emerald-300 mb-2">Найти собеседника</h2>
             <div className="space-y-2">
               <div className="relative">
@@ -104,7 +104,7 @@ export function ChatScreen({
                   onChange={e => onSearchQueryChange(e.target.value)}
                   onKeyDown={handleKeyDown}
                   disabled={isSearching}
-                  className="w-full rounded-md bg-black border border-emerald-700 pr-24 px-3 py-2 text-sm text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full rounded-md bg-black border border-emerald-700 pr-24 px-3 py-2 text-sm text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed smooth-transition hover:border-emerald-600 focus:glow-emerald-hover"
                   placeholder="Имя пользователя..."
                   autoComplete="off"
                 />
@@ -135,7 +135,7 @@ export function ChatScreen({
                     type="button"
                     onClick={onSearch}
                     disabled={isSearching || !searchQuery.trim()}
-                    className="ml-auto rounded-md bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-700 disabled:cursor-not-allowed text-xs font-medium px-3 py-1.5 text-black transition-colors min-w-[60px] flex items-center justify-center"
+                    className="ml-auto rounded-md bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-700 disabled:cursor-not-allowed text-xs font-medium px-3 py-1.5 text-black smooth-transition button-press glow-emerald-hover min-w-[60px] flex items-center justify-center"
                   >
                     {isSearching ? (
                       <div className="w-3 h-3 border-2 border-black border-t-transparent rounded-full animate-spin" />
@@ -167,10 +167,10 @@ export function ChatScreen({
                             setSelectedPeer(user);
                             onUserSelect(user);
                           }}
-                          className="w-full text-left rounded-md border border-emerald-700 px-3 py-2 bg-black/60 hover:bg-emerald-900/40 transition-colors active:scale-[0.98]"
+                          className="w-full text-left rounded-md border border-emerald-700 px-3 py-2 bg-black/60 hover:bg-emerald-900/40 smooth-transition button-press hover:border-emerald-600 hover:glow-emerald-hover"
                         >
                           <p className="font-medium text-emerald-300">{user.username}</p>
-                          <p className="text-[11px] text-emerald-500/80 break-all">{user.id}</p>
+                          <p className="text-[11px] text-emerald-500/80 break-all font-mono">{user.id}</p>
                         </button>
                       ))}
                     </div>
