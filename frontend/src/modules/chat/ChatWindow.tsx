@@ -451,7 +451,7 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 scrollbar-custom relative">
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 scrollbar-custom relative chat-scroll-area">
           {isLoading && (
             <div className="flex items-center justify-center py-8">
               <div className="flex flex-col items-center gap-3">

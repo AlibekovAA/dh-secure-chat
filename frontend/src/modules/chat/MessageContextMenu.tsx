@@ -13,8 +13,8 @@ type Props = {
   onClose: () => void;
 };
 
-const MENU_ESTIMATED_WIDTH = 180;
-const MENU_ESTIMATED_HEIGHT = 200;
+const MENU_ESTIMATED_WIDTH = 260;
+const MENU_ESTIMATED_HEIGHT = 140;
 
 export function MessageContextMenu({
   x,
@@ -29,126 +29,74 @@ export function MessageContextMenu({
   onClose,
 }: Props) {
   const menuRef = useRef<HTMLDivElement>(null);
-  const containerRef = useRef<HTMLElement | null>(null);
 
   const initialPosition = useMemo(() => {
-    const chatContainer = document.querySelector('[class*="overflow-y-auto"][class*="relative"]') as HTMLElement;
-    containerRef.current = chatContainer;
+    const chatContainer = document.querySelector('.chat-scroll-area') as HTMLElement | null;
+    const padding = 10;
+
+    let adjustedX = x;
+    let adjustedY = y;
 
     if (chatContainer) {
-      const containerRect = chatContainer.getBoundingClientRect();
-      const padding = 8;
+      const { width, height } = chatContainer.getBoundingClientRect();
 
-      let adjustedX = x;
-      let adjustedY = y;
-
-      if (adjustedX + MENU_ESTIMATED_WIDTH > containerRect.width - padding) {
-        adjustedX = containerRect.width - MENU_ESTIMATED_WIDTH - padding;
+      if (adjustedX + MENU_ESTIMATED_WIDTH > width - padding) {
+        adjustedX = width - MENU_ESTIMATED_WIDTH - padding;
       }
       if (adjustedX < padding) {
         adjustedX = padding;
       }
 
-      if (adjustedY + MENU_ESTIMATED_HEIGHT > containerRect.height - padding) {
-        adjustedY = containerRect.height - MENU_ESTIMATED_HEIGHT - padding;
+      if (adjustedY + MENU_ESTIMATED_HEIGHT > height - padding) {
+        adjustedY = height - MENU_ESTIMATED_HEIGHT - padding;
       }
       if (adjustedY < padding) {
         adjustedY = padding;
       }
-
-      return { x: adjustedX, y: adjustedY, isRelative: true };
-    } else {
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
-      const padding = 8;
-
-      let adjustedX = x;
-      let adjustedY = y;
-
-      if (x + MENU_ESTIMATED_WIDTH > viewportWidth - padding) {
-        adjustedX = viewportWidth - MENU_ESTIMATED_WIDTH - padding;
-      }
-      if (x < padding) {
-        adjustedX = padding;
-      }
-
-      if (y + MENU_ESTIMATED_HEIGHT > viewportHeight - padding) {
-        adjustedY = viewportHeight - MENU_ESTIMATED_HEIGHT - padding;
-      }
-      if (y < padding) {
-        adjustedY = padding;
-      }
-
-      return { x: adjustedX, y: adjustedY, isRelative: false };
     }
+
+    return { x: adjustedX, y: adjustedY };
   }, [x, y]);
 
   const [position, setPosition] = useState(() => ({ x: initialPosition.x, y: initialPosition.y }));
-  const [isRelativeToContainer, setIsRelativeToContainer] = useState(initialPosition.isRelative);
 
   useLayoutEffect(() => {
-    if (menuRef.current) {
-      const menuRect = menuRef.current.getBoundingClientRect();
-      const chatContainer = containerRef.current || menuRef.current.closest('[class*="overflow-y-auto"]') as HTMLElement;
+    if (!menuRef.current) {
+      return;
+    }
 
-      if (chatContainer) {
-        const containerRect = chatContainer.getBoundingClientRect();
-        const padding = 8;
+    const menuRect = menuRef.current.getBoundingClientRect();
+    const chatContainer = document.querySelector('.chat-scroll-area') as HTMLElement | null;
+    const padding = 10;
 
-        let adjustedX = x;
-        let adjustedY = y;
+    let adjustedX = x;
+    let adjustedY = y;
 
-        if (adjustedX + menuRect.width > containerRect.width - padding) {
-          adjustedX = containerRect.width - menuRect.width - padding;
-        }
-        if (adjustedX < padding) {
-          adjustedX = padding;
-        }
+    if (chatContainer) {
+      const { width, height } = chatContainer.getBoundingClientRect();
 
-        if (adjustedY + menuRect.height > containerRect.height - padding) {
-          adjustedY = containerRect.height - menuRect.height - padding;
-        }
-        if (adjustedY < padding) {
-          adjustedY = padding;
-        }
+      if (adjustedX + menuRect.width > width - padding) {
+        adjustedX = width - menuRect.width - padding;
+      }
+      if (adjustedX < padding) {
+        adjustedX = padding;
+      }
 
-        if (adjustedX !== position.x || adjustedY !== position.y) {
-          setPosition({ x: adjustedX, y: adjustedY });
-        }
-        if (!isRelativeToContainer) {
-          setIsRelativeToContainer(true);
-        }
-      } else {
-        const viewportWidth = window.innerWidth;
-        const viewportHeight = window.innerHeight;
-        const padding = 8;
-
-        let adjustedX = x;
-        let adjustedY = y;
-
-        if (x + menuRect.width > viewportWidth - padding) {
-          adjustedX = viewportWidth - menuRect.width - padding;
-        }
-        if (x < padding) {
-          adjustedX = padding;
-        }
-
-        if (y + menuRect.height > viewportHeight - padding) {
-          adjustedY = viewportHeight - menuRect.height - padding;
-        }
-        if (y < padding) {
-          adjustedY = padding;
-        }
-
-        if (adjustedX !== position.x || adjustedY !== position.y) {
-          setPosition({ x: adjustedX, y: adjustedY });
-        }
-        if (isRelativeToContainer) {
-          setIsRelativeToContainer(false);
-        }
+      if (adjustedY + menuRect.height > height - padding) {
+        adjustedY = height - menuRect.height - padding;
+      }
+      if (adjustedY < padding) {
+        adjustedY = padding;
       }
     }
-  }, [x, y, position.x, position.y, isRelativeToContainer]);
+
+    setPosition(current => {
+      if (current.x === adjustedX && current.y === adjustedY) {
+        return current;
+      }
+      return { x: adjustedX, y: adjustedY };
+    });
+  }, [x, y]);
 
   useLayoutEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -175,7 +123,7 @@ export function MessageContextMenu({
   return (
     <div
       ref={menuRef}
-      className={`z-50 bg-black/95 border border-emerald-500/40 rounded-lg shadow-lg py-1 min-w-[160px] ${isRelativeToContainer ? 'absolute' : 'fixed'}`}
+      className="z-[130] bg-black/95 border border-emerald-600/50 rounded-xl shadow-2xl py-2 px-3 min-w-[200px] absolute"
       style={{
         left: `${position.x}px`,
         top: `${position.y}px`

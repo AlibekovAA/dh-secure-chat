@@ -30,13 +30,14 @@ export function MessageBubble({
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-    const chatContainer = (e.currentTarget.closest('[class*="overflow-y-auto"]') as HTMLElement) || null;
+    const chatContainer = (e.currentTarget.closest('.chat-scroll-area') as HTMLElement) || null;
+    const bubbleRect = e.currentTarget.getBoundingClientRect();
 
     if (chatContainer) {
       const containerRect = chatContainer.getBoundingClientRect();
-      const x = e.clientX - containerRect.left;
-      const y = e.clientY - containerRect.top;
-      setContextMenu({ x, y });
+      const centerX = bubbleRect.left - containerRect.left + bubbleRect.width / 2;
+      const belowY = bubbleRect.bottom - containerRect.top + 8;
+      setContextMenu({ x: centerX, y: belowY });
     } else {
       setContextMenu({ x: e.clientX, y: e.clientY });
     }
@@ -50,12 +51,8 @@ export function MessageBubble({
 
   const handleReact = () => {
     if (contextMenu) {
-      const chatContainer = document.querySelector('[class*="overflow-y-auto"][class*="relative"]') as HTMLElement;
-      if (chatContainer) {
-        setEmojiPicker({ x: contextMenu.x, y: contextMenu.y - 220 });
-      } else {
-        setEmojiPicker({ x: contextMenu.x, y: contextMenu.y - 220 });
-      }
+      setEmojiPicker({ x: contextMenu.x, y: contextMenu.y });
+      setContextMenu(null);
     }
   };
 
@@ -102,7 +99,7 @@ export function MessageBubble({
             message.isOwn
               ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-50 hover:bg-emerald-500/25 hover:border-emerald-500/50'
               : 'bg-emerald-900/20 border border-emerald-700/40 text-emerald-100 hover:bg-emerald-900/25 hover:border-emerald-700/50'
-          }`}
+          } ${contextMenu ? 'relative z-[120] scale-[1.02] shadow-2xl shadow-emerald-900/40' : ''}`}
           style={{ willChange: 'background-color, border-color' }}
           onContextMenu={handleContextMenu}
           data-message-id={message.id}
@@ -200,18 +197,24 @@ export function MessageBubble({
       </div>
 
       {contextMenu && (
-        <MessageContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          isOwn={message.isOwn}
-          canEdit={false}
-          onCopy={handleCopy}
-          onReact={handleReact}
-          onReply={onReply ? () => onReply(message) : undefined}
-          onDeleteForMe={message.isOwn ? () => onDelete?.(message.id, 'me') : undefined}
-          onDeleteForAll={message.isOwn ? () => onDelete?.(message.id, 'all') : undefined}
-          onClose={() => setContextMenu(null)}
-        />
+        <>
+          <div
+            className="fixed inset-0 bg-black/40 backdrop-blur-[0.5px] z-40 animate-[fadeIn_0.15s_ease-out]"
+            onClick={() => setContextMenu(null)}
+          />
+          <MessageContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            isOwn={message.isOwn}
+            canEdit={false}
+            onCopy={handleCopy}
+            onReact={handleReact}
+            onReply={onReply ? () => onReply(message) : undefined}
+            onDeleteForMe={message.isOwn ? () => onDelete?.(message.id, 'me') : undefined}
+            onDeleteForAll={message.isOwn ? () => onDelete?.(message.id, 'all') : undefined}
+            onClose={() => setContextMenu(null)}
+          />
+        </>
       )}
 
       {emojiPicker && (

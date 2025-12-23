@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"gopkg.in/natefinch/lumberjack.v2"
 )
@@ -40,6 +42,8 @@ type Logger struct {
 	out         *log.Logger
 	serviceName string
 	mu          sync.RWMutex
+	sampler     *rand.Rand
+	samplerMu   sync.Mutex
 }
 
 var (
@@ -53,6 +57,7 @@ func GetInstance() *Logger {
 			level:       INFO,
 			out:         log.New(os.Stderr, "", log.LstdFlags|log.Lshortfile),
 			serviceName: "",
+			sampler:     rand.New(rand.NewSource(time.Now().UnixNano())),
 		}
 	})
 	return instance
@@ -85,6 +90,7 @@ func (l *Logger) Initialize(logDir, serviceName, level string) error {
 
 	l.level = parseLevel(level)
 	l.serviceName = serviceName
+	l.sampler = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	return nil
 }
@@ -151,7 +157,12 @@ func (l *Logger) logWithFields(level LogLevel, ctx context.Context, msg string, 
 	l.out.Output(0, fmt.Sprintf("%s %s:%d %s", prefix, file, line, msg))
 }
 
-func (l *Logger) Debug(msg string)    { l.log(DEBUG, msg) }
+func (l *Logger) Debug(msg string) { l.log(DEBUG, msg) }
+func (l *Logger) DebugSampled(prob float64, msg string) {
+	if l.sample(prob) {
+		l.log(DEBUG, msg)
+	}
+}
 func (l *Logger) Info(msg string)     { l.log(INFO, msg) }
 func (l *Logger) Warn(msg string)     { l.log(WARNING, msg) }
 func (l *Logger) Error(msg string)    { l.log(ERROR, msg) }
@@ -201,7 +212,12 @@ type Entry struct {
 	fields Fields
 }
 
-func (e *Entry) Debug(msg string)    { e.logger.logWithFields(DEBUG, e.ctx, msg, e.fields) }
+func (e *Entry) Debug(msg string) { e.logger.logWithFields(DEBUG, e.ctx, msg, e.fields) }
+func (e *Entry) DebugSampled(prob float64, msg string) {
+	if e.logger.sample(prob) {
+		e.logger.logWithFields(DEBUG, e.ctx, msg, e.fields)
+	}
+}
 func (e *Entry) Info(msg string)     { e.logger.logWithFields(INFO, e.ctx, msg, e.fields) }
 func (e *Entry) Warn(msg string)     { e.logger.logWithFields(WARNING, e.ctx, msg, e.fields) }
 func (e *Entry) Error(msg string)    { e.logger.logWithFields(ERROR, e.ctx, msg, e.fields) }
@@ -243,4 +259,16 @@ func parseLevel(value string) LogLevel {
 	default:
 		return INFO
 	}
+}
+
+func (l *Logger) sample(prob float64) bool {
+	if prob <= 0 {
+		return false
+	}
+	if prob >= 1 {
+		return true
+	}
+	l.samplerMu.Lock()
+	defer l.samplerMu.Unlock()
+	return l.sampler.Float64() < prob
 }

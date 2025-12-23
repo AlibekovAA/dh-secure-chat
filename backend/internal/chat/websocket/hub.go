@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -14,36 +15,27 @@ import (
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 	prommetrics "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/prometheus"
-	userdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
 	userrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/repository"
 )
 
+var audioMimePattern = regexp.MustCompile(`^(audio/(webm|ogg|mpeg|mp4|wav|x-m4a))`)
+
+const sendTimeout = 2 * time.Second
+const debugSampleRate = 0.01
+
 func isValidAudioMimeType(mimeType string) bool {
-	validTypes := []string{
-		"audio/webm",
-		"audio/ogg",
-		"audio/mpeg",
-		"audio/mp4",
-		"audio/wav",
-		"audio/x-m4a",
-	}
-	for _, validType := range validTypes {
-		if len(mimeType) >= len(validType) && mimeType[:len(validType)] == validType {
-			return true
-		}
-	}
-	return false
+	return audioMimePattern.MatchString(mimeType)
 }
 
 type Hub struct {
 	clients                sync.Map
 	register               chan *Client
 	unregister             chan *Client
-	lastSeenUpdates        sync.Map
 	clientCount            atomic.Int64
 	log                    *logger.Logger
 	userRepo               userrepo.Repository
 	lastSeenUpdateInterval time.Duration
+	lastSeenUpdater        *LastSeenUpdater
 	processor              *MessageProcessor
 	fileTracker            transfer.Tracker
 	circuitBreaker         *CircuitBreaker
@@ -86,6 +78,8 @@ func NewHub(log *logger.Logger, userRepo userrepo.Repository, config HubConfig) 
 	router := NewMessageRouter(hub, validator, log)
 
 	hub.processor = NewMessageProcessor(config.ProcessorWorkers, router, log, config.ProcessorQueueSize)
+
+	hub.lastSeenUpdater = NewLastSeenUpdater(ctx, userRepo, log, config.LastSeenUpdateInterval, hub.circuitBreaker)
 
 	go hub.fileTrackerCleanup()
 
@@ -207,69 +201,32 @@ func (h *Hub) SendToUserWithContext(ctx context.Context, userID string, message 
 		}).Errorf("websocket marshal error: %v", err)
 		return fmt.Errorf("marshal error: %w", err)
 	}
-	if h.sendWithRetry(client.send, messageBytes, userID, string(message.Type), ctx) {
-		h.log.WithFields(ctx, logger.Fields{
-			"user_id": userID,
-			"action":  "ws_send",
-			"type":    string(message.Type),
-		}).Info("message sent")
-		return nil
-	}
-	return fmt.Errorf("failed to send message to user %s", userID)
-}
-
-func (h *Hub) sendWithRetry(sendChan chan []byte, messageBytes []byte, userID, messageType string, ctx context.Context) bool {
-	const maxRetries = 3
-	const baseDelay = 10 * time.Millisecond
-	const maxDelay = 100 * time.Millisecond
-
-	select {
-	case sendChan <- messageBytes:
-		return true
-	default:
-		h.log.WithFields(ctx, logger.Fields{
-			"user_id": userID,
-			"action":  "ws_send_retry",
-			"type":    messageType,
-		}).Warn("websocket send buffer full, attempting retry")
-	}
-
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		select {
-		case <-sendChan:
-			select {
-			case sendChan <- messageBytes:
-				return true
-			default:
-				delay := baseDelay * (1 << attempt)
-				if delay > maxDelay {
-					delay = maxDelay
-				}
-				time.Sleep(delay)
-			}
-		default:
-			delay := baseDelay * (1 << attempt)
-			if delay > maxDelay {
-				delay = maxDelay
-			}
-			time.Sleep(delay)
-
-			select {
-			case sendChan <- messageBytes:
-				return true
-			default:
-				continue
-			}
-		}
+	if err := h.sendWithTimeout(client.send, messageBytes, userID, string(message.Type), ctx); err != nil {
+		return err
 	}
 
 	h.log.WithFields(ctx, logger.Fields{
 		"user_id": userID,
-		"action":  "ws_send_failed",
-		"type":    messageType,
-		"retries": maxRetries,
-	}).Warnf("websocket failed to send after %d retries", maxRetries)
-	return false
+		"action":  "ws_send",
+		"type":    string(message.Type),
+	}).Info("message sent")
+	return nil
+}
+
+func (h *Hub) sendWithTimeout(sendChan chan []byte, messageBytes []byte, userID, messageType string, ctx context.Context) error {
+	sendCtx, cancel := context.WithTimeout(ctx, sendTimeout)
+	defer cancel()
+	select {
+	case sendChan <- messageBytes:
+		return nil
+	case <-sendCtx.Done():
+		h.log.WithFields(ctx, logger.Fields{
+			"user_id": userID,
+			"action":  "ws_send_timeout",
+			"type":    messageType,
+		}).Warn("websocket send timed out")
+		return fmt.Errorf("send timeout: %w", sendCtx.Err())
+	}
 }
 
 func (h *Hub) IsUserOnline(userID string) bool {
@@ -350,7 +307,7 @@ func (h *Hub) forwardMessage(ctx context.Context, msg *WSMessage, payload payloa
 		"to":     to,
 		"type":   string(msg.Type),
 		"action": "ws_message_forwarded",
-	}).Debug("websocket message forwarded")
+	}).DebugSampled(debugSampleRate, "websocket message forwarded")
 	return true
 }
 
@@ -480,31 +437,9 @@ func (h *Hub) sendPeerOffline(ctx context.Context, fromUserID, peerID string) er
 }
 
 func (h *Hub) updateLastSeenDebounced(userID string) {
-	now := time.Now()
-	value, exists := h.lastSeenUpdates.Load(userID)
-	if exists {
-		lastUpdate := value.(time.Time)
-		if now.Sub(lastUpdate) < h.lastSeenUpdateInterval {
-			return
-		}
+	if h.lastSeenUpdater != nil {
+		h.lastSeenUpdater.Enqueue(userID)
 	}
-	h.lastSeenUpdates.Store(userID, now)
-
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		err := h.circuitBreaker.Call(ctx, func(ctx context.Context) error {
-			return h.userRepo.UpdateLastSeen(ctx, userdomain.ID(userID))
-		})
-
-		if err != nil && !errors.Is(err, commonerrors.ErrCircuitOpen) {
-			h.log.WithFields(ctx, logger.Fields{
-				"user_id": userID,
-				"action":  "ws_update_last_seen",
-			}).Warnf("websocket failed to update last_seen: %v", err)
-		}
-	}()
 }
 
 func (h *Hub) trackFileTransfer(payload FileStartPayload) {
@@ -624,6 +559,9 @@ func (h *Hub) fileTrackerCleanup() {
 
 func (h *Hub) Shutdown() {
 	h.cancel()
+	if h.lastSeenUpdater != nil {
+		h.lastSeenUpdater.Stop()
+	}
 	h.processor.Shutdown()
 	h.shutdown()
 }

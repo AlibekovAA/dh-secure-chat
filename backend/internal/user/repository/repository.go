@@ -20,6 +20,7 @@ type Repository interface {
 	FindByID(ctx context.Context, id domain.ID) (domain.User, error)
 	SearchByUsername(ctx context.Context, query string, limit int) ([]domain.Summary, error)
 	UpdateLastSeen(ctx context.Context, userID domain.ID) error
+	UpdateLastSeenBatch(ctx context.Context, userIDs []domain.ID) error
 	Delete(ctx context.Context, id domain.ID) error
 }
 
@@ -127,6 +128,22 @@ func (r *PgRepository) UpdateLastSeen(ctx context.Context, userID domain.ID) err
 		string(userID),
 	)
 	return db.HandleExecError(err, "update last_seen_at", start)
+}
+
+func (r *PgRepository) UpdateLastSeenBatch(ctx context.Context, userIDs []domain.ID) error {
+	start := time.Now()
+
+	ids := make([]string, 0, len(userIDs))
+	for _, id := range userIDs {
+		ids = append(ids, string(id))
+	}
+
+	_, err := r.pool.Exec(
+		ctx,
+		`UPDATE users SET last_seen_at = NOW() WHERE id = ANY($1)`,
+		ids,
+	)
+	return db.HandleExecError(err, "batch update last_seen_at", start)
 }
 
 func (r *PgRepository) Delete(ctx context.Context, id domain.ID) error {

@@ -17,7 +17,6 @@ import (
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/config"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/db"
 	commonhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/http"
-	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/httpmetrics"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/jwtverify"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 	srv "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/server"
@@ -106,14 +105,7 @@ func main() {
 	restMux.Handle("/api/chat/users/", jwtMw(handler))
 	restMux.Handle("/api/identity/", jwtMw(identityHandler))
 
-	metrics := httpmetrics.New("chat")
-	recovery := commonhttp.RecoveryMiddleware(log)
-	traceID := commonhttp.TraceIDMiddleware
-	maxRequestSize := commonhttp.MaxRequestSizeMiddleware(commonhttp.DefaultMaxRequestSize)
-	securityHeaders := commonhttp.SecurityHeadersMiddleware
-	csp := commonhttp.ContentSecurityPolicyMiddleware("")
-
-	wrappedRestMux := securityHeaders(csp(recovery(traceID(maxRequestSize(metrics.Wrap(restMux))))))
+	wrappedRestMux := commonhttp.BuildBaseHandler("chat", log, restMux)
 
 	mainMux := http.NewServeMux()
 	mainMux.Handle("/ws/", handler)

@@ -1,4 +1,4 @@
-import { useRef, useLayoutEffect, useState, useMemo } from 'react';
+import { useRef, useLayoutEffect, useState, useMemo, useCallback } from 'react';
 
 const EMOJI_LIST = [
   '👍',
@@ -11,7 +11,6 @@ const EMOJI_LIST = [
   '👏',
   '🎉',
   '💯',
-  '😊',
   '😍',
   '🤔',
   '👎',
@@ -20,8 +19,9 @@ const EMOJI_LIST = [
   '💪',
 ];
 
-const PICKER_ESTIMATED_WIDTH = 240;
-const PICKER_ESTIMATED_HEIGHT = 220;
+const PICKER_ESTIMATED_WIDTH = 220;
+const PICKER_ESTIMATED_HEIGHT = 120;
+const PAGE_SIZE = 4;
 
 type Props = {
   x: number;
@@ -32,132 +32,93 @@ type Props = {
 
 export function EmojiPicker({ x, y, onSelect, onClose }: Props) {
   const pickerRef = useRef<HTMLDivElement>(null);
-  const containerRef = useRef<HTMLElement | null>(null);
 
   const initialPosition = useMemo(() => {
-    const chatContainer = document.querySelector('[class*="overflow-y-auto"][class*="relative"]') as HTMLElement;
-    containerRef.current = chatContainer;
+    const chatContainer = document.querySelector('.chat-scroll-area') as HTMLElement | null;
+    const padding = 10;
+
+    let adjustedX = x;
+    let adjustedY = y;
 
     if (chatContainer) {
-      const containerRect = chatContainer.getBoundingClientRect();
-      const padding = 8;
+      const { width, height } = chatContainer.getBoundingClientRect();
 
-      let adjustedX = x;
-      let adjustedY = y;
-
-      if (adjustedX + PICKER_ESTIMATED_WIDTH > containerRect.width - padding) {
-        adjustedX = containerRect.width - PICKER_ESTIMATED_WIDTH - padding;
+      if (adjustedX + PICKER_ESTIMATED_WIDTH > width - padding) {
+        adjustedX = width - PICKER_ESTIMATED_WIDTH - padding;
       }
       if (adjustedX < padding) {
         adjustedX = padding;
       }
 
-      if (adjustedY + PICKER_ESTIMATED_HEIGHT > containerRect.height - padding) {
-        adjustedY = containerRect.height - PICKER_ESTIMATED_HEIGHT - padding;
+      if (adjustedY + PICKER_ESTIMATED_HEIGHT > height - padding) {
+        adjustedY = height - PICKER_ESTIMATED_HEIGHT - padding;
       }
       if (adjustedY < padding) {
         adjustedY = padding;
       }
-
-      return { x: adjustedX, y: adjustedY, isRelative: true };
-    } else {
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
-      const padding = 8;
-
-      let adjustedX = x;
-      let adjustedY = y;
-
-      if (x + PICKER_ESTIMATED_WIDTH > viewportWidth - padding) {
-        adjustedX = viewportWidth - PICKER_ESTIMATED_WIDTH - padding;
-      }
-      if (x < padding) {
-        adjustedX = padding;
-      }
-
-      if (y + PICKER_ESTIMATED_HEIGHT > viewportHeight - padding) {
-        adjustedY = viewportHeight - PICKER_ESTIMATED_HEIGHT - padding;
-      }
-      if (y < padding) {
-        adjustedY = padding;
-      }
-
-      return { x: adjustedX, y: adjustedY, isRelative: false };
     }
+
+    return { x: adjustedX, y: adjustedY };
   }, [x, y]);
 
   const [position, setPosition] = useState(initialPosition);
-  const [isRelativeToContainer, setIsRelativeToContainer] = useState(initialPosition.isRelative);
+  const [startIndex, setStartIndex] = useState(0);
+
+  const visibleEmojis = useMemo(
+    () => EMOJI_LIST.slice(startIndex, startIndex + PAGE_SIZE),
+    [startIndex],
+  );
+
+  const canPrev = startIndex > 0;
+  const canNext = startIndex + PAGE_SIZE < EMOJI_LIST.length;
+
+  const handlePrev = useCallback(() => {
+    setStartIndex((prev) => Math.max(0, prev - PAGE_SIZE));
+  }, []);
+
+  const handleNext = useCallback(() => {
+    setStartIndex((prev) => {
+      const next = prev + PAGE_SIZE;
+      if (next >= EMOJI_LIST.length) {
+        return prev;
+      }
+      return next;
+    });
+  }, []);
 
   useLayoutEffect(() => {
     if (!pickerRef.current) return;
 
     const pickerRect = pickerRef.current.getBoundingClientRect();
-    const chatContainer = containerRef.current || pickerRef.current.closest('[class*="overflow-y-auto"]') as HTMLElement;
+    const chatContainer = document.querySelector('.chat-scroll-area') as HTMLElement | null;
+    const padding = 10;
 
-    let adjustedX: number;
-    let adjustedY: number;
-    let shouldBeRelative: boolean;
+    let adjustedX = x;
+    let adjustedY = y;
 
     if (chatContainer) {
-      const containerRect = chatContainer.getBoundingClientRect();
-      const padding = 8;
+      const { width, height } = chatContainer.getBoundingClientRect();
 
-      adjustedX = x;
-      adjustedY = y;
-
-      if (adjustedX + pickerRect.width > containerRect.width - padding) {
-        adjustedX = containerRect.width - pickerRect.width - padding;
+      if (adjustedX + pickerRect.width > width - padding) {
+        adjustedX = width - pickerRect.width - padding;
       }
       if (adjustedX < padding) {
         adjustedX = padding;
       }
 
-      if (adjustedY + pickerRect.height > containerRect.height - padding) {
-        adjustedY = containerRect.height - pickerRect.height - padding;
+      if (adjustedY + pickerRect.height > height - padding) {
+        adjustedY = height - pickerRect.height - padding;
       }
       if (adjustedY < padding) {
         adjustedY = padding;
       }
-
-      shouldBeRelative = true;
-    } else {
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
-      const padding = 8;
-
-      adjustedX = x;
-      adjustedY = y;
-
-      if (x + pickerRect.width > viewportWidth - padding) {
-        adjustedX = viewportWidth - pickerRect.width - padding;
-      }
-      if (x < padding) {
-        adjustedX = padding;
-      }
-
-      if (y + pickerRect.height > viewportHeight - padding) {
-        adjustedY = viewportHeight - pickerRect.height - padding;
-      }
-      if (y < padding) {
-        adjustedY = padding;
-      }
-
-      shouldBeRelative = false;
     }
 
     setPosition((prevPosition) => {
-      if (prevPosition.x === adjustedX && prevPosition.y === adjustedY && prevPosition.isRelative === shouldBeRelative) {
+      if (prevPosition.x === adjustedX && prevPosition.y === adjustedY) {
         return prevPosition;
       }
-      return { x: adjustedX, y: adjustedY, isRelative: shouldBeRelative };
-    });
-
-    setIsRelativeToContainer((prev) => {
-      if (prev !== shouldBeRelative) {
-        return shouldBeRelative;
-      }
-      return prev;
+      return { x: adjustedX, y: adjustedY };
     });
   }, [x, y]);
 
@@ -186,25 +147,45 @@ export function EmojiPicker({ x, y, onSelect, onClose }: Props) {
   return (
     <div
       ref={pickerRef}
-      className={`z-50 bg-black/95 border border-emerald-500/40 rounded-lg shadow-lg p-2 grid grid-cols-5 gap-1 ${isRelativeToContainer ? 'absolute' : 'fixed'}`}
+      className="z-[140] bg-black/95 border border-emerald-600/50 rounded-lg shadow-xl px-2 py-2 absolute"
       style={{
         left: `${position.x}px`,
         top: `${position.y}px`
       }}
       onClick={(e) => e.stopPropagation()}
     >
-      {EMOJI_LIST.map((emoji) => (
+      <div className="flex items-center gap-1">
         <button
-          key={emoji}
-          onClick={() => {
-            onSelect(emoji);
-            onClose();
-          }}
-          className="w-10 h-10 flex items-center justify-center text-xl hover:bg-emerald-500/20 rounded transition-colors"
+          type="button"
+          onClick={handlePrev}
+          disabled={!canPrev}
+          className="w-8 h-9 rounded-md bg-emerald-950/40 border border-emerald-700/60 text-emerald-300 hover:bg-emerald-900/60 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center text-sm"
         >
-          {emoji}
+          ←
         </button>
-      ))}
+        <div className="flex gap-1">
+          {visibleEmojis.map((emoji) => (
+            <button
+              key={emoji}
+              onClick={() => {
+                onSelect(emoji);
+                onClose();
+              }}
+              className="w-12 h-12 flex items-center justify-center text-xl hover:bg-emerald-500/20 rounded-md transition-colors"
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={handleNext}
+          disabled={!canNext}
+          className="w-8 h-9 rounded-md bg-emerald-950/40 border border-emerald-700/60 text-emerald-300 hover:bg-emerald-900/60 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center text-sm"
+        >
+          →
+        </button>
+      </div>
     </div>
   );
 }

@@ -16,7 +16,6 @@ import (
 	commoncrypto "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/crypto"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/db"
 	commonhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/http"
-	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/httpmetrics"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 	srv "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/server"
 	identityrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/repository"
@@ -72,14 +71,7 @@ func main() {
 	mux.Handle("/metrics", promhttp.Handler())
 
 	rateLimiter := commonhttp.NewStrictRateLimiter()
-	metrics := httpmetrics.New("auth")
-	recovery := commonhttp.RecoveryMiddleware(log)
-	traceID := commonhttp.TraceIDMiddleware
-	maxRequestSize := commonhttp.MaxRequestSizeMiddleware(commonhttp.DefaultMaxRequestSize)
-	securityHeaders := commonhttp.SecurityHeadersMiddleware
-	csp := commonhttp.ContentSecurityPolicyMiddleware("")
-
-	baseHandler := securityHeaders(csp(recovery(traceID(maxRequestSize(metrics.Wrap(mux))))))
+	baseHandler := commonhttp.BuildBaseHandler("auth", log, mux)
 
 	muxWithRateLimit := http.NewServeMux()
 	muxWithRateLimit.HandleFunc("/api/auth/login", rateLimiter.MiddlewareForPath("/api/auth/login")(baseHandler).ServeHTTP)
