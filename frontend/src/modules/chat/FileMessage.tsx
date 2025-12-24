@@ -1,16 +1,13 @@
-import { useState, useMemo, useEffect } from 'react';
-
 type Props = {
   filename: string;
   mimeType: string;
   size: number;
   blob?: Blob;
   isOwn: boolean;
+  accessMode?: 'download_only' | 'view_only' | 'both';
   onDownloadStateChange?: (active: boolean) => void;
+  onView?: () => void;
 };
-
-const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-const MAX_PREVIEW_SIZE = 5 * 1024 * 1024;
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -34,24 +31,12 @@ export function FileMessage({
   size,
   blob,
   isOwn,
+  accessMode = 'both',
   onDownloadStateChange,
+  onView,
 }: Props) {
-  const [imageError, setImageError] = useState(false);
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-
-  const isImage = useMemo(() => IMAGE_TYPES.includes(mimeType), [mimeType]);
-  const canPreview = useMemo(
-    () => isImage && blob && size <= MAX_PREVIEW_SIZE,
-    [isImage, blob, size],
-  );
-
-  useEffect(() => {
-    if (canPreview && blob && !imageUrl) {
-      const url = URL.createObjectURL(blob);
-      setImageUrl(url);
-      return () => URL.revokeObjectURL(url);
-    }
-  }, [canPreview, blob, imageUrl]);
+  const canDownload = isOwn || accessMode === 'download_only' || accessMode === 'both';
+  const canView = isOwn || accessMode === 'view_only' || accessMode === 'both';
 
   const handleDownload = () => {
     if (!blob) return;
@@ -72,22 +57,8 @@ export function FileMessage({
   };
 
   return (
-    <div className="space-y-2">
-      {canPreview && imageUrl && !imageError ? (
-        <div className="rounded-lg overflow-hidden border border-emerald-700/40 max-w-full bg-black/40">
-          <img
-            src={imageUrl}
-            alt={filename}
-            className="max-w-full max-h-64 object-contain"
-            onError={(e) => {
-              const img = e.currentTarget;
-              if (img.src && img.src.startsWith('blob:')) {
-                setImageError(true);
-              }
-            }}
-          />
-        </div>
-      ) : (
+    <>
+      <div className="space-y-2">
         <div
           className={`flex items-center gap-3 p-3 rounded-lg border ${
             isOwn
@@ -109,64 +80,64 @@ export function FileMessage({
             </p>
           </div>
         </div>
-      )}
 
-      {!canPreview && (
-        <div className="flex items-center justify-between">
-          <p className="text-xs text-emerald-500/60 truncate flex-1 mr-2">
-            {filename}
-          </p>
-          {blob && (
-            <button
-              type="button"
-              onClick={handleDownload}
-              className="text-xs text-emerald-400 hover:text-emerald-200 transition-colors flex items-center gap-1 flex-shrink-0"
-              title="Скачать файл"
-            >
-              <svg
-                className="w-3.5 h-3.5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+        {blob && (
+          <div className="flex items-center justify-end gap-2">
+            {canView && (
+              <button
+                type="button"
+                onClick={onView}
+                className="text-xs text-emerald-400 hover:text-emerald-200 transition-colors flex items-center gap-1 px-2 py-1 rounded bg-emerald-900/20 hover:bg-emerald-900/40 border border-emerald-700/40"
+                title="Просмотреть файл"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                />
-              </svg>
-              Скачать
-            </button>
-          )}
-        </div>
-      )}
-
-      {canPreview && blob && (
-        <div className="flex items-center justify-end mt-2">
-          <button
-            type="button"
-            onClick={handleDownload}
-            className="text-xs text-emerald-400 hover:text-emerald-200 transition-colors flex items-center gap-1"
-            title="Скачать изображение"
-          >
-            <svg
-              className="w-3.5 h-3.5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-              />
-            </svg>
-            Скачать
-          </button>
-        </div>
-      )}
-    </div>
+                <svg
+                  className="w-3.5 h-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                  />
+                </svg>
+                Просмотреть
+              </button>
+            )}
+            {canDownload && (
+              <button
+                type="button"
+                onClick={handleDownload}
+                className="text-xs text-emerald-400 hover:text-emerald-200 transition-colors flex items-center gap-1 px-2 py-1 rounded bg-emerald-900/20 hover:bg-emerald-900/40 border border-emerald-700/40"
+                title="Скачать файл"
+              >
+                <svg
+                  className="w-3.5 h-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                  />
+                </svg>
+                Скачать
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </>
   );
 }

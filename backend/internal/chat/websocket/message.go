@@ -85,6 +85,7 @@ type FileStartPayload struct {
 	TotalSize   int64  `json:"total_size"`
 	TotalChunks int    `json:"total_chunks"`
 	ChunkSize   int    `json:"chunk_size"`
+	AccessMode  string `json:"access_mode,omitempty"`
 }
 
 type FileChunkPayload struct {

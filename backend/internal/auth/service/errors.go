@@ -42,8 +42,4 @@ var (
 		Code:    "REFRESH_TOKEN_EXPIRED",
 		Message: "refresh token expired",
 	}
-	ErrTooManyRefreshTokens = &AuthError{
-		Code:    "TOO_MANY_REFRESH_TOKENS",
-		Message: "too many active refresh tokens",
-	}
 )

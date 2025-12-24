@@ -7,7 +7,6 @@ type EventHandlers = {
   onStateChange?: (state: ConnectionState) => void;
   onMessage?: MessageHandler;
   onError?: (error: Error) => void;
-  onMissingSequence?: (expected: number, received: number) => void;
 };
 
 export class WebSocketClient {
@@ -28,9 +27,7 @@ export class WebSocketClient {
     const host = window.location.host;
     this.url = `${protocol}//${host}/ws/`;
     this.handlers = handlers;
-    this.sequenceManager = new SequenceManager({
-      onMissingSequence: handlers.onMissingSequence,
-    });
+    this.sequenceManager = new SequenceManager();
   }
 
   connect(): void {

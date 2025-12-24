@@ -68,6 +68,7 @@ export type ChatMessage = {
     mimeType: string;
     size: number;
     blob?: Blob;
+    accessMode?: 'download_only' | 'view_only' | 'both';
   };
   voice?: {
     filename: string;
@@ -87,6 +88,7 @@ export type ChatMessage = {
     hasFile?: boolean;
     hasVoice?: boolean;
     isOwn?: boolean;
+    isDeleted?: boolean;
   };
 };
 
@@ -157,7 +159,9 @@ export function useChatSession({
     pending.retries++;
     if (pending.retries >= MAX_RETRIES) {
       pendingAcksRef.current.delete(messageId);
-      setError('Не удалось доставить ключ. Попробуйте переподключиться.');
+      setError(
+        'Не удалось доставить ключ шифрования. Попробуйте переподключиться к чату.',
+      );
       setState('error');
       return;
     }
@@ -218,7 +222,9 @@ export function useChatSession({
         );
 
         if (!isValid) {
-          setError('Ошибка проверки подписи ключа');
+          setError(
+            'Ошибка проверки подписи ключа. Возможна попытка атаки. Переподключитесь.',
+          );
           setState('error');
           return;
         }
@@ -261,7 +267,9 @@ export function useChatSession({
           setError(null);
         }
       } catch (err) {
-        setError('Ошибка установки сессии');
+        setError(
+          'Не удалось установить защищенную сессию. Попробуйте переподключиться.',
+        );
         setState('error');
       }
     },
@@ -290,6 +298,7 @@ export function useChatSession({
               hasFile: !!target.file,
               hasVoice: !!target.voice,
               isOwn: target.isOwn,
+              isDeleted: target.isDeleted,
             };
           }
         }
@@ -307,7 +316,9 @@ export function useChatSession({
         return [...prev, newMessage];
       });
     } catch (err) {
-      setError('Ошибка расшифровки сообщения');
+      setError(
+        'Не удалось расшифровать сообщение. Возможно, сессия была прервана.',
+      );
     }
   }, []);
 
@@ -389,6 +400,7 @@ export function useChatSession({
                 mimeType,
                 size: metadata.total_size,
                 blob,
+                accessMode: metadata.access_mode || 'both',
               },
             }),
         timestamp: Date.now(),
@@ -398,7 +410,7 @@ export function useChatSession({
       setMessages((prev) => [...prev, newMessage]);
       fileBuffersRef.current.delete(fileId);
     } catch (err) {
-      setError('Ошибка расшифровки файла');
+      setError('Не удалось расшифровать файл. Возможно, сессия была прервана.');
       fileBuffersRef.current.delete(fileId);
     }
   }, []);
@@ -459,7 +471,9 @@ export function useChatSession({
               pendingAcksRef.current.clear();
 
               setState('peer_offline');
-              setError('Собеседник не в сети');
+              setError(
+                'Собеседник не в сети. Сообщение не может быть доставлено.',
+              );
             }
             break;
           }
@@ -589,7 +603,8 @@ export function useChatSession({
                         ...msg,
                         replyTo: {
                           ...msg.replyTo,
-                          text: 'Сообщение удалено',
+                          isDeleted: true,
+                          text: undefined,
                           hasFile: false,
                           hasVoice: false,
                         },
@@ -643,7 +658,9 @@ export function useChatSession({
       if (!myIdentityPrivateKeyRef.current) {
         const identityKey = await loadIdentityPrivateKey();
         if (!identityKey) {
-          setError('Не найден приватный ключ');
+          setError(
+            'Не найден приватный ключ. Пожалуйста, перезайдите в систему.',
+          );
           setState('error');
           return;
         }
@@ -702,7 +719,9 @@ export function useChatSession({
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : 'Ошибка установки сессии';
-      setError(`Ошибка установки сессии: ${errorMessage}`);
+      setError(
+        `Ошибка установки защищенной сессии: ${errorMessage}. Попробуйте переподключиться.`,
+      );
       setState('error');
     }
   }, [token, peerId, isConnected, send, sendWithAck]);
@@ -760,6 +779,7 @@ export function useChatSession({
                 hasFile: !!target.file,
                 hasVoice: !!target.voice,
                 isOwn: target.isOwn,
+                isDeleted: target.isDeleted,
               };
             }
           }
@@ -775,31 +795,41 @@ export function useChatSession({
           return [...prev, newMessage];
         });
       } catch (err) {
-        setError('Ошибка отправки сообщения');
+        setError(
+          'Не удалось отправить сообщение. Проверьте соединение и попробуйте снова.',
+        );
       }
     },
     [peerId, isConnected, state, send],
   );
 
   const sendFile = useCallback(
-    async (file: File, voiceDuration?: number) => {
+    async (
+      file: File,
+      accessMode: 'download_only' | 'view_only' | 'both' = 'both',
+      voiceDuration?: number,
+    ) => {
       if (
         !sessionKeyRef.current ||
         !peerId ||
         !isConnected ||
         state !== 'active'
       ) {
-        setError('Не удалось отправить файл: сессия не активна');
+        setError(
+          'Не удалось отправить файл: защищенная сессия не активна. Дождитесь установки соединения.',
+        );
         return;
       }
 
       if (file.size > MAX_FILE_SIZE) {
-        setError('Файл слишком большой (максимум 50MB)');
+        setError(
+          'Файл слишком большой. Максимальный размер: 50MB. Выберите файл меньшего размера.',
+        );
         return;
       }
 
       if (file.size === 0) {
-        setError('Файл пустой');
+        setError('Файл пустой. Выберите файл с содержимым.');
         return;
       }
 
@@ -821,8 +851,8 @@ export function useChatSession({
             `Ошибка шифрования файла: ${
               encryptError instanceof Error
                 ? encryptError.message
-                : 'Неизвестная ошибка'
-            }`,
+                : 'неизвестная ошибка'
+            }. Попробуйте выбрать другой файл.`,
           );
           return;
         }
@@ -841,6 +871,7 @@ export function useChatSession({
             total_size: totalSize,
             total_chunks: totalChunks,
             chunk_size: chunkSize,
+            access_mode: accessMode,
           },
         });
 
@@ -895,6 +926,7 @@ export function useChatSession({
                   mimeType,
                   size: file.size,
                   blob: blobClone,
+                  accessMode,
                 },
               }),
           timestamp: Date.now(),
@@ -905,7 +937,9 @@ export function useChatSession({
       } catch (err) {
         const errorMsg =
           err instanceof Error ? err.message : 'Ошибка отправки файла';
-        setError(`Не удалось отправить файл: ${errorMsg}`);
+        setError(
+          `Не удалось отправить файл: ${errorMsg}. Проверьте соединение и попробуйте снова.`,
+        );
         throw err;
       }
     },
@@ -956,10 +990,12 @@ export function useChatSession({
   const sendVoice = useCallback(
     async (file: File, duration: number) => {
       if (file.size > MAX_VOICE_SIZE) {
-        setError('Голосовое сообщение слишком большое (максимум 10MB)');
+        setError(
+          'Голосовое сообщение слишком большое. Максимальный размер: 10MB. Запишите более короткое сообщение.',
+        );
         return;
       }
-      await sendFile(file, duration);
+      await sendFile(file, 'both', duration);
     },
     [sendFile],
   );
@@ -1071,7 +1107,8 @@ export function useChatSession({
               ...msg,
               replyTo: {
                 ...msg.replyTo,
-                text: 'Сообщение удалено',
+                isDeleted: true,
+                text: undefined,
                 hasFile: false,
                 hasVoice: false,
               },

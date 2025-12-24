@@ -33,3 +33,6 @@ Thumbs.db
 
 # Docker
 db-data/
+
+# Python
+*.py

@@ -1,0 +1,20 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'dh-secure-chat'
+
+scrape_configs:
+  - job_name: 'auth'
+    static_configs:
+      - targets: ['auth:8081']
+        labels:
+          service: 'auth'
+          environment: 'development'
+
+  - job_name: 'chat'
+    static_configs:
+      - targets: ['chat:8082']
+        labels:
+          service: 'chat'
+          environment: 'development'

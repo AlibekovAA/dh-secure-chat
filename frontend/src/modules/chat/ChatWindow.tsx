@@ -4,6 +4,9 @@ import type { UserSummary } from './api';
 import { FingerprintVerificationModal } from './FingerprintVerificationModal';
 import { VoiceRecorder } from './VoiceRecorder';
 import { MessageBubble } from './MessageBubble';
+import { TypingIndicator } from './TypingIndicator';
+import { FileAccessDialog, type FileAccessMode } from './FileAccessDialog';
+import { FileViewerModal } from './FileViewerModal';
 import { getFingerprint } from './api';
 import {
   getVerifiedPeerFingerprint,
@@ -29,7 +32,8 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
   const [peerFingerprint, setPeerFingerprint] = useState<string | null>(null);
   const [fingerprintWarning, setFingerprintWarning] = useState(false);
   const [isChatBlocked, setIsChatBlocked] = useState(false);
-  const [imagePreview, setImagePreview] = useState<{ file: File; url: string } | null>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [showAccessDialog, setShowAccessDialog] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const typingTimeoutRef = useRef<number | null>(null);
@@ -38,6 +42,7 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
   const isMediaActive = activeMediaCount > 0;
   const [hasShownMaxLengthToast, setHasShownMaxLengthToast] = useState(false);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
+  const [viewerFile, setViewerFile] = useState<{ filename: string; mimeType: string; blob: Blob; isProtected: boolean } | null>(null);
 
   const {
     state,
@@ -81,14 +86,16 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
       !isChatBlocked &&
       isSessionActive &&
       !isSending &&
-      !isMediaActive
+      !isMediaActive &&
+      !showAccessDialog &&
+      !viewerFile
     ) {
       const timer = setTimeout(() => {
         inputRef.current?.focus();
       }, 100);
       return () => clearTimeout(timer);
     }
-  }, [isChatBlocked, isSessionActive, isSending, isMediaActive]);
+  }, [isChatBlocked, isSessionActive, isSending, isMediaActive, showAccessDialog, viewerFile]);
 
   useEffect(() => {
     const loadFingerprints = async () => {
@@ -115,7 +122,7 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
             setFingerprintWarning(true);
             setIsChatBlocked(true);
             setShowFingerprintModal(true);
-            showToast('Security codes изменились! Верифицируйте identity снова.', 'error');
+            showToast('Коды безопасности изменились. Пожалуйста, верифицируйте identity снова для безопасного общения.', 'error');
           }
         }
       } catch {
@@ -127,26 +134,12 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
     }
   }, [token, myUserId, peer.id, isSessionActive, showToast]);
 
-  useEffect(() => {
-    return () => {
-      if (imagePreview) {
-        URL.revokeObjectURL(imagePreview.url);
-      }
-    };
-  }, [imagePreview]);
-
-  const handleRemovePreview = useCallback(() => {
-    if (imagePreview) {
-      URL.revokeObjectURL(imagePreview.url);
-      setImagePreview(null);
-    }
-  }, [imagePreview]);
 
 
   const handleSend = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
-      if ((!messageText.trim() && !imagePreview) || isSending || !isSessionActive || isChatBlocked) return;
+      if (!messageText.trim() || isSending || !isSessionActive || isChatBlocked) return;
 
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
@@ -156,13 +149,7 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
 
       setIsSending(true);
       try {
-        if (imagePreview) {
-          await sendFile(imagePreview.file);
-          showToast('Изображение отправлено', 'success');
-          handleRemovePreview();
-        } else {
-          await sendMessage(messageText.trim(), replyTo?.id);
-        }
+        await sendMessage(messageText.trim(), replyTo?.id);
         setMessageText('');
         if (hasShownMaxLengthToast) {
           setHasShownMaxLengthToast(false);
@@ -172,15 +159,17 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
         }
         if (inputRef.current) {
           inputRef.current.style.height = '40px';
-          inputRef.current.focus();
+          if (!showAccessDialog && !viewerFile) {
+            inputRef.current.focus();
+          }
         }
       } catch (err) {
-        showToast('Ошибка отправки сообщения', 'error');
+        showToast('Не удалось отправить сообщение. Проверьте соединение и попробуйте снова.', 'error');
       } finally {
         setIsSending(false);
       }
     },
-    [messageText, imagePreview, isSending, isSessionActive, isChatBlocked, sendMessage, sendFile, sendTyping, handleRemovePreview, showToast],
+    [messageText, isSending, isSessionActive, isChatBlocked, sendMessage, sendTyping, showToast, replyTo],
   );
 
   const handleKeyDown = useCallback(
@@ -239,14 +228,14 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
     }
     sendTyping(false);
 
-    if (!isChatBlocked && isSessionActive && !isSending && inputRef.current && !isMediaActive) {
+    if (!isChatBlocked && isSessionActive && !isSending && inputRef.current && !isMediaActive && !showAccessDialog && !viewerFile) {
       setTimeout(() => {
         if (inputRef.current && document.activeElement !== inputRef.current) {
           inputRef.current.focus();
         }
       }, 100);
     }
-  }, [isChatBlocked, isSessionActive, isSending, isMediaActive, sendTyping]);
+  }, [isChatBlocked, isSessionActive, isSending, isMediaActive, sendTyping, showAccessDialog, viewerFile]);
 
   const handleFileSelect = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -254,36 +243,18 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
       if (!file || isSendingFile || !isSessionActive || isChatBlocked) return;
 
       if (file.size > MAX_FILE_SIZE) {
-        showToast('Файл слишком большой (максимум 50MB)', 'error');
+        showToast('Файл слишком большой. Максимальный размер: 50MB. Выберите файл меньшего размера.', 'error');
         return;
       }
 
-      if (file.type.startsWith('image/')) {
-        if (imagePreview) {
-          URL.revokeObjectURL(imagePreview.url);
-        }
-        const url = URL.createObjectURL(file);
-        setImagePreview({ file, url });
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
-        return;
+      setPendingFile(file);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+        fileInputRef.current.blur();
       }
-
-      setIsSendingFile(true);
-      try {
-        await sendFile(file);
-        showToast('Файл отправлен', 'success');
-      } catch (err) {
-        showToast('Ошибка отправки файла', 'error');
-      } finally {
-        setIsSendingFile(false);
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
-      }
+      setShowAccessDialog(true);
     },
-    [isSendingFile, isSessionActive, isChatBlocked, sendFile, showToast, imagePreview],
+    [isSendingFile, isSessionActive, isChatBlocked, sendFile, showToast],
   );
 
   const handlePaste = useCallback(
@@ -299,21 +270,20 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
           if (!file) continue;
 
           if (file.size > MAX_FILE_SIZE) {
-            showToast('Изображение слишком большое (максимум 50MB)', 'error');
+            showToast('Изображение слишком большое. Максимальный размер: 50MB. Выберите изображение меньшего размера.', 'error');
             continue;
           }
 
-          if (imagePreview) {
-            URL.revokeObjectURL(imagePreview.url);
+          if (inputRef.current) {
+            inputRef.current.blur();
           }
-
-          const url = URL.createObjectURL(file);
-          setImagePreview({ file, url });
+          setPendingFile(file);
+          setShowAccessDialog(true);
           break;
         }
       }
     },
-    [isSendingFile, isSessionActive, isChatBlocked, showToast, imagePreview],
+    [isSendingFile, isSessionActive, isChatBlocked, showToast],
   );
 
 
@@ -345,14 +315,6 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
       return next < 0 ? 0 : next;
     });
   }, []);
-
-  useEffect(() => {
-    return () => {
-      if (imagePreview) {
-        URL.revokeObjectURL(imagePreview.url);
-      }
-    };
-  }, [imagePreview]);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -478,23 +440,16 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
               onDelete={deleteMessage}
               onMediaActiveChange={handleMediaActiveChange}
               onReply={setReplyTo}
+              onViewFile={(filename, mimeType, blob, isProtected) => {
+                if (inputRef.current) {
+                  inputRef.current.blur();
+                }
+                setViewerFile({ filename, mimeType, blob, isProtected });
+              }}
             />
           ))}
 
-          {isPeerTyping && isSessionActive && !isChatBlocked && (
-            <div className="flex justify-start animate-[fadeIn_0.2s_ease-out]">
-              <div className="max-w-[75%] rounded-lg px-3 py-2 bg-emerald-900/20 border border-emerald-700/40 smooth-transition">
-                <div className="flex items-center gap-1.5">
-                  <div className="flex gap-1">
-                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400/80 animate-typing" style={{ animationDelay: '0ms' }} />
-                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400/80 animate-typing" style={{ animationDelay: '150ms' }} />
-                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400/80 animate-typing" style={{ animationDelay: '300ms' }} />
-                  </div>
-                  <span className="text-xs text-emerald-400/80 italic leading-relaxed">печатает...</span>
-                </div>
-              </div>
-            </div>
-          )}
+          <TypingIndicator isVisible={isPeerTyping && isSessionActive && !isChatBlocked} />
 
           {isChatBlocked && (
             <div className="flex items-center justify-center py-4">
@@ -536,34 +491,6 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
 
           <div ref={messagesEndRef} />
         </div>
-
-        {imagePreview && (
-          <div className="border-t border-emerald-700/60 bg-black/80 px-4 py-3">
-            <div className="flex items-center gap-3 p-3 rounded-lg border border-emerald-700/40 bg-emerald-900/20">
-              <div className="relative flex-shrink-0">
-                <img
-                  src={imagePreview.url}
-                  alt="Preview"
-                  className="w-16 h-16 object-cover rounded border border-emerald-700/40"
-                />
-                <button
-                  type="button"
-                  onClick={handleRemovePreview}
-                  className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center text-xs transition-colors"
-                  aria-label="Удалить предпросмотр"
-                >
-                  ×
-                </button>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-emerald-100 truncate">{imagePreview.file.name}</p>
-                <p className="text-xs text-emerald-500/80 mt-0.5">
-                  {(imagePreview.file.size / 1024 / 1024).toFixed(2)} MB
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
 
         <form
           onSubmit={handleSend}
@@ -609,7 +536,7 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
                   await sendVoice(file, duration);
                   showToast('Голосовое сообщение отправлено', 'success');
                 } catch {
-                  showToast('Ошибка отправки голосового сообщения', 'error');
+                  showToast('Не удалось отправить голосовое сообщение. Проверьте микрофон и попробуйте снова.', 'error');
                 }
               }}
               onError={(error) => showToast(error, 'error')}
@@ -674,7 +601,7 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
             </div>
             <button
               type="submit"
-              disabled={(!messageText.trim() && !imagePreview) || !isSessionActive || isSending}
+              disabled={!messageText.trim() || !isSessionActive || isSending}
               className="rounded-md bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-700 disabled:cursor-not-allowed text-sm font-medium px-4 h-10 text-black smooth-transition button-press glow-emerald-hover flex items-center justify-center min-w-[80px]"
             >
               {isSending ? (
@@ -708,6 +635,39 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
             setIsChatBlocked(false);
             showToast('Identity подтверждён. Безопасное общение установлено.', 'success');
           }}
+        />
+      )}
+
+      {showAccessDialog && pendingFile && (
+        <FileAccessDialog
+          filename={pendingFile.name}
+          onSelect={async (mode: FileAccessMode) => {
+            setShowAccessDialog(false);
+            setIsSendingFile(true);
+            try {
+              await sendFile(pendingFile, mode);
+              showToast('Файл отправлен', 'success');
+            } catch (err) {
+              showToast('Не удалось отправить файл. Проверьте соединение и попробуйте снова.', 'error');
+            } finally {
+              setIsSendingFile(false);
+              setPendingFile(null);
+            }
+          }}
+          onCancel={() => {
+            setShowAccessDialog(false);
+            setPendingFile(null);
+          }}
+        />
+      )}
+
+      {viewerFile && (
+        <FileViewerModal
+          filename={viewerFile.filename}
+          mimeType={viewerFile.mimeType}
+          blob={viewerFile.blob}
+          onClose={() => setViewerFile(null)}
+          protected={viewerFile.isProtected}
         />
       )}
     </div>

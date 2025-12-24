@@ -30,9 +30,8 @@ type tokenResponse struct {
 }
 
 type Handler struct {
-	auth           *service.AuthService
-	log            *logger.Logger
-	requestTimeout time.Duration
+	auth *service.AuthService
+	log  *logger.Logger
 }
 
 func getClientIP(r *http.Request) string {
@@ -54,9 +53,8 @@ func getClientIP(r *http.Request) string {
 
 func NewHandler(auth *service.AuthService, cfg config.AuthConfig, log *logger.Logger) http.Handler {
 	h := &Handler{
-		auth:           auth,
-		log:            log,
-		requestTimeout: cfg.RequestTimeout,
+		auth: auth,
+		log:  log,
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", commonhttp.HealthHandler(log))

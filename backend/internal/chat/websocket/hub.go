@@ -20,7 +20,6 @@ import (
 
 var audioMimePattern = regexp.MustCompile(`^(audio/(webm|ogg|mpeg|mp4|wav|x-m4a))`)
 
-const sendTimeout = 2 * time.Second
 const debugSampleRate = 0.01
 
 func isValidAudioMimeType(mimeType string) bool {
@@ -40,6 +39,7 @@ type Hub struct {
 	fileTracker            transfer.Tracker
 	circuitBreaker         *CircuitBreaker
 	idempotency            *IdempotencyTracker
+	sendTimeout            time.Duration
 	ctx                    context.Context
 	cancel                 context.CancelFunc
 }
@@ -55,6 +55,7 @@ type HubConfig struct {
 	CircuitBreakerReset     time.Duration
 	FileTransferTimeout     time.Duration
 	IdempotencyTTL          time.Duration
+	SendTimeout             time.Duration
 	ShardCount              int
 }
 
@@ -70,6 +71,7 @@ func NewHub(log *logger.Logger, userRepo userrepo.Repository, config HubConfig) 
 		fileTracker:            transfer.NewTracker(config.FileTransferTimeout),
 		circuitBreaker:         NewCircuitBreaker(config.CircuitBreakerThreshold, config.CircuitBreakerTimeout, config.CircuitBreakerReset),
 		idempotency:            NewIdempotencyTracker(config.IdempotencyTTL),
+		sendTimeout:            config.SendTimeout,
 		ctx:                    ctx,
 		cancel:                 cancel,
 	}
@@ -214,7 +216,7 @@ func (h *Hub) SendToUserWithContext(ctx context.Context, userID string, message 
 }
 
 func (h *Hub) sendWithTimeout(sendChan chan []byte, messageBytes []byte, userID, messageType string, ctx context.Context) error {
-	sendCtx, cancel := context.WithTimeout(ctx, sendTimeout)
+	sendCtx, cancel := context.WithTimeout(ctx, h.sendTimeout)
 	defer cancel()
 	select {
 	case sendChan <- messageBytes:
@@ -379,11 +381,6 @@ func (h *Hub) handleUnregister(client *Client) {
 
 	h.clients.Delete(client.userID)
 	totalClients := h.clientCount.Add(-1)
-	clients := make([]*Client, 0)
-	h.clients.Range(func(key, value interface{}) bool {
-		clients = append(clients, value.(*Client))
-		return true
-	})
 
 	transfers := h.fileTracker.GetTransfersForUser(client.userID)
 	for _, tr := range transfers {
@@ -417,12 +414,14 @@ func (h *Hub) handleUnregister(client *Client) {
 		return
 	}
 	msgBytes, _ := json.Marshal(msg)
-	for _, otherClient := range clients {
+	h.clients.Range(func(key, value interface{}) bool {
+		otherClient := value.(*Client)
 		select {
 		case otherClient.send <- msgBytes:
 		default:
 		}
-	}
+		return true
+	})
 }
 
 func (h *Hub) sendPeerOffline(ctx context.Context, fromUserID, peerID string) error {

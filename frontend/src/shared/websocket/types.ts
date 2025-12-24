@@ -61,6 +61,8 @@ export type PeerDisconnectedPayload = {
   peer_id: string;
 };
 
+export type FileAccessMode = 'download_only' | 'view_only' | 'both';
+
 export type FileStartPayload = {
   to: string;
   from?: string;
@@ -70,6 +72,7 @@ export type FileStartPayload = {
   total_size: number;
   total_chunks: number;
   chunk_size: number;
+  access_mode?: FileAccessMode;
 };
 
 export type FileChunkPayload = {

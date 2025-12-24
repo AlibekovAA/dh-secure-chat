@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -14,6 +13,7 @@ import (
 	authdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/domain"
 	authrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/repository"
 	commoncrypto "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/crypto"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/db"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/jwtverify"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
@@ -35,6 +35,7 @@ type AuthService struct {
 	accessTokenTTL   time.Duration
 	refreshTokenTTL  time.Duration
 	maxRefreshTokens int
+	dbCircuitBreaker *db.DBCircuitBreaker
 }
 
 func NewAuthService(
@@ -50,6 +51,7 @@ func NewAuthService(
 	maxRefreshTokens int,
 	log *logger.Logger,
 ) *AuthService {
+	dbCB := db.NewDBCircuitBreaker(5, 5*time.Second, 30*time.Second, log)
 	return &AuthService{
 		repo:             repo,
 		identityService:  identityService,
@@ -63,6 +65,7 @@ func NewAuthService(
 		accessTokenTTL:   accessTokenTTL,
 		refreshTokenTTL:  refreshTokenTTL,
 		maxRefreshTokens: maxRefreshTokens,
+		dbCircuitBreaker: dbCB,
 	}
 }
 
@@ -122,8 +125,21 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (AuthRe
 		CreatedAt:    s.now(),
 	}
 
-	err = s.repo.Create(ctx, user)
+	err = s.dbCircuitBreaker.Call(ctx, func(ctx context.Context) error {
+		return s.repo.Create(ctx, user)
+	})
 	if err != nil {
+		if errors.Is(err, commonerrors.ErrCircuitOpen) {
+			s.log.WithFields(ctx, logger.Fields{
+				"username": input.Username,
+				"action":   "register_db_circuit_open",
+			}).Error("register failed: database circuit breaker is open")
+			return AuthResult{}, &AuthError{
+				Code:    "SERVICE_UNAVAILABLE",
+				Message: "database service temporarily unavailable",
+				Err:     err,
+			}
+		}
 		if errors.Is(err, commonerrors.ErrUsernameAlreadyExists) {
 			s.log.WithFields(ctx, logger.Fields{
 				"username": input.Username,
@@ -144,22 +160,19 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (AuthRe
 
 	if len(input.IdentityPubKey) > 0 {
 		if err := s.identityService.CreateIdentityKey(ctx, string(user.ID), input.IdentityPubKey); err != nil {
-			if delErr := s.repo.Delete(ctx, user.ID); delErr != nil {
+			if errors.Is(err, commonerrors.ErrInvalidPublicKey) {
 				s.log.WithFields(ctx, logger.Fields{
 					"username": input.Username,
 					"user_id":  string(user.ID),
-					"action":   "register_delete_user_failed",
-				}).Errorf("register failed: failed to delete user after identity key error: %v", delErr)
+					"action":   "register_invalid_identity_key",
+				}).Warn("register: invalid identity key provided, continuing without it")
+			} else {
+				s.log.WithFields(ctx, logger.Fields{
+					"username": input.Username,
+					"user_id":  string(user.ID),
+					"action":   "register_identity_key_failed",
+				}).Warnf("register: failed to save identity key (non-critical): %v, continuing without it", err)
 			}
-			if errors.Is(err, commonerrors.ErrInvalidPublicKey) {
-				return AuthResult{}, err
-			}
-			s.log.WithFields(ctx, logger.Fields{
-				"username": input.Username,
-				"user_id":  string(user.ID),
-				"action":   "register_identity_key_failed",
-			}).Errorf("register failed: failed to save identity key: %v", err)
-			return AuthResult{}, fmt.Errorf("failed to save identity key: %w", err)
 		}
 	}
 
@@ -200,8 +213,24 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (AuthResult, 
 		return AuthResult{}, err
 	}
 
-	user, err := s.repo.FindByUsername(ctx, input.Username)
+	var user userdomain.User
+	err := s.dbCircuitBreaker.Call(ctx, func(ctx context.Context) error {
+		var fetchErr error
+		user, fetchErr = s.repo.FindByUsername(ctx, input.Username)
+		return fetchErr
+	})
 	if err != nil {
+		if errors.Is(err, commonerrors.ErrCircuitOpen) {
+			s.log.WithFields(ctx, logger.Fields{
+				"username": input.Username,
+				"action":   "login_db_circuit_open",
+			}).Error("login failed: database circuit breaker is open")
+			return AuthResult{}, &AuthError{
+				Code:    "SERVICE_UNAVAILABLE",
+				Message: "database service temporarily unavailable",
+				Err:     err,
+			}
+		}
 		if errors.Is(err, userrepo.ErrUserNotFound) {
 			s.log.WithFields(ctx, logger.Fields{
 				"username": input.Username,
@@ -262,8 +291,23 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken strin
 
 	hash := hashRefreshToken(refreshToken)
 
-	tx, err := s.refreshTokenRepo.BeginTx(ctx)
+	var tx authrepo.RefreshTokenTx
+	err := s.dbCircuitBreaker.Call(ctx, func(ctx context.Context) error {
+		var txErr error
+		tx, txErr = s.refreshTokenRepo.BeginTx(ctx)
+		return txErr
+	})
 	if err != nil {
+		if errors.Is(err, commonerrors.ErrCircuitOpen) {
+			s.log.WithFields(ctx, logger.Fields{
+				"action": "refresh_token_db_circuit_open",
+			}).Error("refresh token failed: database circuit breaker is open")
+			return AuthResult{}, &AuthError{
+				Code:    "SERVICE_UNAVAILABLE",
+				Message: "database service temporarily unavailable",
+				Err:     err,
+			}
+		}
 		s.log.WithFields(ctx, logger.Fields{
 			"action": "refresh_token_begin_tx_failed",
 		}).Errorf("refresh token failed to begin tx: %v", err)
@@ -271,7 +315,12 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken strin
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	stored, err := tx.FindByTokenHashForUpdate(ctx, hash)
+	var stored authdomain.RefreshToken
+	err = s.dbCircuitBreaker.Call(ctx, func(ctx context.Context) error {
+		var fetchErr error
+		stored, fetchErr = tx.FindByTokenHashForUpdate(ctx, hash)
+		return fetchErr
+	})
 	if err != nil {
 		if errors.Is(err, authrepo.ErrRefreshTokenNotFound) {
 			fields := logger.Fields{
@@ -295,14 +344,20 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken strin
 			"action":  "refresh_token_expired",
 		}).Warn("refresh token expired")
 		incrementRefreshTokensExpired()
-		if err := tx.DeleteByTokenHash(ctx, hash); err != nil {
+		err = s.dbCircuitBreaker.Call(ctx, func(ctx context.Context) error {
+			return tx.DeleteByTokenHash(ctx, hash)
+		})
+		if err != nil {
 			s.log.WithFields(ctx, logger.Fields{
 				"user_id": stored.UserID,
 				"action":  "refresh_token_delete_expired_failed",
 			}).Errorf("refresh token failed to delete expired token: %v", err)
 			return AuthResult{}, err
 		}
-		if err := tx.Commit(ctx); err != nil {
+		err = s.dbCircuitBreaker.Call(ctx, func(ctx context.Context) error {
+			return tx.Commit(ctx)
+		})
+		if err != nil {
 			s.log.WithFields(ctx, logger.Fields{
 				"user_id": stored.UserID,
 				"action":  "refresh_token_commit_delete_expired_failed",
@@ -312,8 +367,24 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken strin
 		return AuthResult{}, ErrRefreshTokenExpired
 	}
 
-	user, err := s.repo.FindByID(ctx, userdomain.ID(stored.UserID))
+	var user userdomain.User
+	err = s.dbCircuitBreaker.Call(ctx, func(ctx context.Context) error {
+		var fetchErr error
+		user, fetchErr = s.repo.FindByID(ctx, userdomain.ID(stored.UserID))
+		return fetchErr
+	})
 	if err != nil {
+		if errors.Is(err, commonerrors.ErrCircuitOpen) {
+			s.log.WithFields(ctx, logger.Fields{
+				"user_id": stored.UserID,
+				"action":  "refresh_token_db_circuit_open",
+			}).Error("refresh token failed: database circuit breaker is open")
+			return AuthResult{}, &AuthError{
+				Code:    "SERVICE_UNAVAILABLE",
+				Message: "database service temporarily unavailable",
+				Err:     err,
+			}
+		}
 		s.log.WithFields(ctx, logger.Fields{
 			"user_id": stored.UserID,
 			"action":  "refresh_token_user_lookup_failed",
@@ -321,7 +392,10 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken strin
 		return AuthResult{}, err
 	}
 
-	if err := tx.DeleteByTokenHash(ctx, hash); err != nil {
+	err = s.dbCircuitBreaker.Call(ctx, func(ctx context.Context) error {
+		return tx.DeleteByTokenHash(ctx, hash)
+	})
+	if err != nil {
 		s.log.WithFields(ctx, logger.Fields{
 			"user_id": stored.UserID,
 			"action":  "refresh_token_delete_old_failed",
@@ -329,7 +403,10 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken strin
 		return AuthResult{}, err
 	}
 
-	if err := tx.Commit(ctx); err != nil {
+	err = s.dbCircuitBreaker.Call(ctx, func(ctx context.Context) error {
+		return tx.Commit(ctx)
+	})
+	if err != nil {
 		s.log.WithFields(ctx, logger.Fields{
 			"user_id": stored.UserID,
 			"action":  "refresh_token_commit_delete_old_failed",
@@ -346,16 +423,11 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken strin
 		return AuthResult{}, err
 	}
 
-	s.log.WithFields(ctx, logger.Fields{
-		"user_id": stored.UserID,
-		"action":  "refresh_token_used",
-	}).Info("refresh token used")
+	incrementRefreshTokensUsed()
 	s.log.WithFields(ctx, logger.Fields{
 		"user_id": stored.UserID,
 		"action":  "refresh_token_success",
 	}).Info("refresh token success")
-
-	incrementRefreshTokensUsed()
 
 	return AuthResult{
 		AccessToken:      accessToken,
@@ -371,8 +443,19 @@ func (s *AuthService) RevokeRefreshToken(ctx context.Context, refreshToken strin
 
 	hash := hashRefreshToken(refreshToken)
 
-	stored, err := s.refreshTokenRepo.FindByTokenHash(ctx, hash)
+	var stored authdomain.RefreshToken
+	err := s.dbCircuitBreaker.Call(ctx, func(ctx context.Context) error {
+		var fetchErr error
+		stored, fetchErr = s.refreshTokenRepo.FindByTokenHash(ctx, hash)
+		return fetchErr
+	})
 	if err != nil {
+		if errors.Is(err, commonerrors.ErrCircuitOpen) {
+			s.log.WithFields(ctx, logger.Fields{
+				"action": "revoke_refresh_token_db_circuit_open",
+			}).Error("revoke refresh token failed: database circuit breaker is open")
+			return err
+		}
 		if errors.Is(err, authrepo.ErrRefreshTokenNotFound) {
 			return nil
 		}
@@ -382,7 +465,10 @@ func (s *AuthService) RevokeRefreshToken(ctx context.Context, refreshToken strin
 		return err
 	}
 
-	if err := s.refreshTokenRepo.DeleteByTokenHash(ctx, hash); err != nil {
+	err = s.dbCircuitBreaker.Call(ctx, func(ctx context.Context) error {
+		return s.refreshTokenRepo.DeleteByTokenHash(ctx, hash)
+	})
+	if err != nil {
 		if errors.Is(err, authrepo.ErrRefreshTokenNotFound) {
 			return nil
 		}
@@ -409,7 +495,18 @@ func (s *AuthService) RevokeAccessToken(ctx context.Context, jti string, userID 
 	}
 
 	expiresAt := s.now().Add(s.accessTokenTTL)
-	if err := s.revokedTokenRepo.Revoke(ctx, jti, userID, expiresAt); err != nil {
+	err := s.dbCircuitBreaker.Call(ctx, func(ctx context.Context) error {
+		return s.revokedTokenRepo.Revoke(ctx, jti, userID, expiresAt)
+	})
+	if err != nil {
+		if errors.Is(err, commonerrors.ErrCircuitOpen) {
+			s.log.WithFields(ctx, logger.Fields{
+				"jti":     jti,
+				"user_id": userID,
+				"action":  "revoke_access_token_db_circuit_open",
+			}).Error("revoke access token failed: database circuit breaker is open")
+			return err
+		}
 		s.log.WithFields(ctx, logger.Fields{
 			"jti":     jti,
 			"user_id": userID,
@@ -471,8 +568,20 @@ func (s *AuthService) issueAccessToken(user userdomain.User) (string, string, er
 }
 
 func (s *AuthService) issueRefreshToken(ctx context.Context, user userdomain.User) (authdomain.RefreshToken, error) {
-	count, err := s.refreshTokenRepo.CountByUserID(ctx, string(user.ID))
+	var count int
+	err := s.dbCircuitBreaker.Call(ctx, func(ctx context.Context) error {
+		var countErr error
+		count, countErr = s.refreshTokenRepo.CountByUserID(ctx, string(user.ID))
+		return countErr
+	})
 	if err != nil {
+		if errors.Is(err, commonerrors.ErrCircuitOpen) {
+			s.log.WithFields(ctx, logger.Fields{
+				"user_id": string(user.ID),
+				"action":  "count_refresh_tokens_db_circuit_open",
+			}).Error("failed to count refresh tokens: database circuit breaker is open")
+			return authdomain.RefreshToken{}, err
+		}
 		s.log.WithFields(ctx, logger.Fields{
 			"user_id": string(user.ID),
 			"action":  "count_refresh_tokens_failed",
@@ -481,7 +590,10 @@ func (s *AuthService) issueRefreshToken(ctx context.Context, user userdomain.Use
 	}
 
 	if count >= s.maxRefreshTokens {
-		if err := s.refreshTokenRepo.DeleteOldestByUserID(ctx, string(user.ID)); err != nil {
+		err = s.dbCircuitBreaker.Call(ctx, func(ctx context.Context) error {
+			return s.refreshTokenRepo.DeleteOldestByUserID(ctx, string(user.ID))
+		})
+		if err != nil {
 			s.log.WithFields(ctx, logger.Fields{
 				"user_id": string(user.ID),
 				"action":  "delete_oldest_refresh_token_failed",
@@ -511,7 +623,16 @@ func (s *AuthService) issueRefreshToken(ctx context.Context, user userdomain.Use
 		CreatedAt: s.now(),
 	}
 
-	if err := s.refreshTokenRepo.Create(ctx, stored); err != nil {
+	err = s.dbCircuitBreaker.Call(ctx, func(ctx context.Context) error {
+		return s.refreshTokenRepo.Create(ctx, stored)
+	})
+	if err != nil {
+		if errors.Is(err, commonerrors.ErrCircuitOpen) {
+			s.log.WithFields(ctx, logger.Fields{
+				"user_id": string(user.ID),
+				"action":  "create_refresh_token_db_circuit_open",
+			}).Error("failed to create refresh token: database circuit breaker is open")
+		}
 		return authdomain.RefreshToken{}, err
 	}
 

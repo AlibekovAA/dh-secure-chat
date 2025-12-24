@@ -31,6 +31,7 @@ type ChatConfig struct {
 	WebSocketMaxMsgSize    int64         `validate:"gt=0"`
 	WebSocketSendBufSize   int           `validate:"gt=0"`
 	WebSocketAuthTimeout   time.Duration `validate:"gt=0"`
+	WebSocketSendTimeout   time.Duration `validate:"gt=0"`
 	LastSeenUpdateInterval time.Duration `validate:"gt=0"`
 	RequestTimeout         time.Duration `validate:"gt=0"`
 	SearchTimeout          time.Duration `validate:"gt=0"`
@@ -67,10 +68,6 @@ func LoadAuthConfig() (AuthConfig, error) {
 		return AuthConfig{}, fmt.Errorf("invalid auth config: %w", err)
 	}
 
-	if err := validateJWTSecret(jwtSecret); err != nil {
-		return AuthConfig{}, err
-	}
-
 	return cfg, nil
 }
 
@@ -99,6 +96,7 @@ func LoadChatConfig() (ChatConfig, error) {
 		WebSocketMaxMsgSize:    getInt64Env("CHAT_WS_MAX_MSG_SIZE", 20*1024*1024),
 		WebSocketSendBufSize:   getIntEnv("CHAT_WS_SEND_BUF_SIZE", 256),
 		WebSocketAuthTimeout:   getDurationEnv("CHAT_WS_AUTH_TIMEOUT", 10*time.Second),
+		WebSocketSendTimeout:   getDurationEnv("CHAT_WS_SEND_TIMEOUT", 2*time.Second),
 		LastSeenUpdateInterval: getDurationEnv("CHAT_LAST_SEEN_INTERVAL", 1*time.Minute),
 		RequestTimeout:         getDurationEnv("CHAT_REQUEST_TIMEOUT", 5*time.Second),
 		SearchTimeout:          getDurationEnv("CHAT_SEARCH_TIMEOUT", 10*time.Second),
@@ -106,10 +104,6 @@ func LoadChatConfig() (ChatConfig, error) {
 
 	if err := validate.Struct(cfg); err != nil {
 		return ChatConfig{}, fmt.Errorf("invalid chat config: %w", err)
-	}
-
-	if err := validateJWTSecret(jwtSecret); err != nil {
-		return ChatConfig{}, err
 	}
 
 	return cfg, nil

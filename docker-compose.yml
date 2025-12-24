@@ -4,6 +4,8 @@ include:
   - yaml/chat.yml
   - yaml/frontend.yml
   - yaml/proxy.yml
+  - yaml/prometheus.yml
 
 volumes:
   db-data:
+  prometheus-data:

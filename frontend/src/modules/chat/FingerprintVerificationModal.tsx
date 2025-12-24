@@ -58,8 +58,16 @@ export function FingerprintVerificationModal({
   const hasChanged = peerFingerprint ? hasPeerFingerprintChanged(peerId, peerFingerprint) : false;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 backdrop-blur-sm">
-      <div className="w-full max-w-lg mx-4 bg-black border border-emerald-700 rounded-xl overflow-hidden animate-[fadeIn_0.3s_ease-out,slideUp_0.3s_ease-out]">
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 backdrop-blur-sm"
+      onClick={onClose}
+      style={{ willChange: 'opacity' }}
+    >
+      <div
+        className="w-full max-w-lg mx-4 bg-black border border-emerald-700 rounded-xl overflow-hidden animate-[fadeIn_0.3s_ease-out,scaleIn_0.3s_ease-out] shadow-2xl shadow-emerald-900/30"
+        onClick={(e) => e.stopPropagation()}
+        style={{ willChange: 'transform, opacity' }}
+      >
         <div className="px-6 py-4 border-b border-emerald-700/60 bg-black/80">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-emerald-300">Верификация Identity</h2>

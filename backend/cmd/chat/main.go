@@ -63,6 +63,7 @@ func main() {
 		CircuitBreakerReset:     30 * time.Second,
 		FileTransferTimeout:     10 * time.Minute,
 		IdempotencyTTL:          5 * time.Minute,
+		SendTimeout:             cfg.WebSocketSendTimeout,
 		ShardCount:              shardCount,
 	}
 
