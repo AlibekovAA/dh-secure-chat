@@ -29,4 +29,20 @@ var (
 		},
 		[]string{"name"},
 	)
+
+	DomainErrorsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "domain_errors_total",
+			Help: "Total number of domain errors by category and code",
+		},
+		[]string{"category", "code", "status"},
+	)
+
+	HTTPErrorsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "http_errors_total",
+			Help: "Total number of HTTP errors by status code",
+		},
+		[]string{"status", "path", "method"},
+	)
 )

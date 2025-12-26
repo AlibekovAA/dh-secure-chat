@@ -65,6 +65,8 @@ func main() {
 		IdempotencyTTL:          5 * time.Minute,
 		SendTimeout:             cfg.WebSocketSendTimeout,
 		ShardCount:              shardCount,
+		MaxConnections:          cfg.WebSocketMaxConnections,
+		DebugSampleRate:         0.01,
 	}
 
 	var hub websocket.HubInterface

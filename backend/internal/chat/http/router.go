@@ -14,6 +14,7 @@ import (
 	chatdto "github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/service/dto"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/websocket"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/config"
+	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	commonhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/http"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/jwtverify"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
@@ -27,11 +28,6 @@ type Handler struct {
 	log       *logger.Logger
 	cfg       config.ChatConfig
 	pool      *pgxpool.Pool
-}
-
-type meResponse struct {
-	ID       string `json:"id"`
-	Username string `json:"username"`
 }
 
 type userResponse struct {
@@ -92,7 +88,7 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 		"user_id": claims.UserID,
 		"action":  "chat_me_success",
 	}).Info("chat/me success")
-	commonhttp.WriteJSON(w, http.StatusOK, meResponse{
+	commonhttp.WriteJSON(w, http.StatusOK, userResponse{
 		ID:       user.ID,
 		Username: user.Username,
 	})
@@ -134,16 +130,13 @@ func (h *Handler) getIdentityKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, ok := commonhttp.ExtractUserIDFromPath(urlPath)
-	if !ok || userID == "" {
-		commonhttp.WriteError(w, http.StatusBadRequest, "user_id is required")
-		return
-	}
-
 	ctx := r.Context()
-
-	userID = strings.TrimSuffix(userID, "/identity-key")
-	if err := commonhttp.ValidateUUID(userID); err != nil {
+	userID, err := commonhttp.ExtractAndValidateUserID(urlPath, "/identity-key")
+	if err != nil {
+		if err == commonerrors.ErrEmptyUUID {
+			commonhttp.WriteError(w, http.StatusBadRequest, "user_id is required")
+			return
+		}
 		h.log.WithFields(ctx, logger.Fields{
 			"user_id": userID,
 			"action":  "chat_identity_key_invalid_format",
@@ -169,6 +162,29 @@ func (h *Handler) getIdentityKey(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
+	revokedTokenRepo := authrepo.NewPgRevokedTokenRepository(h.pool)
+	var claims jwtverify.Claims
+	var authenticated bool
+
+	authHeader := r.Header.Get("Authorization")
+	if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+		parsedClaims, err := jwtverify.ParseToken(tokenString, []byte(h.jwtSecret))
+		if err == nil {
+			if parsedClaims.JTI != "" {
+				revoked, err := revokedTokenRepo.IsRevoked(ctx, parsedClaims.JTI)
+				if err == nil && !revoked {
+					claims = parsedClaims
+					authenticated = true
+				}
+			} else {
+				claims = parsedClaims
+				authenticated = true
+			}
+		}
+	}
+
 	conn, err := h.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		h.log.WithFields(ctx, logger.Fields{
@@ -177,20 +193,40 @@ func (h *Handler) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	revokedTokenRepo := authrepo.NewPgRevokedTokenRepository(h.pool)
-	client := websocket.NewUnauthenticatedClient(
-		h.hub,
-		conn,
-		h.jwtSecret,
-		h.log,
-		revokedTokenRepo,
-		h.cfg.WebSocketWriteWait,
-		h.cfg.WebSocketPongWait,
-		h.cfg.WebSocketPingPeriod,
-		h.cfg.WebSocketMaxMsgSize,
-		h.cfg.WebSocketAuthTimeout,
-		h.cfg.WebSocketSendBufSize,
-	)
+	var client *websocket.Client
+	if authenticated {
+		client = websocket.NewAuthenticatedClient(
+			h.hub,
+			conn,
+			claims,
+			h.log,
+			h.cfg.WebSocketWriteWait,
+			h.cfg.WebSocketPongWait,
+			h.cfg.WebSocketPingPeriod,
+			h.cfg.WebSocketMaxMsgSize,
+			h.cfg.WebSocketSendBufSize,
+		)
+		h.hub.Register(client)
+		h.log.WithFields(ctx, logger.Fields{
+			"user_id":  claims.UserID,
+			"username": claims.Username,
+			"action":   "ws_authenticated_via_header",
+		}).Info("websocket client authenticated via Authorization header")
+	} else {
+		client = websocket.NewUnauthenticatedClient(
+			h.hub,
+			conn,
+			h.jwtSecret,
+			h.log,
+			revokedTokenRepo,
+			h.cfg.WebSocketWriteWait,
+			h.cfg.WebSocketPongWait,
+			h.cfg.WebSocketPingPeriod,
+			h.cfg.WebSocketMaxMsgSize,
+			h.cfg.WebSocketAuthTimeout,
+			h.cfg.WebSocketSendBufSize,
+		)
+	}
 	client.Start()
 }
 

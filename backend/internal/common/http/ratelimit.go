@@ -109,13 +109,19 @@ func getClientKey(r *http.Request) string {
 type StrictRateLimiter struct {
 	loginLimiter    *RateLimiter
 	registerLimiter *RateLimiter
+	refreshLimiter  *RateLimiter
+	logoutLimiter   *RateLimiter
+	revokeLimiter   *RateLimiter
 	generalLimiter  *RateLimiter
 }
 
 func NewStrictRateLimiter() *StrictRateLimiter {
 	return &StrictRateLimiter{
-		loginLimiter:    NewRateLimiter(5.0, 5),
-		registerLimiter: NewRateLimiter(2.0, 2),
+		loginLimiter:    NewRateLimiter(3.0, 3),
+		registerLimiter: NewRateLimiter(2.0, 1),
+		refreshLimiter:  NewRateLimiter(1.0, 3),
+		logoutLimiter:   NewRateLimiter(1.0, 2),
+		revokeLimiter:   NewRateLimiter(1.0, 2),
 		generalLimiter:  NewRateLimiter(100.0, 100),
 	}
 }
@@ -131,6 +137,15 @@ func (srl *StrictRateLimiter) MiddlewareForPath(path string) func(http.Handler) 
 	case "/api/auth/register":
 		limiter = srl.registerLimiter
 		limiterType = "register"
+	case "/api/auth/refresh":
+		limiter = srl.refreshLimiter
+		limiterType = "refresh"
+	case "/api/auth/logout":
+		limiter = srl.logoutLimiter
+		limiterType = "logout"
+	case "/api/auth/revoke":
+		limiter = srl.revokeLimiter
+		limiterType = "revoke"
 	default:
 		limiter = srl.generalLimiter
 		limiterType = "general"

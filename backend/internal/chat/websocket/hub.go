@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -18,12 +19,25 @@ import (
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/resilience"
 	observabilitymetrics "github.com/AlibekovAA/dh-secure-chat/backend/internal/observability/metrics"
+	userdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
 	userrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/repository"
 )
 
 var audioMimePattern = regexp.MustCompile(`^(audio/(webm|ogg|mpeg|mp4|wav|x-m4a))`)
 
-const debugSampleRate = 0.01
+const userExistenceCacheTTL = 5 * time.Minute
+const userExistenceCacheCleanupInterval = 1 * time.Minute
+
+type userExistenceCacheEntry struct {
+	exists    bool
+	expiresAt time.Time
+}
+
+var jsonBufferPool = sync.Pool{
+	New: func() interface{} {
+		return &bytes.Buffer{}
+	},
+}
 
 func isValidAudioMimeType(mimeType string) bool {
 	return audioMimePattern.MatchString(mimeType)
@@ -34,6 +48,7 @@ type Hub struct {
 	register              chan *Client
 	unregister            chan *Client
 	clientCount           atomic.Int64
+	maxConnections        int
 	log                   *logger.Logger
 	userRepo              userrepo.Repository
 	lastSeenUpdater       *LastSeenUpdater
@@ -42,6 +57,9 @@ type Hub struct {
 	idempotency           *IdempotencyTracker
 	idempotencyMiddleware *middleware.IdempotencyMiddleware
 	sendTimeout           time.Duration
+	userExistenceCache    sync.Map
+	clock                 clock.Clock
+	debugSampleRate       float64
 	ctx                   context.Context
 	cancel                context.CancelFunc
 }
@@ -59,6 +77,8 @@ type HubConfig struct {
 	IdempotencyTTL          time.Duration
 	SendTimeout             time.Duration
 	ShardCount              int
+	MaxConnections          int
+	DebugSampleRate         float64
 }
 
 func NewHub(log *logger.Logger, userRepo userrepo.Repository, config HubConfig) *Hub {
@@ -66,15 +86,18 @@ func NewHub(log *logger.Logger, userRepo userrepo.Repository, config HubConfig) 
 
 	clk := clock.NewRealClock()
 	hub := &Hub{
-		register:    make(chan *Client),
-		unregister:  make(chan *Client),
-		log:         log,
-		userRepo:    userRepo,
-		fileTracker: transfer.NewTracker(config.FileTransferTimeout, clk),
-		idempotency: NewIdempotencyTracker(config.IdempotencyTTL, clk),
-		sendTimeout: config.SendTimeout,
-		ctx:         ctx,
-		cancel:      cancel,
+		register:        make(chan *Client),
+		unregister:      make(chan *Client),
+		log:             log,
+		userRepo:        userRepo,
+		fileTracker:     transfer.NewTracker(config.FileTransferTimeout, clk),
+		idempotency:     NewIdempotencyTracker(ctx, config.IdempotencyTTL, clk),
+		sendTimeout:     config.SendTimeout,
+		maxConnections:  config.MaxConnections,
+		clock:           clk,
+		debugSampleRate: config.DebugSampleRate,
+		ctx:             ctx,
+		cancel:          cancel,
 	}
 
 	validator := NewDefaultValidator(config.MaxFileSize, config.MaxVoiceSize)
@@ -95,6 +118,7 @@ func NewHub(log *logger.Logger, userRepo userrepo.Repository, config HubConfig) 
 	hub.lastSeenUpdater = NewLastSeenUpdater(ctx, userRepo, log, config.LastSeenUpdateInterval, lastSeenCircuitBreaker, clk)
 
 	go hub.fileTrackerCleanup()
+	go hub.userExistenceCacheCleanup()
 
 	return hub
 }
@@ -123,11 +147,26 @@ func (h *Hub) Run(ctx context.Context) {
 					"action":   "ws_close_existing",
 				}).Info("websocket closing existing connection")
 				existingClient.Stop()
-				close(existingClient.send)
+				existingClient.Close()
 				h.clients.Delete(client.userID)
 				metrics.DecrementActiveWebSocketConnections()
 				h.clientCount.Add(-1)
 			}
+
+			currentCount := int(h.clientCount.Load())
+			if currentCount >= h.maxConnections {
+				observabilitymetrics.ChatWebSocketConnectionsRejected.Inc()
+				h.log.WithFields(client.ctx, logger.Fields{
+					"user_id": client.userID,
+					"current": currentCount,
+					"max":     h.maxConnections,
+					"action":  "ws_register_rejected",
+				}).Warn("websocket connection rejected: max connections limit reached")
+				client.Stop()
+				client.conn.Close()
+				continue
+			}
+
 			h.clients.Store(client.userID, client)
 			totalClients := h.clientCount.Add(1)
 			metrics.IncrementActiveWebSocketConnections()
@@ -173,7 +212,7 @@ func (h *Hub) shutdown() {
 			}
 			cancel()
 		}
-		close(client.send)
+		client.Close()
 	}
 
 	h.clients.Range(func(key, value interface{}) bool {
@@ -193,6 +232,12 @@ func (h *Hub) SendToUser(userID string, message *WSMessage) bool {
 }
 
 func (h *Hub) SendToUserWithContext(ctx context.Context, userID string, message *WSMessage) error {
+	startTime := h.clock.Now()
+	defer func() {
+		duration := time.Since(startTime).Seconds()
+		observabilitymetrics.ChatWebSocketMessageSendDurationSeconds.WithLabelValues(string(message.Type)).Observe(duration)
+	}()
+
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -205,8 +250,13 @@ func (h *Hub) SendToUserWithContext(ctx context.Context, userID string, message 
 	}
 
 	client := value.(*Client)
-	messageBytes, err := json.Marshal(message)
-	if err != nil {
+
+	buf := jsonBufferPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer jsonBufferPool.Put(buf)
+
+	encoder := json.NewEncoder(buf)
+	if err := encoder.Encode(message); err != nil {
 		h.log.WithFields(ctx, logger.Fields{
 			"user_id": userID,
 			"action":  "ws_marshal",
@@ -214,7 +264,16 @@ func (h *Hub) SendToUserWithContext(ctx context.Context, userID string, message 
 		}).Errorf("websocket marshal error: %v", err)
 		return commonerrors.ErrMarshalError.WithCause(err)
 	}
-	if err := h.sendWithTimeout(client.send, messageBytes, userID, string(message.Type), ctx); err != nil {
+
+	messageBytes := buf.Bytes()
+	if len(messageBytes) > 0 && messageBytes[len(messageBytes)-1] == '\n' {
+		messageBytes = messageBytes[:len(messageBytes)-1]
+	}
+
+	messageBytesCopy := make([]byte, len(messageBytes))
+	copy(messageBytesCopy, messageBytes)
+
+	if err := h.sendWithTimeout(client.send, messageBytesCopy, userID, string(message.Type), ctx); err != nil {
 		return err
 	}
 
@@ -226,6 +285,37 @@ func (h *Hub) SendToUserWithContext(ctx context.Context, userID string, message 
 	return nil
 }
 
+func (h *Hub) sendErrorToUser(userID string, err error) {
+	if err == nil {
+		return
+	}
+
+	var domainErr commonerrors.DomainError
+	if de, ok := commonerrors.AsDomainError(err); ok {
+		domainErr = de
+	} else {
+		domainErr = commonerrors.ErrInternalError.WithCause(err)
+	}
+
+	errorPayload := ErrorPayload{
+		Code:    domainErr.Code(),
+		Message: domainErr.Message(),
+	}
+	payloadBytes, err := json.Marshal(errorPayload)
+	if err != nil {
+		h.log.WithFields(h.ctx, logger.Fields{
+			"user_id": userID,
+			"action":  "ws_error_marshal_failed",
+		}).Warnf("websocket failed to marshal error payload: %v", err)
+		return
+	}
+	errorMsg := &WSMessage{
+		Type:    TypeError,
+		Payload: payloadBytes,
+	}
+	h.SendToUser(userID, errorMsg)
+}
+
 func (h *Hub) sendWithTimeout(sendChan chan []byte, messageBytes []byte, userID, messageType string, ctx context.Context) error {
 	sendCtx, cancel := context.WithTimeout(ctx, h.sendTimeout)
 	defer cancel()
@@ -233,12 +323,18 @@ func (h *Hub) sendWithTimeout(sendChan chan []byte, messageBytes []byte, userID,
 	case sendChan <- messageBytes:
 		return nil
 	case <-sendCtx.Done():
-		h.log.WithFields(ctx, logger.Fields{
-			"user_id": userID,
-			"action":  "ws_send_timeout",
-			"type":    messageType,
-		}).Warn("websocket send timed out")
-		return commonerrors.ErrSendTimeout.WithCause(sendCtx.Err())
+		select {
+		case sendChan <- messageBytes:
+			return nil
+		default:
+			metrics.IncrementDroppedMessages(messageType)
+			h.log.WithFields(ctx, logger.Fields{
+				"user_id": userID,
+				"action":  "ws_message_dropped",
+				"type":    messageType,
+			}).Warn("websocket message dropped due to slow client")
+			return commonerrors.ErrClientTooSlow
+		}
 	}
 }
 
@@ -303,6 +399,30 @@ func (h *Hub) forwardMessage(ctx context.Context, msg *WSMessage, payload payloa
 		return false
 	}
 
+	if !requireOnline {
+		exists, err := h.checkUserExists(ctx, to)
+		if err != nil {
+			h.log.WithFields(ctx, logger.Fields{
+				"from":   fromUserID,
+				"to":     to,
+				"type":   string(msg.Type),
+				"action": "ws_user_check_failed",
+			}).Errorf("websocket failed to check user existence: %v", err)
+			return false
+		}
+		if !exists {
+			if fromUserID != "" {
+				h.log.WithFields(ctx, logger.Fields{
+					"from":   fromUserID,
+					"to":     to,
+					"type":   string(msg.Type),
+					"action": "ws_message_user_not_found",
+				}).Warn("websocket message to non-existent user")
+			}
+			return false
+		}
+	}
+
 	if err := h.SendToUserWithContext(ctx, to, msg); err != nil {
 		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 			h.log.WithFields(ctx, logger.Fields{
@@ -320,7 +440,7 @@ func (h *Hub) forwardMessage(ctx context.Context, msg *WSMessage, payload payloa
 		"to":     to,
 		"type":   string(msg.Type),
 		"action": "ws_message_forwarded",
-	}).DebugSampled(debugSampleRate, "websocket message forwarded")
+	}).DebugSampled(h.debugSampleRate, "websocket message forwarded")
 	return true
 }
 
@@ -388,7 +508,7 @@ func (h *Hub) handleUnregister(client *Client) {
 	}
 
 	client.Stop()
-	close(client.send)
+	client.Close()
 	metrics.DecrementActiveWebSocketConnections()
 	observabilitymetrics.ChatWebSocketDisconnections.WithLabelValues("unregister").Inc()
 	h.log.WithFields(client.ctx, logger.Fields{
@@ -549,10 +669,68 @@ func (h *Hub) fileTrackerCleanup() {
 	}
 }
 
+func (h *Hub) checkUserExists(ctx context.Context, userID string) (bool, error) {
+	if cached, ok := h.userExistenceCache.Load(userID); ok {
+		entry := cached.(*userExistenceCacheEntry)
+		if h.clock.Now().Before(entry.expiresAt) {
+			observabilitymetrics.ChatWebSocketUserExistenceCacheHits.Inc()
+			return entry.exists, nil
+		}
+		h.userExistenceCache.Delete(userID)
+	}
+
+	observabilitymetrics.ChatWebSocketUserExistenceCacheMisses.Inc()
+
+	_, err := h.userRepo.FindByID(ctx, userdomain.ID(userID))
+	exists := err == nil
+	if err != nil && !errors.Is(err, userrepo.ErrUserNotFound) {
+		return false, err
+	}
+
+	h.userExistenceCache.Store(userID, &userExistenceCacheEntry{
+		exists:    exists,
+		expiresAt: h.clock.Now().Add(userExistenceCacheTTL),
+	})
+
+	return exists, nil
+}
+
+func (h *Hub) userExistenceCacheCleanup() {
+	ticker := time.NewTicker(userExistenceCacheCleanupInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-h.ctx.Done():
+			return
+		case <-ticker.C:
+			now := h.clock.Now()
+			removed := 0
+			total := 0
+			h.userExistenceCache.Range(func(key, value interface{}) bool {
+				total++
+				entry := value.(*userExistenceCacheEntry)
+				if now.After(entry.expiresAt) {
+					h.userExistenceCache.Delete(key)
+					removed++
+				}
+				return true
+			})
+			observabilitymetrics.ChatWebSocketUserExistenceCacheSize.Set(float64(total))
+			if removed > 0 {
+				h.log.Debugf("websocket cleaned up stale user existence cache entries count=%d", removed)
+			}
+		}
+	}
+}
+
 func (h *Hub) Shutdown() {
 	h.cancel()
 	if h.lastSeenUpdater != nil {
 		h.lastSeenUpdater.Stop()
+	}
+	if h.idempotency != nil {
+		h.idempotency.Shutdown()
 	}
 	h.processor.Shutdown()
 	h.shutdown()

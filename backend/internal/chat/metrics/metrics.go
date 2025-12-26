@@ -28,3 +28,7 @@ func IncrementWebSocketFile() {
 func IncrementWebSocketFileChunk() {
 	observabilitymetrics.ChatWebSocketFilesChunksTotal.Inc()
 }
+
+func IncrementDroppedMessages(messageType string) {
+	observabilitymetrics.ChatWebSocketDroppedMessages.WithLabelValues(messageType).Inc()
+}

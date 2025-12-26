@@ -6,6 +6,7 @@ import (
 
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/metrics"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
+	commonhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/http"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 )
 
@@ -25,6 +26,51 @@ func NewMessageRouter(hub *Hub, validator MessageValidator, log *logger.Logger) 
 		validator: validator,
 		log:       log,
 	}
+}
+
+func (r *messageRouter) handleUnmarshalError(ctx context.Context, client *Client, err error, msgType string) error {
+	if err == nil {
+		return nil
+	}
+	wsErr := commonerrors.ErrInvalidPayload.WithCause(err)
+	r.log.WithFields(ctx, logger.Fields{
+		"user_id": client.userID,
+		"type":    msgType,
+		"action":  "ws_invalid_payload",
+	}).Warnf("websocket invalid payload: %v", err)
+	metrics.IncrementWebSocketError("invalid_" + msgType + "_payload")
+	r.hub.sendErrorToUser(client.userID, wsErr)
+	return wsErr
+}
+
+func (r *messageRouter) handleValidateUserIDError(ctx context.Context, client *Client, userID, msgType string) error {
+	if err := commonhttp.ValidateUUID(userID); err != nil {
+		wsErr := commonerrors.ErrInvalidPayload.WithCause(err)
+		r.log.WithFields(ctx, logger.Fields{
+			"user_id": client.userID,
+			"to":      userID,
+			"type":    msgType,
+			"action":  "ws_invalid_user_id",
+		}).Warnf("websocket invalid user ID: %v", err)
+		metrics.IncrementWebSocketError("invalid_user_id")
+		r.hub.sendErrorToUser(client.userID, wsErr)
+		return wsErr
+	}
+	return nil
+}
+
+func (r *messageRouter) handleMarshalError(ctx context.Context, client *Client, err error, msgType string) error {
+	if err == nil {
+		return nil
+	}
+	wsErr := commonerrors.ErrMarshalError.WithCause(err)
+	r.log.WithFields(ctx, logger.Fields{
+		"user_id": client.userID,
+		"type":    msgType,
+		"action":  "ws_marshal_failed",
+	}).Warnf("websocket failed to marshal payload: %v", err)
+	metrics.IncrementWebSocketError("marshal_failed")
+	return wsErr
 }
 
 type payloadWithFrom interface {
@@ -55,44 +101,10 @@ func (r *messageRouter) Route(ctx context.Context, client *Client, msg *WSMessag
 		return r.routeFileStart(ctx, client, msg)
 
 	case TypeFileChunk:
-		var payload FileChunkPayload
-		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
-			r.log.WithFields(ctx, logger.Fields{
-				"user_id": client.userID,
-				"type":    "file_chunk",
-				"action":  "ws_invalid_payload",
-			}).Warnf("websocket invalid file_chunk payload: %v", err)
-			metrics.IncrementWebSocketError("invalid_file_chunk_payload")
-			return commonerrors.ErrInvalidPayload.WithCause(err)
-		}
-		payload.From = client.userID
-		payloadBytes, _ := json.Marshal(payload)
-		msg.Payload = payloadBytes
-		if r.hub.forwardMessage(ctx, msg, &payload, true, client.userID) {
-			metrics.IncrementWebSocketFileChunk()
-			metrics.IncrementWebSocketMessage("file_chunk")
-			r.hub.updateFileTransferProgress(payload.FileID, payload.ChunkIndex)
-		}
-		return nil
+		return r.routeFileChunk(ctx, client, msg)
 
 	case TypeFileComplete:
-		var payload FileCompletePayload
-		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
-			r.log.WithFields(ctx, logger.Fields{
-				"user_id": client.userID,
-				"type":    "file_complete",
-				"action":  "ws_invalid_payload",
-			}).Warnf("websocket invalid file_complete payload: %v", err)
-			return commonerrors.ErrInvalidPayload.WithCause(err)
-		}
-		payload.From = client.userID
-		payloadBytes, _ := json.Marshal(payload)
-		msg.Payload = payloadBytes
-		if r.hub.forwardMessage(ctx, msg, &payload, true, client.userID) {
-			metrics.IncrementWebSocketMessage("file_complete")
-			r.hub.completeFileTransfer(payload.FileID)
-		}
-		return nil
+		return r.routeFileComplete(ctx, client, msg)
 
 	case TypeAck:
 		return r.routeSimple(ctx, client, msg, &AckPayload{}, "ack", false, client.userID)
@@ -113,18 +125,39 @@ func (r *messageRouter) Route(ctx context.Context, client *Client, msg *WSMessag
 			"action":  "ws_unknown_message_type",
 		}).Warn("websocket unknown message type")
 		metrics.IncrementWebSocketError("unknown_message_type")
+		r.hub.sendErrorToUser(client.userID, commonerrors.ErrUnknownMessageType)
 		return commonerrors.ErrUnknownMessageType
 	}
 }
 
 func (r *messageRouter) routeSimple(ctx context.Context, client *Client, msg *WSMessage, payload payloadWithTo, msgType string, requireOnline bool, fromUserID string) error {
+	return r.routePayload(ctx, client, msg, payload, msgType, requireOnline, fromUserID, false)
+}
+
+func (r *messageRouter) routeWithModifiedPayload(ctx context.Context, client *Client, msg *WSMessage, payload payloadWithTo, msgType string, requireOnline bool) error {
+	return r.routePayload(ctx, client, msg, payload, msgType, requireOnline, client.userID, true)
+}
+
+func (r *messageRouter) routePayload(ctx context.Context, client *Client, msg *WSMessage, payload payloadWithTo, msgType string, requireOnline bool, fromUserID string, modifyPayload bool) error {
 	if err := json.Unmarshal(msg.Payload, payload); err != nil {
-		r.log.WithFields(ctx, logger.Fields{
-			"user_id": client.userID,
-			"type":    msgType,
-			"action":  "ws_invalid_payload",
-		}).Warnf("websocket invalid payload: %v", err)
-		return commonerrors.ErrInvalidPayload.WithCause(err)
+		return r.handleUnmarshalError(ctx, client, err, msgType)
+	}
+
+	to := payload.GetTo()
+	if err := r.handleValidateUserIDError(ctx, client, to, msgType); err != nil {
+		return err
+	}
+
+	if modifyPayload {
+		if p, ok := payload.(payloadWithFrom); ok {
+			p.SetFrom(client.userID)
+		}
+
+		payloadBytes, err := json.Marshal(payload)
+		if err != nil {
+			return r.handleMarshalError(ctx, client, err, msgType)
+		}
+		msg.Payload = payloadBytes
 	}
 
 	if r.hub.forwardMessage(ctx, msg, payload, requireOnline, fromUserID) {
@@ -133,29 +166,48 @@ func (r *messageRouter) routeSimple(ctx context.Context, client *Client, msg *WS
 	return nil
 }
 
-func (r *messageRouter) routeWithModifiedPayload(ctx context.Context, client *Client, msg *WSMessage, payload payloadWithTo, msgType string, requireOnline bool) error {
+func (r *messageRouter) routeFileChunk(ctx context.Context, client *Client, msg *WSMessage) error {
+	var payload FileChunkPayload
+	if err := r.unmarshalAndValidate(ctx, client, msg, &payload, "file_chunk"); err != nil {
+		return err
+	}
+
+	payload.From = client.userID
+	if err := r.marshalAndForward(ctx, client, msg, &payload, "file_chunk", true); err != nil {
+		return err
+	}
+
+	metrics.IncrementWebSocketFileChunk()
+	r.hub.updateFileTransferProgress(payload.FileID, payload.ChunkIndex)
+	return nil
+}
+
+func (r *messageRouter) routeFileComplete(ctx context.Context, client *Client, msg *WSMessage) error {
+	var payload FileCompletePayload
+	if err := r.unmarshalAndValidate(ctx, client, msg, &payload, "file_complete"); err != nil {
+		return err
+	}
+
+	payload.From = client.userID
+	if err := r.marshalAndForward(ctx, client, msg, &payload, "file_complete", true); err != nil {
+		return err
+	}
+
+	r.hub.completeFileTransfer(payload.FileID)
+	return nil
+}
+
+func (r *messageRouter) unmarshalAndValidate(ctx context.Context, client *Client, msg *WSMessage, payload payloadWithTo, msgType string) error {
 	if err := json.Unmarshal(msg.Payload, payload); err != nil {
-		r.log.WithFields(ctx, logger.Fields{
-			"user_id": client.userID,
-			"type":    msgType,
-			"action":  "ws_invalid_payload",
-		}).Warnf("websocket invalid payload: %v", err)
-		metrics.IncrementWebSocketError("invalid_" + msgType + "_payload")
-		return commonerrors.ErrInvalidPayload.WithCause(err)
+		return r.handleUnmarshalError(ctx, client, err, msgType)
 	}
+	return r.handleValidateUserIDError(ctx, client, payload.GetTo(), msgType)
+}
 
-	if p, ok := payload.(payloadWithFrom); ok {
-		p.SetFrom(client.userID)
-	}
-
+func (r *messageRouter) marshalAndForward(ctx context.Context, client *Client, msg *WSMessage, payload payloadWithTo, msgType string, requireOnline bool) error {
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
-		r.log.WithFields(ctx, logger.Fields{
-			"user_id": client.userID,
-			"type":    msgType,
-			"action":  "ws_marshal_failed",
-		}).Warnf("websocket failed to marshal payload: %v", err)
-		return commonerrors.ErrMarshalError.WithCause(err)
+		return r.handleMarshalError(ctx, client, err, msgType)
 	}
 
 	msg.Payload = payloadBytes
@@ -167,42 +219,32 @@ func (r *messageRouter) routeWithModifiedPayload(ctx context.Context, client *Cl
 
 func (r *messageRouter) routeFileStart(ctx context.Context, client *Client, msg *WSMessage) error {
 	var payload FileStartPayload
-	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
-		r.log.WithFields(ctx, logger.Fields{
-			"user_id": client.userID,
-			"type":    "file_start",
-			"action":  "ws_invalid_payload",
-		}).Warnf("websocket invalid file_start payload: %v", err)
-		metrics.IncrementWebSocketError("invalid_file_start_payload")
-		return commonerrors.ErrInvalidPayload.WithCause(err)
+	if err := r.unmarshalAndValidate(ctx, client, msg, &payload, "file_start"); err != nil {
+		return err
 	}
 
 	if err := r.validator.ValidateFileStart(payload); err != nil {
+		wsErr := commonerrors.ErrFileSizeExceeded
+		if de, ok := commonerrors.AsDomainError(err); ok {
+			wsErr = de
+		}
 		r.log.WithFields(ctx, logger.Fields{
 			"user_id": client.userID,
 			"file_id": payload.FileID,
 			"action":  "ws_file_validation_failed",
 		}).Warnf("websocket file_start validation failed: %v", err)
 		metrics.IncrementWebSocketError("file_validation_failed")
-		return err
+		r.hub.sendErrorToUser(client.userID, wsErr)
+		return wsErr
 	}
 
 	payload.From = client.userID
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
-		r.log.WithFields(ctx, logger.Fields{
-			"user_id": client.userID,
-			"file_id": payload.FileID,
-			"action":  "ws_file_marshal_failed",
-		}).Warnf("websocket failed to marshal file_start payload: %v", err)
-		return commonerrors.ErrMarshalError.WithCause(err)
+		return r.handleMarshalError(ctx, client, err, "file_start")
 	}
 
-	forwardMsg := &WSMessage{
-		Type:    msg.Type,
-		Payload: payloadBytes,
-	}
-
+	forwardMsg := &WSMessage{Type: msg.Type, Payload: payloadBytes}
 	r.log.WithFields(ctx, logger.Fields{
 		"from":     client.userID,
 		"to":       payload.To,
@@ -216,6 +258,5 @@ func (r *messageRouter) routeFileStart(ctx context.Context, client *Client, msg 
 		metrics.IncrementWebSocketMessage("file_start")
 		r.hub.trackFileTransfer(payload)
 	}
-
 	return nil
 }

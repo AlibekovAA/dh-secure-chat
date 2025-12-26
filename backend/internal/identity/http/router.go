@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	commonhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/http"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/service"
@@ -79,18 +80,16 @@ func (h *Handler) handleIdentityRequest(
 		return
 	}
 
-	userID, ok := commonhttp.ExtractUserIDFromPath(urlPath)
-	if !ok || userID == "" {
-		h.log.WithFields(r.Context(), logger.Fields{
-			"operation": operation,
-			"action":    "identity_empty_user_id",
-		}).Warn("identity request failed: empty user_id")
-		commonhttp.WriteError(w, http.StatusBadRequest, "user_id is required")
-		return
-	}
-
-	userID = strings.TrimSuffix(userID, suffix)
-	if err := commonhttp.ValidateUUID(userID); err != nil {
+	userID, err := commonhttp.ExtractAndValidateUserID(urlPath, suffix)
+	if err != nil {
+		if err == commonerrors.ErrEmptyUUID {
+			h.log.WithFields(r.Context(), logger.Fields{
+				"operation": operation,
+				"action":    "identity_empty_user_id",
+			}).Warn("identity request failed: empty user_id")
+			commonhttp.WriteError(w, http.StatusBadRequest, "user_id is required")
+			return
+		}
 		h.log.WithFields(r.Context(), logger.Fields{
 			"operation": operation,
 			"user_id":   userID,

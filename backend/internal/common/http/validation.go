@@ -36,3 +36,20 @@ func ExtractUserIDFromPath(path string) (string, bool) {
 
 	return "", false
 }
+
+func ExtractAndValidateUserID(path string, suffix string) (string, error) {
+	userID, ok := ExtractUserIDFromPath(path)
+	if !ok || userID == "" {
+		return "", commonerrors.ErrEmptyUUID
+	}
+
+	if suffix != "" {
+		userID = strings.TrimSuffix(userID, suffix)
+	}
+
+	if err := ValidateUUID(userID); err != nil {
+		return "", err
+	}
+
+	return userID, nil
+}

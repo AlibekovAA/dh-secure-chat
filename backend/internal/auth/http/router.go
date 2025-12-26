@@ -2,7 +2,6 @@ package http
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -34,23 +33,6 @@ type Handler struct {
 	log  *logger.Logger
 }
 
-func getClientIP(r *http.Request) string {
-	ip := r.Header.Get("X-Real-IP")
-	if ip == "" {
-		ip = r.Header.Get("X-Forwarded-For")
-		if idx := strings.Index(ip, ","); idx != -1 {
-			ip = strings.TrimSpace(ip[:idx])
-		}
-	}
-	if ip == "" {
-		ip = r.RemoteAddr
-		if idx := strings.LastIndex(ip, ":"); idx != -1 {
-			ip = ip[:idx]
-		}
-	}
-	return ip
-}
-
 func NewHandler(auth *service.AuthService, cfg config.AuthConfig, log *logger.Logger) http.Handler {
 	h := &Handler{
 		auth: auth,
@@ -68,7 +50,7 @@ func NewHandler(auth *service.AuthService, cfg config.AuthConfig, log *logger.Lo
 
 func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 	var req registerRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := commonhttp.DecodeJSON(r, &req); err != nil {
 		h.log.Warnf("register failed: invalid json: %v", err)
 		commonhttp.WriteError(w, http.StatusBadRequest, "invalid json")
 		return
@@ -103,7 +85,7 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := commonhttp.DecodeJSON(r, &req); err != nil {
 		h.log.Warnf("login failed: invalid json: %v", err)
 		commonhttp.WriteError(w, http.StatusBadRequest, "invalid json")
 		return
@@ -132,7 +114,7 @@ func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	clientIP := getClientIP(r)
+	clientIP := commonhttp.GetClientIP(r)
 
 	result, err := h.auth.RefreshAccessToken(ctx, cookie.Value, clientIP)
 	if err != nil {

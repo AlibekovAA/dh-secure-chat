@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"sync"
@@ -20,16 +21,21 @@ type IdempotencyTracker struct {
 	operations sync.Map
 	ttl        time.Duration
 	clock      clock.Clock
+	ctx        context.Context
+	cancel     context.CancelFunc
 }
 
-func NewIdempotencyTracker(ttl time.Duration, clock clock.Clock) *IdempotencyTracker {
+func NewIdempotencyTracker(ctx context.Context, ttl time.Duration, clock clock.Clock) *IdempotencyTracker {
 	if ttl <= 0 {
 		ttl = 5 * time.Minute
 	}
 
+	trackerCtx, cancel := context.WithCancel(ctx)
 	tracker := &IdempotencyTracker{
-		ttl:   ttl,
-		clock: clock,
+		ttl:    ttl,
+		clock:  clock,
+		ctx:    trackerCtx,
+		cancel: cancel,
 	}
 
 	go tracker.cleanup()
@@ -66,14 +72,28 @@ func (t *IdempotencyTracker) cleanup() {
 	ticker := time.NewTicker(t.ttl / 2)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		now := t.clock.Now()
-		t.operations.Range(func(key, value interface{}) bool {
-			res := value.(*idempotencyResult)
-			if now.After(res.expiresAt) {
-				t.operations.Delete(key)
+	for {
+		select {
+		case <-t.ctx.Done():
+			return
+		case <-ticker.C:
+			now := t.clock.Now()
+			removed := 0
+			t.operations.Range(func(key, value interface{}) bool {
+				res := value.(*idempotencyResult)
+				if now.After(res.expiresAt) {
+					t.operations.Delete(key)
+					removed++
+				}
+				return true
+			})
+			if removed > 0 {
+				metrics.ChatWebSocketIdempotencyCleanupDeleted.Add(float64(removed))
 			}
-			return true
-		})
+		}
 	}
+}
+
+func (t *IdempotencyTracker) Shutdown() {
+	t.cancel()
 }

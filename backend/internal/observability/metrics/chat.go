@@ -122,4 +122,56 @@ var (
 		},
 		[]string{"message_type"},
 	)
+
+	ChatWebSocketDroppedMessages = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "chat_websocket_dropped_messages_total",
+			Help: "Total number of dropped messages due to slow clients",
+		},
+		[]string{"message_type"},
+	)
+
+	ChatWebSocketConnectionsRejected = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "chat_websocket_connections_rejected_total",
+			Help: "Total number of WebSocket connections rejected due to max connections limit",
+		},
+	)
+
+	ChatWebSocketIdempotencyCleanupDeleted = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "chat_websocket_idempotency_cleanup_deleted_total",
+			Help: "Total number of expired idempotency entries deleted during cleanup",
+		},
+	)
+
+	ChatWebSocketUserExistenceCacheHits = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "chat_websocket_user_existence_cache_hits_total",
+			Help: "Total number of user existence cache hits",
+		},
+	)
+
+	ChatWebSocketUserExistenceCacheMisses = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "chat_websocket_user_existence_cache_misses_total",
+			Help: "Total number of user existence cache misses",
+		},
+	)
+
+	ChatWebSocketUserExistenceCacheSize = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "chat_websocket_user_existence_cache_size",
+			Help: "Current size of user existence cache",
+		},
+	)
+
+	ChatWebSocketMessageSendDurationSeconds = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "chat_websocket_message_send_duration_seconds",
+			Help:    "Duration of WebSocket message send operations in seconds",
+			Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1},
+		},
+		[]string{"message_type"},
+	)
 )

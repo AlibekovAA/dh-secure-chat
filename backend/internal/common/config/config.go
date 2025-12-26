@@ -40,6 +40,7 @@ type ChatConfig struct {
 	CircuitBreakerThreshold int32         `validate:"gt=0"`
 	CircuitBreakerTimeout   time.Duration `validate:"gt=0"`
 	CircuitBreakerReset     time.Duration `validate:"gt=0"`
+	WebSocketMaxConnections int           `validate:"gt=0"`
 }
 
 var validate = validator.New()
@@ -111,6 +112,7 @@ func LoadChatConfig() (ChatConfig, error) {
 		CircuitBreakerThreshold: int32(getIntEnv("CHAT_CIRCUIT_BREAKER_THRESHOLD", 5)),
 		CircuitBreakerTimeout:   getDurationEnv("CHAT_CIRCUIT_BREAKER_TIMEOUT", 5*time.Second),
 		CircuitBreakerReset:     getDurationEnv("CHAT_CIRCUIT_BREAKER_RESET", 30*time.Second),
+		WebSocketMaxConnections: getIntEnv("CHAT_WS_MAX_CONNECTIONS", 10000),
 	}
 
 	if err := validate.Struct(cfg); err != nil {

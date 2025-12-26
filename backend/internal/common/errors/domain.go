@@ -215,6 +215,13 @@ var (
 		"send operation timed out",
 	)
 
+	ErrClientTooSlow = NewDomainError(
+		"CLIENT_TOO_SLOW",
+		CategoryExternal,
+		http.StatusRequestTimeout,
+		"client is too slow to receive messages",
+	)
+
 	ErrInvalidPayload = NewDomainError(
 		"INVALID_PAYLOAD",
 		CategoryValidation,

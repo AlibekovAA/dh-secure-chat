@@ -76,21 +76,35 @@ func main() {
 	rateLimiter := commonhttp.NewStrictRateLimiter()
 	baseHandler := commonhttp.BuildBaseHandler("auth", log, mux)
 
-	muxWithRateLimit := http.NewServeMux()
-	muxWithRateLimit.HandleFunc("/api/auth/login", rateLimiter.MiddlewareForPath("/api/auth/login")(baseHandler).ServeHTTP)
-	muxWithRateLimit.HandleFunc("/api/auth/register", rateLimiter.MiddlewareForPath("/api/auth/register")(baseHandler).ServeHTTP)
-	muxWithRateLimit.Handle("/", baseHandler)
+	rateLimitMiddleware := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			path := r.URL.Path
+			if path == "/health" || path == "/metrics" {
+				next.ServeHTTP(w, r)
+				return
+			}
+			rateLimiter.MiddlewareForPath(path)(next).ServeHTTP(w, r)
+		})
+	}
+
+	finalHandler := rateLimitMiddleware(baseHandler)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.HTTPPort,
-		Handler:           muxWithRateLimit,
+		Handler:           finalHandler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
 
-	srv.StartWithGracefulShutdown(server, log, "auth")
+	shutdownHooks := []srv.ShutdownHook{
+		func(ctx context.Context) error {
+			log.Infof("auth service: stopping cleanup goroutines")
+			cancel()
+			return nil
+		},
+	}
 
-	cancel()
+	srv.StartWithGracefulShutdownAndHooks(server, log, "auth", shutdownHooks)
 }

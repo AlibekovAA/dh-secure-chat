@@ -3,6 +3,7 @@ package websocket
 import (
 	"context"
 	"encoding/json"
+	"sync/atomic"
 	"time"
 
 	gorillaWS "github.com/gorilla/websocket"
@@ -18,6 +19,7 @@ type Client struct {
 	userID              string
 	username            string
 	send                chan []byte
+	closed              atomic.Bool
 	log                 *logger.Logger
 	authenticated       bool
 	jwtSecret           []byte
@@ -55,6 +57,27 @@ func NewUnauthenticatedClient(hub HubInterface, conn *gorillaWS.Conn, jwtSecret 
 	}
 }
 
+func NewAuthenticatedClient(hub HubInterface, conn *gorillaWS.Conn, claims jwtverify.Claims, log *logger.Logger, writeWait, pongWait, pingPeriod time.Duration, maxMsgSize int64, sendBufSize int) *Client {
+	ctx, cancel := context.WithCancel(context.Background())
+	client := &Client{
+		hub:           hub,
+		conn:          conn,
+		userID:        claims.UserID,
+		username:      claims.Username,
+		send:          make(chan []byte, sendBufSize),
+		log:           log,
+		authenticated: true,
+		writeWait:     writeWait,
+		pongWait:      pongWait,
+		pingPeriod:    pingPeriod,
+		maxMsgSize:    maxMsgSize,
+		ctx:           ctx,
+		cancel:        cancel,
+	}
+	client.conn.SetReadDeadline(time.Now().Add(client.pongWait))
+	return client
+}
+
 func (c *Client) Start() {
 	go c.writePump()
 	go c.readPump()
@@ -62,6 +85,12 @@ func (c *Client) Start() {
 
 func (c *Client) Stop() {
 	c.cancel()
+}
+
+func (c *Client) Close() {
+	if c.closed.CompareAndSwap(false, true) {
+		close(c.send)
+	}
 }
 
 func (c *Client) readPump() {

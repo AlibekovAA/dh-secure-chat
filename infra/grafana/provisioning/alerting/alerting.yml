@@ -1,0 +1,5 @@
+apiVersion: 1
+
+# Alerting provisioning configuration
+# This file is intentionally empty - no alerting rules are provisioned automatically
+# Alerting rules can be configured manually through the Grafana UI

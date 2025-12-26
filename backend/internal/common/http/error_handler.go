@@ -2,9 +2,11 @@ package http
 
 import (
 	"net/http"
+	"strconv"
 
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/observability/metrics"
 )
 
 type ErrorHandler struct {
@@ -32,6 +34,12 @@ func (h *ErrorHandler) HandleError(w http.ResponseWriter, r *http.Request, err e
 		"action": "unhandled_error",
 	}).Errorf("unhandled error: %v", err)
 
+	metrics.HTTPErrorsTotal.WithLabelValues(
+		strconv.Itoa(http.StatusInternalServerError),
+		r.URL.Path,
+		r.Method,
+	).Inc()
+
 	WriteError(w, http.StatusInternalServerError, "internal server error")
 }
 
@@ -46,6 +54,18 @@ func (h *ErrorHandler) handleDomainError(w http.ResponseWriter, r *http.Request,
 		"status":     status,
 		"action":     "domain_error",
 	}).Debugf("domain error: %s", err.Error())
+
+	metrics.DomainErrorsTotal.WithLabelValues(
+		string(err.Category()),
+		err.Code(),
+		strconv.Itoa(status),
+	).Inc()
+
+	metrics.HTTPErrorsTotal.WithLabelValues(
+		strconv.Itoa(status),
+		r.URL.Path,
+		r.Method,
+	).Inc()
 
 	WriteError(w, status, message)
 }
