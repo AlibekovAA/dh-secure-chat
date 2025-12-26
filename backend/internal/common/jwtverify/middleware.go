@@ -3,7 +3,7 @@ package jwtverify
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -11,19 +11,19 @@ import (
 
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
-	prommetrics "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/prometheus"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/observability/metrics"
 )
 
 func incrementJWTValidationsTotal() {
-	prommetrics.JWTValidationsTotal.Inc()
+	metrics.JWTValidationsTotal.Inc()
 }
 
 func incrementJWTValidationsFailed() {
-	prommetrics.JWTValidationsFailed.Inc()
+	metrics.JWTValidationsFailed.Inc()
 }
 
 func incrementJWTRevokedChecksTotal() {
-	prommetrics.JWTRevokedChecksTotal.Inc()
+	metrics.JWTRevokedChecksTotal.Inc()
 }
 
 type RevokedTokenChecker interface {
@@ -116,7 +116,7 @@ func ParseToken(tokenString string, secret []byte) (Claims, error) {
 func parseToken(tokenString string, secret []byte) (Claims, error) {
 	parsed, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
 		if token.Method != jwt.SigningMethodHS256 {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Method)
+			return nil, commonerrors.ErrInvalidTokenSigningMethod
 		}
 		return secret, nil
 	})
@@ -124,19 +124,22 @@ func parseToken(tokenString string, secret []byte) (Claims, error) {
 		if err == nil {
 			err = commonerrors.ErrInvalidToken
 		}
-		return Claims{}, fmt.Errorf("failed to parse token: %w", err)
+		if errors.Is(err, commonerrors.ErrInvalidToken) {
+			return Claims{}, err
+		}
+		return Claims{}, commonerrors.ErrInvalidToken.WithCause(err)
 	}
 
 	mapClaims, ok := parsed.Claims.(jwt.MapClaims)
 	if !ok {
-		return Claims{}, fmt.Errorf("invalid claims type: expected MapClaims, got %T", parsed.Claims)
+		return Claims{}, commonerrors.ErrInvalidTokenClaims
 	}
 
 	sub, _ := mapClaims["sub"].(string)
 	username, _ := mapClaims["usr"].(string)
 	jti, _ := mapClaims["jti"].(string)
 	if sub == "" || username == "" {
-		return Claims{}, fmt.Errorf("missing required claims: sub=%q, usr=%q", sub, username)
+		return Claims{}, commonerrors.ErrMissingTokenClaims
 	}
 
 	return Claims{

@@ -1,0 +1,21 @@
+services:
+  grafana:
+    image: grafana/grafana:latest
+    container_name: dh-secure-chat-grafana
+    ports:
+      - '3000:3000'
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ../infra/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+      - ../infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
+volumes:
+  grafana-data:

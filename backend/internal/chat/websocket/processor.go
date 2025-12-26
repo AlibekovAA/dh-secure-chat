@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
-	prommetrics "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/prometheus"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/observability/metrics"
 )
 
 type messageTask struct {
@@ -62,7 +62,7 @@ func (p *MessageProcessor) process(ctx context.Context, client *Client, msg *WSM
 	}
 
 	duration := time.Since(start).Seconds()
-	prommetrics.ChatWebSocketMessageProcessingDurationSeconds.WithLabelValues(string(msg.Type)).Observe(duration)
+	metrics.ChatWebSocketMessageProcessingDurationSeconds.WithLabelValues(string(msg.Type)).Observe(duration)
 }
 
 func (p *MessageProcessor) Submit(ctx context.Context, client *Client, msg *WSMessage) {
@@ -74,14 +74,14 @@ func (p *MessageProcessor) Submit(ctx context.Context, client *Client, msg *WSMe
 
 	select {
 	case p.queue <- task:
-		prommetrics.ChatWebSocketMessageProcessorQueueSize.Set(float64(len(p.queue)))
+		metrics.ChatWebSocketMessageProcessorQueueSize.Set(float64(len(p.queue)))
 	default:
 		p.log.WithFields(ctx, logger.Fields{
 			"user_id": client.userID,
 			"type":    string(msg.Type),
 			"action":  "ws_queue_full",
 		}).Warn("websocket message queue full")
-		prommetrics.ChatWebSocketMessageProcessorQueueSize.Set(float64(len(p.queue)))
+		metrics.ChatWebSocketMessageProcessorQueueSize.Set(float64(len(p.queue)))
 	}
 }
 

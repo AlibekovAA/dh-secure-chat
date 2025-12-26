@@ -29,28 +29,16 @@ import { deriveSessionKey } from '../../shared/crypto/session';
 import { encrypt, decrypt } from '../../shared/crypto/encryption';
 import {
   encryptFile,
-  decryptFile,
   calculateChunks,
   getChunkSize,
 } from '../../shared/crypto/file-encryption';
 import { getIdentityKey } from './api';
 import type { SessionKey } from '../../shared/crypto/session';
-import {
-  MAX_FILE_SIZE,
-  MAX_MESSAGE_LENGTH,
-  MAX_VOICE_SIZE,
-  VOICE_MIME_TYPES,
-} from './constants';
-
-function extractDurationFromFilename(filename: string): number {
-  const match = filename.match(/voice-(\d+)s/);
-  const extracted = match ? parseInt(match[1], 10) : 0;
-  return extracted > 0 ? extracted : 0;
-}
-
-function isVoiceFile(mimeType: string): boolean {
-  return VOICE_MIME_TYPES.some((type) => mimeType.includes(type));
-}
+import { MAX_FILE_SIZE, MAX_MESSAGE_LENGTH, MAX_VOICE_SIZE } from './constants';
+import { useAckManager } from './hooks/useAckManager';
+import { useFileTransfer } from './hooks/useFileTransfer';
+import { useMessageHandler } from './hooks/useMessageHandlers';
+import { isVoiceFile, extractDurationFromFilename } from './utils';
 
 export type ChatSessionState =
   | 'idle'
@@ -139,69 +127,31 @@ export function useChatSession({
       }
     >
   >(new Map());
-  const ACK_TIMEOUT = 5000;
-  const MAX_RETRIES = 3;
-  const RETRY_DELAY = 1000;
   const typingTimeoutRef = useRef<number | null>(null);
 
-  const handleAck = useCallback((messageId: string) => {
-    const pending = pendingAcksRef.current.get(messageId);
-    if (pending) {
-      clearTimeout(pending.timeout);
-      pendingAcksRef.current.delete(messageId);
-    }
-  }, []);
-
-  const scheduleRetry = useCallback((messageId: string) => {
-    const pending = pendingAcksRef.current.get(messageId);
-    if (!pending) return;
-
-    pending.retries++;
-    if (pending.retries >= MAX_RETRIES) {
-      pendingAcksRef.current.delete(messageId);
+  const { handleAck, sendWithAck, clearPendingAcks } = useAckManager({
+    sendRef,
+    pendingAcksRef,
+    onMaxRetries: () => {
       setError(
         'Не удалось доставить ключ шифрования. Попробуйте переподключиться к чату.',
       );
       setState('error');
-      return;
-    }
-
-    const retryTimeout = setTimeout(() => {
-      sendRef.current?.(pending.message);
-      const ackTimeout = setTimeout(() => {
-        scheduleRetry(messageId);
-      }, ACK_TIMEOUT) as unknown as number;
-      pending.timeout = ackTimeout;
-    }, RETRY_DELAY) as unknown as number;
-
-    pending.timeout = retryTimeout;
-  }, []);
-
-  const sendWithAck = useCallback(
-    (message: WSMessage, requiresAck: boolean) => {
-      if (!requiresAck) {
-        sendRef.current?.(message);
-        return;
-      }
-
-      const payload = message.payload as EphemeralKeyPayload;
-      const messageId = payload.message_id;
-
-      const timeout = setTimeout(() => {
-        scheduleRetry(messageId);
-      }, ACK_TIMEOUT) as unknown as number;
-
-      pendingAcksRef.current.set(messageId, {
-        message,
-        timeout,
-        retries: 0,
-        timestamp: Date.now(),
-      });
-
-      sendRef.current?.(message);
     },
-    [scheduleRetry],
-  );
+  });
+
+  const { handleIncomingFile, clearFileBuffers } = useFileTransfer({
+    sessionKeyRef,
+    fileBuffersRef,
+    setMessages,
+    setError,
+  });
+
+  const clearSession = useCallback(() => {
+    sessionKeyRef.current = null;
+    myEphemeralKeyRef.current = null;
+    peerEphemeralKeyRef.current = null;
+  }, []);
 
   const handlePeerEphemeralKey = useCallback(
     async (payload: EphemeralKeyPayload) => {
@@ -322,312 +272,129 @@ export function useChatSession({
     }
   }, []);
 
-  const handleIncomingFile = useCallback(async (fileId: string) => {
-    if (!sessionKeyRef.current) {
-      return;
-    }
-
-    const buffer = fileBuffersRef.current.get(fileId);
-    if (!buffer) {
-      return;
-    }
-
-    if (buffer.processing) {
-      return;
-    }
-
-    const { chunks, metadata } = buffer;
-    const expectedChunks = metadata.total_chunks;
-
-    if (chunks.length < expectedChunks) {
-      return;
-    }
-
-    buffer.processing = true;
-
-    const sortedChunks: Array<{ ciphertext: string; nonce: string }> = [];
-    for (let i = 0; i < expectedChunks; i++) {
-      const chunk = chunks[i];
-      if (!chunk || !chunk.ciphertext || !chunk.nonce) {
-        setError(
-          `Не все части файла получены (${sortedChunks.length}/${expectedChunks})`,
-        );
-        return;
-      }
-      sortedChunks.push(chunk);
-    }
-
-    try {
-      const decryptedBlob = await decryptFile(
-        sessionKeyRef.current,
-        sortedChunks,
-      );
-
-      if (!decryptedBlob || decryptedBlob.size === 0) {
-        setError('Получен пустой файл');
-        fileBuffersRef.current.delete(fileId);
-        return;
-      }
-
-      const mimeType = metadata.mime_type || 'application/octet-stream';
-      const blob = new Blob([decryptedBlob], { type: mimeType });
-
-      if (!blob || blob.size === 0) {
-        setError('Получен пустой файл');
-        fileBuffersRef.current.delete(fileId);
-        return;
-      }
-
-      const isVoice =
-        metadata.mime_type && metadata.mime_type.startsWith('audio/');
-      const extractedDuration = extractDurationFromFilename(metadata.filename);
-
-      const newMessage: ChatMessage = {
-        id: fileId,
-        ...(isVoice
-          ? {
-              voice: {
-                filename: metadata.filename,
-                mimeType,
-                size: metadata.total_size,
-                duration: extractedDuration > 0 ? extractedDuration : 0,
-                blob,
-              },
+  const handleReaction = useCallback((payload: ReactionPayload) => {
+    const currentUserId = localStorage.getItem('userId') || '';
+    if (payload.from && payload.from !== currentUserId) {
+      const fromUserId = payload.from;
+      setMessages((prev) =>
+        prev.map((msg) => {
+          if (msg.id === payload.message_id) {
+            const reactions = msg.reactions || {};
+            const emojiReactions = reactions[payload.emoji] || [];
+            if (payload.action === 'add') {
+              if (!emojiReactions.includes(fromUserId)) {
+                return {
+                  ...msg,
+                  reactions: {
+                    ...reactions,
+                    [payload.emoji]: [...emojiReactions, fromUserId],
+                  },
+                };
+              }
+            } else {
+              return {
+                ...msg,
+                reactions: {
+                  ...reactions,
+                  [payload.emoji]: emojiReactions.filter(
+                    (id) => id !== fromUserId,
+                  ),
+                },
+              };
             }
-          : {
-              file: {
-                filename: metadata.filename,
-                mimeType,
-                size: metadata.total_size,
-                blob,
-                accessMode: metadata.access_mode || 'both',
-              },
-            }),
-        timestamp: Date.now(),
-        isOwn: false,
-      };
-
-      setMessages((prev) => [...prev, newMessage]);
-      fileBuffersRef.current.delete(fileId);
-    } catch (err) {
-      setError('Не удалось расшифровать файл. Возможно, сессия была прервана.');
-      fileBuffersRef.current.delete(fileId);
+          }
+          return msg;
+        }),
+      );
     }
   }, []);
+
+  const handleMessageDelete = useCallback(
+    (payload: MessageDeletePayload) => {
+      if (payload.from === peerId) {
+        const scope = payload.scope ?? 'all';
+        if (scope === 'all') {
+          setMessages((prev) =>
+            prev.map((msg) => {
+              if (msg.id === payload.message_id) {
+                return { ...msg, isDeleted: true, text: undefined };
+              }
+
+              if (msg.replyTo?.id === payload.message_id) {
+                return {
+                  ...msg,
+                  replyTo: {
+                    ...msg.replyTo,
+                    isDeleted: true,
+                    text: undefined,
+                    hasFile: false,
+                    hasVoice: false,
+                  },
+                };
+              }
+
+              return msg;
+            }),
+          );
+        }
+      }
+    },
+    [peerId],
+  );
+
+  const handlePeerOffline = useCallback((_payload: PeerOfflinePayload) => {
+    setState('peer_offline');
+    setError('Собеседник не в сети. Сообщение не может быть доставлено.');
+  }, []);
+
+  const handlePeerDisconnected = useCallback(
+    (_payload: PeerDisconnectedPayload) => {
+      setState('peer_disconnected');
+    },
+    [],
+  );
+
+  const handleSessionEstablished = useCallback(
+    (payload: SessionEstablishedPayload) => {
+      if (payload.peer_id === peerId && sessionKeyRef.current) {
+        setState('active');
+        setError(null);
+      }
+    },
+    [peerId],
+  );
+
+  const messageHandler = useMessageHandler({
+    peerId,
+    handlers: {
+      onEphemeralKey: handlePeerEphemeralKey,
+      onAck: handleAck,
+      onSessionEstablished: handleSessionEstablished,
+      onMessage: handleIncomingMessage,
+      onPeerOffline: handlePeerOffline,
+      onPeerDisconnected: handlePeerDisconnected,
+      onFileStart: () => {},
+      onFileChunk: () => {},
+      onFileComplete: () => {},
+      onTyping: () => {},
+      onReaction: handleReaction,
+      onMessageDelete: handleMessageDelete,
+    },
+    setState,
+    setMessages,
+    setIsPeerTyping,
+    clearPendingAcks,
+    clearSession,
+    clearFileBuffers,
+    fileBuffersRef,
+    typingTimeoutRef,
+    handleIncomingFile,
+  });
 
   const { isConnected, send } = useWebSocket({
     token,
     enabled: enabled && !!token,
-    onMessage: useCallback(
-      (message: WSMessage) => {
-        if (!peerId) return;
-
-        switch (message.type) {
-          case 'ephemeral_key': {
-            const payload = message.payload as EphemeralKeyPayload;
-            setState((currentState) => {
-              if (
-                currentState === 'peer_disconnected' ||
-                currentState === 'peer_offline'
-              ) {
-                sessionKeyRef.current = null;
-                myEphemeralKeyRef.current = null;
-                peerEphemeralKeyRef.current = null;
-                return 'idle';
-              }
-              return currentState;
-            });
-            handlePeerEphemeralKey(payload);
-            break;
-          }
-
-          case 'ack': {
-            const payload = message.payload as AckPayload;
-            handleAck(payload.message_id);
-            break;
-          }
-
-          case 'session_established': {
-            const payload = message.payload as SessionEstablishedPayload;
-            if (payload.peer_id === peerId && sessionKeyRef.current) {
-              setState('active');
-              setError(null);
-            }
-            break;
-          }
-
-          case 'message': {
-            const payload = message.payload as MessagePayload;
-            handleIncomingMessage(payload);
-            break;
-          }
-
-          case 'peer_offline': {
-            const payload = message.payload as PeerOfflinePayload;
-            if (payload.peer_id === peerId) {
-              for (const [, pending] of pendingAcksRef.current) {
-                clearTimeout(pending.timeout);
-              }
-              pendingAcksRef.current.clear();
-
-              setState('peer_offline');
-              setError(
-                'Собеседник не в сети. Сообщение не может быть доставлено.',
-              );
-            }
-            break;
-          }
-
-          case 'peer_disconnected': {
-            const payload = message.payload as PeerDisconnectedPayload;
-            if (payload.peer_id === peerId) {
-              setState('peer_disconnected');
-              setMessages([]);
-              sessionKeyRef.current = null;
-              myEphemeralKeyRef.current = null;
-              peerEphemeralKeyRef.current = null;
-              fileBuffersRef.current.clear();
-            }
-            break;
-          }
-
-          case 'file_start': {
-            const payload = message.payload as FileStartPayload;
-            if (payload.from === peerId) {
-              fileBuffersRef.current.set(payload.file_id, {
-                chunks: [],
-                metadata: payload,
-                processing: false,
-              });
-            }
-            break;
-          }
-
-          case 'file_chunk': {
-            const payload = message.payload as FileChunkPayload;
-            if (payload.from === peerId) {
-              const buffer = fileBuffersRef.current.get(payload.file_id);
-              if (buffer && !buffer.processing) {
-                if (
-                  payload.chunk_index >= 0 &&
-                  payload.chunk_index < payload.total_chunks
-                ) {
-                  buffer.chunks[payload.chunk_index] = {
-                    ciphertext: payload.ciphertext,
-                    nonce: payload.nonce,
-                  };
-                }
-              }
-            }
-            break;
-          }
-
-          case 'file_complete': {
-            const payload = message.payload as FileCompletePayload;
-            if (payload.from === peerId) {
-              setTimeout(() => {
-                handleIncomingFile(payload.file_id);
-              }, 100);
-            }
-            break;
-          }
-
-          case 'typing': {
-            const payload = message.payload as TypingPayload;
-            if (payload.from === peerId) {
-              setIsPeerTyping(payload.is_typing);
-              if (typingTimeoutRef.current) {
-                clearTimeout(typingTimeoutRef.current);
-              }
-              if (payload.is_typing) {
-                typingTimeoutRef.current = setTimeout(() => {
-                  setIsPeerTyping(false);
-                }, 3000) as unknown as number;
-              }
-            }
-            break;
-          }
-
-          case 'reaction': {
-            const payload = message.payload as ReactionPayload;
-            const currentUserId = localStorage.getItem('userId') || '';
-            if (payload.from && payload.from !== currentUserId) {
-              const fromUserId = payload.from;
-              setMessages((prev) =>
-                prev.map((msg) => {
-                  if (msg.id === payload.message_id) {
-                    const reactions = msg.reactions || {};
-                    const emojiReactions = reactions[payload.emoji] || [];
-                    if (payload.action === 'add') {
-                      if (!emojiReactions.includes(fromUserId)) {
-                        return {
-                          ...msg,
-                          reactions: {
-                            ...reactions,
-                            [payload.emoji]: [...emojiReactions, fromUserId],
-                          },
-                        };
-                      }
-                    } else {
-                      return {
-                        ...msg,
-                        reactions: {
-                          ...reactions,
-                          [payload.emoji]: emojiReactions.filter(
-                            (id) => id !== fromUserId,
-                          ),
-                        },
-                      };
-                    }
-                  }
-                  return msg;
-                }),
-              );
-            }
-            break;
-          }
-
-          case 'message_delete': {
-            const payload = message.payload as MessageDeletePayload;
-            if (payload.from === peerId) {
-              const scope = payload.scope ?? 'all';
-              if (scope === 'all') {
-                setMessages((prev) =>
-                  prev.map((msg) => {
-                    if (msg.id === payload.message_id) {
-                      return { ...msg, isDeleted: true, text: undefined };
-                    }
-
-                    if (msg.replyTo?.id === payload.message_id) {
-                      return {
-                        ...msg,
-                        replyTo: {
-                          ...msg.replyTo,
-                          isDeleted: true,
-                          text: undefined,
-                          hasFile: false,
-                          hasVoice: false,
-                        },
-                      };
-                    }
-
-                    return msg;
-                  }),
-                );
-              }
-            }
-            break;
-          }
-        }
-      },
-      [
-        peerId,
-        handleIncomingFile,
-        handleIncomingMessage,
-        handlePeerEphemeralKey,
-        handleAck,
-      ],
-    ),
+    onMessage: messageHandler,
     onError: useCallback((err: Error) => {
       setError(err.message);
       setState('error');
@@ -649,10 +416,7 @@ export function useChatSession({
     peerEphemeralKeyRef.current = null;
     peerIdentityPublicKeyRef.current = null;
 
-    for (const [, pending] of pendingAcksRef.current) {
-      clearTimeout(pending.timeout);
-    }
-    pendingAcksRef.current.clear();
+    clearPendingAcks();
 
     try {
       if (!myIdentityPrivateKeyRef.current) {
@@ -966,26 +730,18 @@ export function useChatSession({
       peerEphemeralKeyRef.current = null;
       peerIdentityPublicKeyRef.current = null;
 
-      for (const [, pending] of pendingAcksRef.current) {
-        clearTimeout(pending.timeout);
-      }
-      pendingAcksRef.current.clear();
+      clearPendingAcks();
     }
   }, [enabled, peerId, isConnected, state, startSession]);
 
   useEffect(() => {
     return () => {
-      for (const [, pending] of pendingAcksRef.current) {
-        clearTimeout(pending.timeout);
-      }
-      pendingAcksRef.current.clear();
-      fileBuffersRef.current.clear();
-      sessionKeyRef.current = null;
-      myEphemeralKeyRef.current = null;
-      peerEphemeralKeyRef.current = null;
+      clearPendingAcks();
+      clearFileBuffers();
+      clearSession();
       peerIdentityPublicKeyRef.current = null;
     };
-  }, []);
+  }, [clearPendingAcks, clearFileBuffers, clearSession]);
 
   const sendVoice = useCallback(
     async (file: File, duration: number) => {

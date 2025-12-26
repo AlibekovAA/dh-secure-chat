@@ -2,7 +2,6 @@ package http
 
 import (
 	"encoding/base64"
-	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,13 +11,12 @@ import (
 
 	authrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/repository"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/service"
+	chatdto "github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/service/dto"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/websocket"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/config"
-	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	commonhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/http"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/jwtverify"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
-	userdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
 )
 
 type Handler struct {
@@ -87,11 +85,7 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.chat.GetMe(ctx, claims.UserID)
 	if err != nil {
-		h.log.WithFields(ctx, logger.Fields{
-			"user_id": claims.UserID,
-			"action":  "chat_me_failed",
-		}).Errorf("chat/me failed: %v", err)
-		commonhttp.WriteError(w, http.StatusInternalServerError, "failed to load profile")
+		commonhttp.HandleError(w, r, err, h.log)
 		return
 	}
 	h.log.WithFields(ctx, logger.Fields{
@@ -99,7 +93,7 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 		"action":  "chat_me_success",
 	}).Info("chat/me success")
 	commonhttp.WriteJSON(w, http.StatusOK, meResponse{
-		ID:       string(user.ID),
+		ID:       user.ID,
 		Username: user.Username,
 	})
 }
@@ -119,20 +113,7 @@ func (h *Handler) searchUsers(w http.ResponseWriter, r *http.Request) {
 
 	users, err := h.chat.SearchUsers(ctx, query, limit)
 	if err != nil {
-		if errors.Is(err, commonerrors.ErrEmptyQuery) {
-			h.log.WithFields(ctx, logger.Fields{
-				"query":  query,
-				"action": "chat_users_search_empty",
-			}).Warn("chat/users search failed: empty query")
-			commonhttp.WriteError(w, http.StatusBadRequest, "query is empty")
-		} else {
-			h.log.WithFields(ctx, logger.Fields{
-				"query":  query,
-				"limit":  limit,
-				"action": "chat_users_search_failed",
-			}).Errorf("chat/users search failed: %v", err)
-			commonhttp.WriteError(w, http.StatusInternalServerError, "failed to search users")
-		}
+		commonhttp.HandleError(w, r, err, h.log)
 		return
 	}
 
@@ -173,19 +154,7 @@ func (h *Handler) getIdentityKey(w http.ResponseWriter, r *http.Request) {
 
 	pubKey, err := h.chat.GetIdentityKey(ctx, userID)
 	if err != nil {
-		if errors.Is(err, commonerrors.ErrIdentityKeyNotFound) {
-			h.log.WithFields(ctx, logger.Fields{
-				"user_id": userID,
-				"action":  "chat_identity_key_not_found",
-			}).Warn("chat/identity-key failed: not found")
-			commonhttp.WriteError(w, http.StatusNotFound, "identity key not found")
-		} else {
-			h.log.WithFields(ctx, logger.Fields{
-				"user_id": userID,
-				"action":  "chat_identity_key_failed",
-			}).Errorf("chat/identity-key failed: %v", err)
-			commonhttp.WriteError(w, http.StatusInternalServerError, "failed to get identity key")
-		}
+		commonhttp.HandleError(w, r, err, h.log)
 		return
 	}
 
@@ -225,11 +194,11 @@ func (h *Handler) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	client.Start()
 }
 
-func toUserResponses(users []userdomain.Summary) []userResponse {
+func toUserResponses(users []chatdto.UserSummary) []userResponse {
 	result := make([]userResponse, 0, len(users))
 	for _, u := range users {
 		result = append(result, userResponse{
-			ID:       string(u.ID),
+			ID:       u.ID,
 			Username: u.Username,
 		})
 	}

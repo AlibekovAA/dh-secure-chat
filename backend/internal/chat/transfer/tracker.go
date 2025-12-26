@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/clock"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 )
 
@@ -35,16 +36,18 @@ type Tracker interface {
 type InMemoryTracker struct {
 	transfers sync.Map
 	timeout   time.Duration
+	clock     clock.Clock
 }
 
-func NewTracker(timeout time.Duration) Tracker {
+func NewTracker(timeout time.Duration, clock clock.Clock) Tracker {
 	return &InMemoryTracker{
 		timeout: timeout,
+		clock:   clock,
 	}
 }
 
 func (t *InMemoryTracker) Track(req TrackRequest) error {
-	now := time.Now()
+	now := t.clock.Now()
 
 	transfer := &Transfer{
 		FileID:         req.FileID,
@@ -74,7 +77,7 @@ func (t *InMemoryTracker) UpdateProgress(fileID string, chunkIndex int) error {
 	}
 
 	transfer := value.(*Transfer)
-	transfer.LastChunkAt = time.Now()
+	transfer.LastChunkAt = t.clock.Now()
 	if chunkIndex >= transfer.TotalChunks {
 		return commonerrors.ErrInvalidChunkIndex
 	}
@@ -110,7 +113,7 @@ func (t *InMemoryTracker) GetTransfersForUser(userID string) []*Transfer {
 }
 
 func (t *InMemoryTracker) CleanupStale() int {
-	now := time.Now()
+	now := t.clock.Now()
 	removed := 0
 
 	t.transfers.Range(func(key, value interface{}) bool {

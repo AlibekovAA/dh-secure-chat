@@ -6,7 +6,8 @@ import (
 	"sync"
 	"time"
 
-	prommetrics "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/prometheus"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/clock"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/observability/metrics"
 )
 
 type idempotencyResult struct {
@@ -18,15 +19,17 @@ type idempotencyResult struct {
 type IdempotencyTracker struct {
 	operations sync.Map
 	ttl        time.Duration
+	clock      clock.Clock
 }
 
-func NewIdempotencyTracker(ttl time.Duration) *IdempotencyTracker {
+func NewIdempotencyTracker(ttl time.Duration, clock clock.Clock) *IdempotencyTracker {
 	if ttl <= 0 {
 		ttl = 5 * time.Minute
 	}
 
 	tracker := &IdempotencyTracker{
-		ttl: ttl,
+		ttl:   ttl,
+		clock: clock,
 	}
 
 	go tracker.cleanup()
@@ -34,7 +37,7 @@ func NewIdempotencyTracker(ttl time.Duration) *IdempotencyTracker {
 	return tracker
 }
 
-func (t *IdempotencyTracker) generateOperationID(userID string, msgType MessageType, payload []byte) string {
+func (t *IdempotencyTracker) GenerateOperationID(userID string, msgType MessageType, payload []byte) string {
 	hash := sha256.Sum256(append(append([]byte(userID), []byte(msgType)...), payload...))
 	return hex.EncodeToString(hash[:])
 }
@@ -42,8 +45,8 @@ func (t *IdempotencyTracker) generateOperationID(userID string, msgType MessageT
 func (t *IdempotencyTracker) Execute(operationID string, msgType MessageType, fn func() (interface{}, error)) (interface{}, error) {
 	if result, ok := t.operations.Load(operationID); ok {
 		res := result.(*idempotencyResult)
-		if time.Now().Before(res.expiresAt) {
-			prommetrics.ChatWebSocketIdempotencyDuplicates.WithLabelValues(string(msgType)).Inc()
+		if t.clock.Now().Before(res.expiresAt) {
+			metrics.ChatWebSocketIdempotencyDuplicates.WithLabelValues(string(msgType)).Inc()
 			return res.result, res.err
 		}
 		t.operations.Delete(operationID)
@@ -53,7 +56,7 @@ func (t *IdempotencyTracker) Execute(operationID string, msgType MessageType, fn
 	t.operations.Store(operationID, &idempotencyResult{
 		result:    result,
 		err:       err,
-		expiresAt: time.Now().Add(t.ttl),
+		expiresAt: t.clock.Now().Add(t.ttl),
 	})
 
 	return result, err
@@ -64,7 +67,7 @@ func (t *IdempotencyTracker) cleanup() {
 	defer ticker.Stop()
 
 	for range ticker.C {
-		now := time.Now()
+		now := t.clock.Now()
 		t.operations.Range(func(key, value interface{}) bool {
 			res := value.(*idempotencyResult)
 			if now.After(res.expiresAt) {

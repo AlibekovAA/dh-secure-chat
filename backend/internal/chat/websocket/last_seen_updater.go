@@ -2,12 +2,12 @@ package websocket
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
 
-	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/clock"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/resilience"
 	userdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
 	userrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/repository"
 )
@@ -24,7 +24,8 @@ type LastSeenUpdater struct {
 	cancel         context.CancelFunc
 	repo           userrepo.Repository
 	log            *logger.Logger
-	circuitBreaker *CircuitBreaker
+	circuitBreaker *resilience.CircuitBreaker
+	clock          clock.Clock
 	updateInterval time.Duration
 	queue          chan string
 	lastSeenCache  map[string]time.Time
@@ -32,7 +33,7 @@ type LastSeenUpdater struct {
 	wg             sync.WaitGroup
 }
 
-func NewLastSeenUpdater(ctx context.Context, repo userrepo.Repository, log *logger.Logger, updateInterval time.Duration, circuitBreaker *CircuitBreaker) *LastSeenUpdater {
+func NewLastSeenUpdater(ctx context.Context, repo userrepo.Repository, log *logger.Logger, updateInterval time.Duration, circuitBreaker *resilience.CircuitBreaker, clock clock.Clock) *LastSeenUpdater {
 	updateCtx, cancel := context.WithCancel(ctx)
 	updater := &LastSeenUpdater{
 		ctx:            updateCtx,
@@ -40,6 +41,7 @@ func NewLastSeenUpdater(ctx context.Context, repo userrepo.Repository, log *logg
 		repo:           repo,
 		log:            log,
 		circuitBreaker: circuitBreaker,
+		clock:          clock,
 		updateInterval: updateInterval,
 		queue:          make(chan string, lastSeenQueueSize),
 		lastSeenCache:  make(map[string]time.Time),
@@ -52,7 +54,7 @@ func NewLastSeenUpdater(ctx context.Context, repo userrepo.Repository, log *logg
 }
 
 func (u *LastSeenUpdater) Enqueue(userID string) {
-	now := time.Now()
+	now := u.clock.Now()
 
 	u.mu.Lock()
 	if last, ok := u.lastSeenCache[userID]; ok && now.Sub(last) < u.updateInterval {
@@ -116,14 +118,20 @@ func (u *LastSeenUpdater) flush(pending map[string]struct{}) {
 
 	var err error
 	if u.circuitBreaker != nil {
-		err = u.circuitBreaker.Call(ctx, func(callCtx context.Context) error {
+		err = u.circuitBreaker.CallWithFallback(ctx, func(callCtx context.Context) error {
 			return u.repo.UpdateLastSeenBatch(callCtx, ids)
+		}, func() error {
+			u.log.WithFields(ctx, logger.Fields{
+				"count":  len(ids),
+				"action": "last_seen_batch_skipped",
+			}).Debug("last_seen update skipped: circuit breaker is open")
+			return nil
 		})
 	} else {
 		err = u.repo.UpdateLastSeenBatch(ctx, ids)
 	}
 
-	if err != nil && !errors.Is(err, commonerrors.ErrCircuitOpen) {
+	if err != nil {
 		u.log.WithFields(ctx, logger.Fields{
 			"count":  len(ids),
 			"action": "last_seen_batch_failed",

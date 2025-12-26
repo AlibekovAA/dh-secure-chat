@@ -1,7 +1,6 @@
 package config
 
 import (
-	"fmt"
 	"os"
 	"strconv"
 	"time"
@@ -19,22 +18,28 @@ type AuthConfig struct {
 	AccessTokenTTL          time.Duration `validate:"gt=0"`
 	RefreshTokenTTL         time.Duration `validate:"gt=0"`
 	MaxRefreshTokensPerUser int           `validate:"gt=0"`
+	CircuitBreakerThreshold int32         `validate:"gt=0"`
+	CircuitBreakerTimeout   time.Duration `validate:"gt=0"`
+	CircuitBreakerReset     time.Duration `validate:"gt=0"`
 }
 
 type ChatConfig struct {
-	HTTPPort               string        `validate:"required"`
-	DatabaseURL            string        `validate:"required,url"`
-	JWTSecret              string        `validate:"required"`
-	WebSocketWriteWait     time.Duration `validate:"gt=0"`
-	WebSocketPongWait      time.Duration `validate:"gt=0"`
-	WebSocketPingPeriod    time.Duration `validate:"gt=0"`
-	WebSocketMaxMsgSize    int64         `validate:"gt=0"`
-	WebSocketSendBufSize   int           `validate:"gt=0"`
-	WebSocketAuthTimeout   time.Duration `validate:"gt=0"`
-	WebSocketSendTimeout   time.Duration `validate:"gt=0"`
-	LastSeenUpdateInterval time.Duration `validate:"gt=0"`
-	RequestTimeout         time.Duration `validate:"gt=0"`
-	SearchTimeout          time.Duration `validate:"gt=0"`
+	HTTPPort                string        `validate:"required"`
+	DatabaseURL             string        `validate:"required,url"`
+	JWTSecret               string        `validate:"required"`
+	WebSocketWriteWait      time.Duration `validate:"gt=0"`
+	WebSocketPongWait       time.Duration `validate:"gt=0"`
+	WebSocketPingPeriod     time.Duration `validate:"gt=0"`
+	WebSocketMaxMsgSize     int64         `validate:"gt=0"`
+	WebSocketSendBufSize    int           `validate:"gt=0"`
+	WebSocketAuthTimeout    time.Duration `validate:"gt=0"`
+	WebSocketSendTimeout    time.Duration `validate:"gt=0"`
+	LastSeenUpdateInterval  time.Duration `validate:"gt=0"`
+	RequestTimeout          time.Duration `validate:"gt=0"`
+	SearchTimeout           time.Duration `validate:"gt=0"`
+	CircuitBreakerThreshold int32         `validate:"gt=0"`
+	CircuitBreakerTimeout   time.Duration `validate:"gt=0"`
+	CircuitBreakerReset     time.Duration `validate:"gt=0"`
 }
 
 var validate = validator.New()
@@ -62,10 +67,13 @@ func LoadAuthConfig() (AuthConfig, error) {
 		AccessTokenTTL:          getDurationEnv("AUTH_ACCESS_TOKEN_TTL", 15*time.Minute),
 		RefreshTokenTTL:         getDurationEnv("AUTH_REFRESH_TOKEN_TTL", 7*24*time.Hour),
 		MaxRefreshTokensPerUser: getIntEnv("AUTH_MAX_REFRESH_TOKENS_PER_USER", 5),
+		CircuitBreakerThreshold: int32(getIntEnv("AUTH_CIRCUIT_BREAKER_THRESHOLD", 5)),
+		CircuitBreakerTimeout:   getDurationEnv("AUTH_CIRCUIT_BREAKER_TIMEOUT", 5*time.Second),
+		CircuitBreakerReset:     getDurationEnv("AUTH_CIRCUIT_BREAKER_RESET", 30*time.Second),
 	}
 
 	if err := validate.Struct(cfg); err != nil {
-		return AuthConfig{}, fmt.Errorf("invalid auth config: %w", err)
+		return AuthConfig{}, commonerrors.ErrInternalError.WithCause(err)
 	}
 
 	return cfg, nil
@@ -87,23 +95,26 @@ func LoadChatConfig() (ChatConfig, error) {
 	}
 
 	cfg := ChatConfig{
-		HTTPPort:               getEnv("CHAT_HTTP_PORT", "8082"),
-		DatabaseURL:            databaseURL,
-		JWTSecret:              jwtSecret,
-		WebSocketWriteWait:     getDurationEnv("CHAT_WS_WRITE_WAIT", 10*time.Second),
-		WebSocketPongWait:      getDurationEnv("CHAT_WS_PONG_WAIT", 60*time.Second),
-		WebSocketPingPeriod:    getDurationEnv("CHAT_WS_PING_PERIOD", 54*time.Second),
-		WebSocketMaxMsgSize:    getInt64Env("CHAT_WS_MAX_MSG_SIZE", 20*1024*1024),
-		WebSocketSendBufSize:   getIntEnv("CHAT_WS_SEND_BUF_SIZE", 256),
-		WebSocketAuthTimeout:   getDurationEnv("CHAT_WS_AUTH_TIMEOUT", 10*time.Second),
-		WebSocketSendTimeout:   getDurationEnv("CHAT_WS_SEND_TIMEOUT", 2*time.Second),
-		LastSeenUpdateInterval: getDurationEnv("CHAT_LAST_SEEN_INTERVAL", 1*time.Minute),
-		RequestTimeout:         getDurationEnv("CHAT_REQUEST_TIMEOUT", 5*time.Second),
-		SearchTimeout:          getDurationEnv("CHAT_SEARCH_TIMEOUT", 10*time.Second),
+		HTTPPort:                getEnv("CHAT_HTTP_PORT", "8082"),
+		DatabaseURL:             databaseURL,
+		JWTSecret:               jwtSecret,
+		WebSocketWriteWait:      getDurationEnv("CHAT_WS_WRITE_WAIT", 10*time.Second),
+		WebSocketPongWait:       getDurationEnv("CHAT_WS_PONG_WAIT", 60*time.Second),
+		WebSocketPingPeriod:     getDurationEnv("CHAT_WS_PING_PERIOD", 54*time.Second),
+		WebSocketMaxMsgSize:     getInt64Env("CHAT_WS_MAX_MSG_SIZE", 20*1024*1024),
+		WebSocketSendBufSize:    getIntEnv("CHAT_WS_SEND_BUF_SIZE", 256),
+		WebSocketAuthTimeout:    getDurationEnv("CHAT_WS_AUTH_TIMEOUT", 10*time.Second),
+		WebSocketSendTimeout:    getDurationEnv("CHAT_WS_SEND_TIMEOUT", 2*time.Second),
+		LastSeenUpdateInterval:  getDurationEnv("CHAT_LAST_SEEN_INTERVAL", 1*time.Minute),
+		RequestTimeout:          getDurationEnv("CHAT_REQUEST_TIMEOUT", 5*time.Second),
+		SearchTimeout:           getDurationEnv("CHAT_SEARCH_TIMEOUT", 10*time.Second),
+		CircuitBreakerThreshold: int32(getIntEnv("CHAT_CIRCUIT_BREAKER_THRESHOLD", 5)),
+		CircuitBreakerTimeout:   getDurationEnv("CHAT_CIRCUIT_BREAKER_TIMEOUT", 5*time.Second),
+		CircuitBreakerReset:     getDurationEnv("CHAT_CIRCUIT_BREAKER_RESET", 30*time.Second),
 	}
 
 	if err := validate.Struct(cfg); err != nil {
-		return ChatConfig{}, fmt.Errorf("invalid chat config: %w", err)
+		return ChatConfig{}, commonerrors.ErrInternalError.WithCause(err)
 	}
 
 	return cfg, nil
@@ -111,7 +122,7 @@ func LoadChatConfig() (ChatConfig, error) {
 
 func validateJWTSecret(secret string) error {
 	if len(secret) < 32 {
-		return fmt.Errorf("%w: got %d bytes", commonerrors.ErrInvalidJWTSecret, len(secret))
+		return commonerrors.ErrInvalidJWTSecret
 	}
 	return nil
 }
@@ -126,7 +137,7 @@ func getEnv(key, fallback string) string {
 func mustEnv(key string) (string, error) {
 	v, ok := os.LookupEnv(key)
 	if !ok || v == "" {
-		return "", fmt.Errorf("%w: %s", commonerrors.ErrMissingRequiredEnv, key)
+		return "", commonerrors.ErrMissingRequiredEnv
 	}
 	return v, nil
 }

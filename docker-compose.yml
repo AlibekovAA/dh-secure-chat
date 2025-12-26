@@ -5,7 +5,9 @@ include:
   - yaml/frontend.yml
   - yaml/proxy.yml
   - yaml/prometheus.yml
+  - yaml/grafana.yml
 
 volumes:
   db-data:
   prometheus-data:
+  grafana-data:

@@ -7,7 +7,7 @@ import (
 
 	"golang.org/x/time/rate"
 
-	prommetrics "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/prometheus"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/observability/metrics"
 )
 
 type RateLimiter struct {
@@ -71,7 +71,7 @@ func (rl *RateLimiter) Middleware() func(http.Handler) http.Handler {
 			key := getClientKey(r)
 
 			if !rl.Allow(key) {
-				prommetrics.RateLimitBlocked.WithLabelValues(r.URL.Path, "general").Inc()
+				metrics.RateLimitBlocked.WithLabelValues(r.URL.Path, "general").Inc()
 				WriteError(w, http.StatusTooManyRequests, "rate limit exceeded")
 				return
 			}
@@ -141,7 +141,7 @@ func (srl *StrictRateLimiter) MiddlewareForPath(path string) func(http.Handler) 
 			key := getClientKey(r)
 
 			if !limiter.Allow(key) {
-				prommetrics.RateLimitBlocked.WithLabelValues(path, limiterType).Inc()
+				metrics.RateLimitBlocked.WithLabelValues(path, limiterType).Inc()
 				WriteError(w, http.StatusTooManyRequests, "rate limit exceeded")
 				return
 			}

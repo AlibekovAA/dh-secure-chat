@@ -4,17 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"regexp"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/metrics"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/transfer"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/websocket/middleware"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/clock"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
-	prommetrics "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/prometheus"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/resilience"
+	observabilitymetrics "github.com/AlibekovAA/dh-secure-chat/backend/internal/observability/metrics"
 	userrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/repository"
 )
 
@@ -27,21 +30,20 @@ func isValidAudioMimeType(mimeType string) bool {
 }
 
 type Hub struct {
-	clients                sync.Map
-	register               chan *Client
-	unregister             chan *Client
-	clientCount            atomic.Int64
-	log                    *logger.Logger
-	userRepo               userrepo.Repository
-	lastSeenUpdateInterval time.Duration
-	lastSeenUpdater        *LastSeenUpdater
-	processor              *MessageProcessor
-	fileTracker            transfer.Tracker
-	circuitBreaker         *CircuitBreaker
-	idempotency            *IdempotencyTracker
-	sendTimeout            time.Duration
-	ctx                    context.Context
-	cancel                 context.CancelFunc
+	clients               sync.Map
+	register              chan *Client
+	unregister            chan *Client
+	clientCount           atomic.Int64
+	log                   *logger.Logger
+	userRepo              userrepo.Repository
+	lastSeenUpdater       *LastSeenUpdater
+	processor             *MessageProcessor
+	fileTracker           transfer.Tracker
+	idempotency           *IdempotencyTracker
+	idempotencyMiddleware *middleware.IdempotencyMiddleware
+	sendTimeout           time.Duration
+	ctx                   context.Context
+	cancel                context.CancelFunc
 }
 
 type HubConfig struct {
@@ -62,18 +64,17 @@ type HubConfig struct {
 func NewHub(log *logger.Logger, userRepo userrepo.Repository, config HubConfig) *Hub {
 	ctx, cancel := context.WithCancel(context.Background())
 
+	clk := clock.NewRealClock()
 	hub := &Hub{
-		register:               make(chan *Client),
-		unregister:             make(chan *Client),
-		log:                    log,
-		userRepo:               userRepo,
-		lastSeenUpdateInterval: config.LastSeenUpdateInterval,
-		fileTracker:            transfer.NewTracker(config.FileTransferTimeout),
-		circuitBreaker:         NewCircuitBreaker(config.CircuitBreakerThreshold, config.CircuitBreakerTimeout, config.CircuitBreakerReset),
-		idempotency:            NewIdempotencyTracker(config.IdempotencyTTL),
-		sendTimeout:            config.SendTimeout,
-		ctx:                    ctx,
-		cancel:                 cancel,
+		register:    make(chan *Client),
+		unregister:  make(chan *Client),
+		log:         log,
+		userRepo:    userRepo,
+		fileTracker: transfer.NewTracker(config.FileTransferTimeout, clk),
+		idempotency: NewIdempotencyTracker(config.IdempotencyTTL, clk),
+		sendTimeout: config.SendTimeout,
+		ctx:         ctx,
+		cancel:      cancel,
 	}
 
 	validator := NewDefaultValidator(config.MaxFileSize, config.MaxVoiceSize)
@@ -81,7 +82,17 @@ func NewHub(log *logger.Logger, userRepo userrepo.Repository, config HubConfig) 
 
 	hub.processor = NewMessageProcessor(config.ProcessorWorkers, router, log, config.ProcessorQueueSize)
 
-	hub.lastSeenUpdater = NewLastSeenUpdater(ctx, userRepo, log, config.LastSeenUpdateInterval, hub.circuitBreaker)
+	idempotencyAdapter := &idempotencyAdapter{tracker: hub.idempotency}
+	hub.idempotencyMiddleware = middleware.NewIdempotencyMiddleware(idempotencyAdapter, log)
+
+	lastSeenCircuitBreaker := resilience.NewCircuitBreaker(resilience.CircuitBreakerConfig{
+		Threshold:  config.CircuitBreakerThreshold,
+		Timeout:    config.CircuitBreakerTimeout,
+		ResetAfter: config.CircuitBreakerReset,
+		Name:       "last_seen_update",
+		Logger:     log,
+	})
+	hub.lastSeenUpdater = NewLastSeenUpdater(ctx, userRepo, log, config.LastSeenUpdateInterval, lastSeenCircuitBreaker, clk)
 
 	go hub.fileTrackerCleanup()
 
@@ -190,7 +201,7 @@ func (h *Hub) SendToUserWithContext(ctx context.Context, userID string, message 
 
 	value, ok := h.clients.Load(userID)
 	if !ok {
-		return fmt.Errorf("user %s not connected: %w", userID, commonerrors.ErrUserNotConnected)
+		return commonerrors.ErrUserNotConnected
 	}
 
 	client := value.(*Client)
@@ -201,7 +212,7 @@ func (h *Hub) SendToUserWithContext(ctx context.Context, userID string, message 
 			"action":  "ws_marshal",
 			"type":    string(message.Type),
 		}).Errorf("websocket marshal error: %v", err)
-		return fmt.Errorf("marshal error: %w", err)
+		return commonerrors.ErrMarshalError.WithCause(err)
 	}
 	if err := h.sendWithTimeout(client.send, messageBytes, userID, string(message.Type), ctx); err != nil {
 		return err
@@ -227,7 +238,7 @@ func (h *Hub) sendWithTimeout(sendChan chan []byte, messageBytes []byte, userID,
 			"action":  "ws_send_timeout",
 			"type":    messageType,
 		}).Warn("websocket send timed out")
-		return fmt.Errorf("send timeout: %w", sendCtx.Err())
+		return commonerrors.ErrSendTimeout.WithCause(sendCtx.Err())
 	}
 }
 
@@ -314,37 +325,29 @@ func (h *Hub) forwardMessage(ctx context.Context, msg *WSMessage, payload payloa
 }
 
 func (h *Hub) HandleMessage(client *Client, msg *WSMessage) {
+	handler := func(ctx context.Context, c middleware.Client, m *middleware.WSMessage) error {
+		h.processor.Submit(ctx, client, msg)
+		return nil
+	}
+
+	middlewareMsg := &middleware.WSMessage{
+		Type:    string(msg.Type),
+		Payload: msg.Payload,
+	}
+
 	switch msg.Type {
 	case TypeEphemeralKey:
-		operationID := h.idempotency.generateOperationID(client.userID, msg.Type, msg.Payload)
-		_, err := h.idempotency.Execute(operationID, msg.Type, func() (interface{}, error) {
-			h.processor.Submit(client.ctx, client, msg)
-			return nil, nil
-		})
-		if err != nil {
-			h.log.WithFields(client.ctx, logger.Fields{
-				"user_id": client.userID,
-				"type":    string(msg.Type),
-				"action":  "ws_idempotency_failed",
-			}).Warnf("websocket idempotency check failed: %v", err)
+		if err := h.idempotencyMiddleware.Handle(client.ctx, client, middlewareMsg, handler); err != nil {
+			return
 		}
 		return
 
 	case TypeMessage:
 		var payload MessagePayload
 		if err := json.Unmarshal(msg.Payload, &payload); err == nil && payload.MessageID != "" {
-			operationID := h.idempotency.generateOperationID(client.userID+":"+payload.MessageID, msg.Type, msg.Payload)
-			_, err := h.idempotency.Execute(operationID, msg.Type, func() (interface{}, error) {
-				h.processor.Submit(client.ctx, client, msg)
-				return nil, nil
-			})
-			if err != nil {
-				h.log.WithFields(client.ctx, logger.Fields{
-					"user_id":    client.userID,
-					"message_id": payload.MessageID,
-					"type":       string(msg.Type),
-					"action":     "ws_idempotency_failed",
-				}).Warnf("websocket idempotency check failed: %v", err)
+			operationID := h.idempotency.GenerateOperationID(client.userID+":"+payload.MessageID, msg.Type, msg.Payload)
+			if err := h.idempotencyMiddleware.HandleWithOperationID(client.ctx, client, middlewareMsg, operationID, handler); err != nil {
+				return
 			}
 			return
 		}
@@ -352,20 +355,10 @@ func (h *Hub) HandleMessage(client *Client, msg *WSMessage) {
 	case TypeFileChunk:
 		var payload FileChunkPayload
 		if err := json.Unmarshal(msg.Payload, &payload); err == nil && payload.FileID != "" {
-			chunkKey := fmt.Sprintf("%s:%s:%d", client.userID, payload.FileID, payload.ChunkIndex)
-			operationID := h.idempotency.generateOperationID(chunkKey, msg.Type, msg.Payload)
-			_, err := h.idempotency.Execute(operationID, msg.Type, func() (interface{}, error) {
-				h.processor.Submit(client.ctx, client, msg)
-				return nil, nil
-			})
-			if err != nil {
-				h.log.WithFields(client.ctx, logger.Fields{
-					"user_id":     client.userID,
-					"file_id":     payload.FileID,
-					"chunk_index": payload.ChunkIndex,
-					"type":        string(msg.Type),
-					"action":      "ws_idempotency_failed",
-				}).Warnf("websocket idempotency check failed: %v", err)
+			chunkKey := client.userID + ":" + payload.FileID + ":" + strconv.Itoa(payload.ChunkIndex)
+			operationID := h.idempotency.GenerateOperationID(chunkKey, msg.Type, msg.Payload)
+			if err := h.idempotencyMiddleware.HandleWithOperationID(client.ctx, client, middlewareMsg, operationID, handler); err != nil {
+				return
 			}
 			return
 		}
@@ -397,7 +390,7 @@ func (h *Hub) handleUnregister(client *Client) {
 	client.Stop()
 	close(client.send)
 	metrics.DecrementActiveWebSocketConnections()
-	prommetrics.ChatWebSocketDisconnections.WithLabelValues("unregister").Inc()
+	observabilitymetrics.ChatWebSocketDisconnections.WithLabelValues("unregister").Inc()
 	h.log.WithFields(client.ctx, logger.Fields{
 		"user_id":  client.userID,
 		"username": client.username,
@@ -427,10 +420,10 @@ func (h *Hub) handleUnregister(client *Client) {
 func (h *Hub) sendPeerOffline(ctx context.Context, fromUserID, peerID string) error {
 	msg, err := marshalMessage(TypePeerOffline, PeerOfflinePayload{PeerID: peerID})
 	if err != nil {
-		return fmt.Errorf("marshal error: %w", err)
+		return commonerrors.ErrMarshalError.WithCause(err)
 	}
 	if err := h.SendToUserWithContext(ctx, fromUserID, msg); err != nil {
-		return fmt.Errorf("user %s is not connected: %w", fromUserID, err)
+		return err
 	}
 	return nil
 }
@@ -456,7 +449,7 @@ func (h *Hub) trackFileTransfer(payload FileStartPayload) {
 			"to":      payload.To,
 			"action":  "ws_file_track",
 		}).Warnf("websocket failed to track file transfer: %v", err)
-		prommetrics.ChatWebSocketFileTransferFailures.WithLabelValues("track_failed").Inc()
+		observabilitymetrics.ChatWebSocketFileTransferFailures.WithLabelValues("track_failed").Inc()
 	}
 }
 
@@ -500,13 +493,13 @@ func (h *Hub) completeFileTransfer(fileID string) {
 			"file_id": fileID,
 			"action":  "ws_file_complete_failed",
 		}).Warnf("websocket failed to complete file transfer: %v", err)
-		prommetrics.ChatWebSocketFileTransferFailures.WithLabelValues("complete_failed").Inc()
+		observabilitymetrics.ChatWebSocketFileTransferFailures.WithLabelValues("complete_failed").Inc()
 		return
 	}
 
 	if tr != nil {
 		duration := time.Since(tr.StartedAt).Seconds()
-		prommetrics.ChatWebSocketFileTransferDurationSeconds.WithLabelValues("success").Observe(duration)
+		observabilitymetrics.ChatWebSocketFileTransferDurationSeconds.WithLabelValues("success").Observe(duration)
 	}
 }
 
@@ -516,8 +509,8 @@ func (h *Hub) notifyFileTransferFailed(tr *transfer.Transfer) {
 	}
 
 	duration := time.Since(tr.StartedAt).Seconds()
-	prommetrics.ChatWebSocketFileTransferDurationSeconds.WithLabelValues("failed").Observe(duration)
-	prommetrics.ChatWebSocketFileTransferFailures.WithLabelValues("timeout_or_disconnect").Inc()
+	observabilitymetrics.ChatWebSocketFileTransferDurationSeconds.WithLabelValues("failed").Observe(duration)
+	observabilitymetrics.ChatWebSocketFileTransferFailures.WithLabelValues("timeout_or_disconnect").Inc()
 
 	msg, err := marshalMessage(TypeFileComplete, FileCompletePayload{
 		To:     tr.To,
@@ -563,4 +556,16 @@ func (h *Hub) Shutdown() {
 	}
 	h.processor.Shutdown()
 	h.shutdown()
+}
+
+type idempotencyAdapter struct {
+	tracker *IdempotencyTracker
+}
+
+func (a *idempotencyAdapter) GenerateOperationID(userID string, msgType string, payload []byte) string {
+	return a.tracker.GenerateOperationID(userID, MessageType(msgType), payload)
+}
+
+func (a *idempotencyAdapter) Execute(operationID string, msgType string, fn func() (interface{}, error)) (interface{}, error) {
+	return a.tracker.Execute(operationID, MessageType(msgType), fn)
 }

@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
 
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
@@ -60,7 +59,7 @@ func (s *IdentityService) CreateIdentityKey(ctx context.Context, userID string, 
 			"user_id": userID,
 			"action":  "create_identity_key_failed",
 		}).Errorf("create identity key failed: %v", err)
-		return fmt.Errorf("failed to create identity key: %w", err)
+		return commonerrors.ErrIdentityKeyCreateFailed.WithCause(err)
 	}
 
 	s.log.WithFields(ctx, logger.Fields{
@@ -89,7 +88,7 @@ func (s *IdentityService) GetPublicKey(ctx context.Context, userID string) ([]by
 			"user_id": userID,
 			"action":  "get_identity_key_failed",
 		}).Errorf("get identity key failed: %v", err)
-		return nil, fmt.Errorf("failed to get identity key: %w", err)
+		return nil, commonerrors.ErrIdentityKeyGetFailed.WithCause(err)
 	}
 
 	return key.PublicKey, nil
@@ -109,7 +108,7 @@ func (s *IdentityService) GetIdentityKey(ctx context.Context, userID string) (id
 			"user_id": userID,
 			"action":  "get_identity_key_failed",
 		}).Errorf("get identity key failed: %v", err)
-		return identitydomain.IdentityKey{}, fmt.Errorf("failed to get identity key: %w", err)
+		return identitydomain.IdentityKey{}, commonerrors.ErrIdentityKeyGetFailed.WithCause(err)
 	}
 
 	return key, nil
@@ -134,7 +133,7 @@ func (s *IdentityService) GetFingerprint(ctx context.Context, userID string) (st
 			"user_id": userID,
 			"action":  "get_fingerprint_failed",
 		}).Errorf("get identity fingerprint failed: %v", err)
-		return "", fmt.Errorf("failed to get identity fingerprint: %w", err)
+		return "", commonerrors.ErrFingerprintGetFailed.WithCause(err)
 	}
 
 	hash := sha256.Sum256(key.PublicKey)

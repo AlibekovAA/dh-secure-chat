@@ -1,8 +1,9 @@
 package websocket
 
 import (
-	"fmt"
 	"strings"
+
+	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 )
 
 type MessageValidator interface {
@@ -55,24 +56,24 @@ func (v *DefaultValidator) ValidateFileStart(p FileStartPayload) error {
 	}
 
 	if p.TotalSize > maxSize {
-		return fmt.Errorf("file size %d exceeds maximum %d (audio=%v)", p.TotalSize, maxSize, isAudio)
+		return commonerrors.ErrFileSizeExceeded
 	}
 
 	if p.TotalSize <= 0 {
-		return fmt.Errorf("invalid file size %d", p.TotalSize)
+		return commonerrors.ErrInvalidFileSize
 	}
 
 	if p.TotalChunks <= 0 || p.TotalChunks > 1000 {
-		return fmt.Errorf("invalid total_chunks %d", p.TotalChunks)
+		return commonerrors.ErrInvalidTotalChunks
 	}
 
 	if isAudio {
 		if !isValidAudioMimeType(p.MimeType) {
-			return fmt.Errorf("invalid audio mime type %s", p.MimeType)
+			return commonerrors.ErrInvalidMimeType
 		}
 	} else {
 		if !v.allowedMimeTypes[p.MimeType] {
-			return fmt.Errorf("mime type not allowed: %s", p.MimeType)
+			return commonerrors.ErrMimeTypeNotAllowed
 		}
 	}
 

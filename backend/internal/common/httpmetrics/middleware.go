@@ -7,7 +7,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	prommetrics "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/prometheus"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/observability/metrics"
 )
 
 type Collector struct {
@@ -41,13 +41,13 @@ func (c *Collector) Wrap(next http.Handler) http.Handler {
 		var promRequestDuration *prometheus.HistogramVec
 
 		if c.prefix == "auth" {
-			promRequestsTotal = prommetrics.AuthRequestsTotal
-			promRequestsInFlight = prommetrics.AuthRequestsInFlight
-			promRequestDuration = prommetrics.AuthRequestDurationSeconds
+			promRequestsTotal = metrics.AuthRequestsTotal
+			promRequestsInFlight = metrics.AuthRequestsInFlight
+			promRequestDuration = metrics.AuthRequestDurationSeconds
 		} else if c.prefix == "chat" {
-			promRequestsTotal = prommetrics.ChatRequestsTotal
-			promRequestsInFlight = prommetrics.ChatRequestsInFlight
-			promRequestDuration = prommetrics.ChatRequestDurationSeconds
+			promRequestsTotal = metrics.ChatRequestsTotal
+			promRequestsInFlight = metrics.ChatRequestsInFlight
+			promRequestDuration = metrics.ChatRequestDurationSeconds
 		}
 
 		if promRequestsTotal != nil {

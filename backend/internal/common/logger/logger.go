@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"gopkg.in/natefinch/lumberjack.v2"
+
+	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 )
 
 type Fields map[string]interface{}
@@ -72,7 +74,7 @@ func (l *Logger) Initialize(logDir, serviceName, level string) error {
 	}
 
 	if err := os.MkdirAll(logDir, 0o755); err != nil {
-		return fmt.Errorf("failed to create log directory: %w", err)
+		return commonerrors.ErrInternalError.WithCause(err)
 	}
 
 	logFile := filepath.Join(logDir, "app.log")
@@ -146,14 +148,7 @@ func (l *Logger) logWithFields(level LogLevel, ctx context.Context, msg string, 
 		prefix = fmt.Sprintf("%s [%s]", prefix, strings.Join(fieldParts, " "))
 	}
 
-	_, file, line, ok := runtime.Caller(3)
-	if !ok {
-		file = "unknown"
-		line = 0
-	} else {
-		file = filepath.Base(file)
-	}
-
+	file, line := l.getCallerInfo()
 	l.out.Output(0, fmt.Sprintf("%s %s:%d %s", prefix, file, line, msg))
 }
 
@@ -271,4 +266,18 @@ func (l *Logger) sample(prob float64) bool {
 	l.samplerMu.Lock()
 	defer l.samplerMu.Unlock()
 	return l.sampler.Float64() < prob
+}
+
+func (l *Logger) getCallerInfo() (string, int) {
+	for skip := 3; skip < 10; skip++ {
+		_, file, line, ok := runtime.Caller(skip)
+		if !ok {
+			break
+		}
+		fileBase := filepath.Base(file)
+		if fileBase != "logger.go" && !strings.HasSuffix(fileBase, ".s") && !strings.Contains(file, "runtime/") {
+			return fileBase, line
+		}
+	}
+	return "unknown", 0
 }

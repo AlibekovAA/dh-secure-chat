@@ -1,29 +1,29 @@
 package service
 
 import (
-	prommetrics "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/prometheus"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/observability/metrics"
 )
 
 func incrementRefreshTokensIssued() {
-	prommetrics.RefreshTokensIssued.Inc()
+	metrics.RefreshTokensIssued.Inc()
 }
 
 func incrementRefreshTokensUsed() {
-	prommetrics.RefreshTokensUsed.Inc()
+	metrics.RefreshTokensUsed.Inc()
 }
 
 func incrementRefreshTokensRevoked() {
-	prommetrics.RefreshTokensRevoked.Inc()
+	metrics.RefreshTokensRevoked.Inc()
 }
 
 func incrementRefreshTokensExpired() {
-	prommetrics.RefreshTokensExpired.Inc()
+	metrics.RefreshTokensExpired.Inc()
 }
 
 func incrementAccessTokensRevoked() {
-	prommetrics.AccessTokensRevoked.Inc()
+	metrics.AccessTokensRevoked.Inc()
 }
 
 func incrementAccessTokensIssued() {
-	prommetrics.AccessTokensIssued.Inc()
+	metrics.AccessTokensIssued.Inc()
 }

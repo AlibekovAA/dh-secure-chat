@@ -5,7 +5,7 @@ import (
 
 	"github.com/jackc/pgx/v4/pgxpool"
 
-	prommetrics "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/prometheus"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/observability/metrics"
 )
 
 func StartPoolMetrics(pool *pgxpool.Pool, interval time.Duration) {
@@ -22,10 +22,10 @@ func StartPoolMetrics(pool *pgxpool.Pool, interval time.Duration) {
 			max := int64(stats.MaxConns())
 			total := int64(stats.TotalConns())
 
-			prommetrics.DBPoolAcquiredConnections.Set(float64(acquired))
-			prommetrics.DBPoolIdleConnections.Set(float64(idle))
-			prommetrics.DBPoolMaxConnections.Set(float64(max))
-			prommetrics.DBPoolTotalConnections.Set(float64(total))
+			metrics.DBPoolAcquiredConnections.Set(float64(acquired))
+			metrics.DBPoolIdleConnections.Set(float64(idle))
+			metrics.DBPoolMaxConnections.Set(float64(max))
+			metrics.DBPoolTotalConnections.Set(float64(total))
 		}
 	}()
 }

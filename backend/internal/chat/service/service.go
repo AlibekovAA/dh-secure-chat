@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"strings"
 
+	chatdto "github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/service/dto"
+	chatmapper "github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/service/mapper"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 	identityservice "github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/service"
@@ -26,15 +28,18 @@ func NewChatService(repo userrepo.Repository, identityService identityservice.Se
 	}
 }
 
-func (s *ChatService) GetMe(ctx context.Context, userID string) (userdomain.User, error) {
+func (s *ChatService) GetMe(ctx context.Context, userID string) (chatdto.User, error) {
 	user, err := s.repo.FindByID(ctx, userdomain.ID(userID))
 	if err != nil {
-		return userdomain.User{}, fmt.Errorf("get user by id %s: %w", userID, err)
+		if errors.Is(err, userrepo.ErrUserNotFound) {
+			return chatdto.User{}, commonerrors.ErrUserNotFound.WithCause(err)
+		}
+		return chatdto.User{}, commonerrors.ErrUserGetFailed.WithCause(err)
 	}
-	return user, nil
+	return chatmapper.UserToDTO(user), nil
 }
 
-func (s *ChatService) SearchUsers(ctx context.Context, query string, limit int) ([]userdomain.Summary, error) {
+func (s *ChatService) SearchUsers(ctx context.Context, query string, limit int) ([]chatdto.UserSummary, error) {
 	q := strings.TrimSpace(query)
 	if q == "" {
 		return nil, commonerrors.ErrEmptyQuery
@@ -49,15 +54,18 @@ func (s *ChatService) SearchUsers(ctx context.Context, query string, limit int) 
 			"limit":  limit,
 			"action": "search_users_failed",
 		}).Errorf("search users failed: %v", err)
-		return nil, fmt.Errorf("search users query=%q limit=%d: %w", q, limit, err)
+		return nil, commonerrors.ErrUserSearchFailed.WithCause(err)
 	}
-	return users, nil
+	return chatmapper.UserSummariesToDTO(users), nil
 }
 
 func (s *ChatService) GetIdentityKey(ctx context.Context, userID string) ([]byte, error) {
 	key, err := s.identityService.GetPublicKey(ctx, userID)
 	if err != nil {
-		return nil, fmt.Errorf("get identity key for user %s: %w", userID, err)
+		if errors.Is(err, commonerrors.ErrIdentityKeyNotFound) {
+			return nil, err
+		}
+		return nil, commonerrors.ErrIdentityKeyGetFailed.WithCause(err)
 	}
 	return key, nil
 }

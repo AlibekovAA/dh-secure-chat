@@ -6,7 +6,7 @@ import (
 
 	authrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/repository"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
-	prommetrics "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/prometheus"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/observability/metrics"
 )
 
 type ExpiredDeleter interface {
@@ -29,9 +29,9 @@ func StartCleanup(ctx context.Context, repo ExpiredDeleter, log *logger.Logger, 
 			}
 			if deleted > 0 {
 				if repoName == "refresh token" {
-					prommetrics.RefreshTokensCleanupDeleted.Add(float64(deleted))
+					metrics.RefreshTokensCleanupDeleted.Add(float64(deleted))
 				} else if repoName == "revoked token" {
-					prommetrics.RevokedTokensCleanupDeleted.Add(float64(deleted))
+					metrics.RevokedTokensCleanupDeleted.Add(float64(deleted))
 				}
 				log.Infof("%s cleanup: deleted %d expired tokens", repoName, deleted)
 			}

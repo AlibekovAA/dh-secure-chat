@@ -55,6 +55,9 @@ func main() {
 		cfg.AccessTokenTTL,
 		cfg.RefreshTokenTTL,
 		cfg.MaxRefreshTokensPerUser,
+		cfg.CircuitBreakerThreshold,
+		cfg.CircuitBreakerTimeout,
+		cfg.CircuitBreakerReset,
 		log,
 	)
 

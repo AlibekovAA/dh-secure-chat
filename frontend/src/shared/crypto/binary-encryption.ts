@@ -1,7 +1,8 @@
 import type { SessionKey } from './session';
+import { BASE64_CHUNK_SIZE } from './constants';
 
-export async function encryptBinary(
-  sessionKey: SessionKey,
+async function encryptBinaryInternal(
+  sessionKey: CryptoKey,
   data: Uint8Array,
 ): Promise<{ ciphertext: string; nonce: string }> {
   const nonce = crypto.getRandomValues(new Uint8Array(12));
@@ -17,10 +18,9 @@ export async function encryptBinary(
   );
 
   const ciphertextArray = new Uint8Array(ciphertext);
-  const chunkSize = 8192;
   let ciphertextString = '';
-  for (let i = 0; i < ciphertextArray.length; i += chunkSize) {
-    const chunk = ciphertextArray.slice(i, i + chunkSize);
+  for (let i = 0; i < ciphertextArray.length; i += BASE64_CHUNK_SIZE) {
+    const chunk = ciphertextArray.slice(i, i + BASE64_CHUNK_SIZE);
     ciphertextString += String.fromCharCode.apply(null, Array.from(chunk));
   }
   const ciphertextBase64 = btoa(ciphertextString);
@@ -33,8 +33,8 @@ export async function encryptBinary(
   };
 }
 
-export async function decryptBinary(
-  sessionKey: SessionKey,
+async function decryptBinaryInternal(
+  sessionKey: CryptoKey,
   ciphertext: string,
   nonce: string,
 ): Promise<Uint8Array> {
@@ -54,3 +54,23 @@ export async function decryptBinary(
 
   return new Uint8Array(plaintext);
 }
+
+export async function encryptBinary(
+  sessionKey: SessionKey,
+  data: Uint8Array,
+): Promise<{ ciphertext: string; nonce: string }> {
+  return encryptBinaryInternal(sessionKey as CryptoKey, data);
+}
+
+export async function decryptBinary(
+  sessionKey: SessionKey,
+  ciphertext: string,
+  nonce: string,
+): Promise<Uint8Array> {
+  return decryptBinaryInternal(sessionKey as CryptoKey, ciphertext, nonce);
+}
+
+export {
+  encryptBinaryInternal as encryptBinaryWithKey,
+  decryptBinaryInternal as decryptBinaryWithKey,
+};

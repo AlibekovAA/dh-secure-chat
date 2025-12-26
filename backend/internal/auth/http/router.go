@@ -3,7 +3,6 @@ package http
 import (
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -11,6 +10,7 @@ import (
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/service"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/config"
 	commonhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/http"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/jwtverify"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 )
 
@@ -93,7 +93,7 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 		IdentityPubKey: pubKey,
 	})
 	if err != nil {
-		h.writeError(w, err)
+		h.writeError(w, r, err)
 		return
 	}
 
@@ -116,7 +116,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		Password: req.Password,
 	})
 	if err != nil {
-		h.writeError(w, err)
+		h.writeError(w, r, err)
 		return
 	}
 
@@ -136,12 +136,7 @@ func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.auth.RefreshAccessToken(ctx, cookie.Value, clientIP)
 	if err != nil {
-		if errors.Is(err, service.ErrInvalidRefreshToken) || errors.Is(err, service.ErrRefreshTokenExpired) {
-			commonhttp.WriteError(w, http.StatusUnauthorized, "invalid refresh token")
-			return
-		}
-		h.log.Errorf("refresh failed: %v", err)
-		commonhttp.WriteError(w, http.StatusInternalServerError, "internal error")
+		h.writeError(w, r, err)
 		return
 	}
 
@@ -151,15 +146,24 @@ func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-
-	raw := r.Header.Get("Authorization")
-	if raw != "" && strings.HasPrefix(raw, "Bearer ") {
-		tokenString := strings.TrimPrefix(raw, "Bearer ")
-		claims, err := h.auth.ParseTokenForRevoke(ctx, tokenString)
-		if err == nil && claims.JTI != "" {
-			if err := h.auth.RevokeAccessToken(ctx, claims.JTI, claims.UserID); err != nil {
-				h.log.Errorf("logout revoke access token failed: %v", err)
+	var claims jwtverify.Claims
+	var err error
+	if ctxClaims, ok := jwtverify.FromContext(ctx); ok {
+		claims = ctxClaims
+	} else {
+		raw := r.Header.Get("Authorization")
+		if raw != "" && strings.HasPrefix(raw, "Bearer ") {
+			tokenString := strings.TrimPrefix(raw, "Bearer ")
+			claims, err = h.auth.ParseTokenForRevoke(ctx, tokenString)
+			if err != nil {
+				claims = jwtverify.Claims{}
 			}
+		}
+	}
+
+	if err == nil && claims.JTI != "" {
+		if err := h.auth.RevokeAccessToken(ctx, claims.JTI, claims.UserID); err != nil {
+			h.log.Errorf("logout revoke access token failed: %v", err)
 		}
 	}
 
@@ -175,19 +179,24 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) revoke(w http.ResponseWriter, r *http.Request) {
-	raw := r.Header.Get("Authorization")
-	if raw == "" || !strings.HasPrefix(raw, "Bearer ") {
-		commonhttp.WriteError(w, http.StatusUnauthorized, "missing authorization")
-		return
-	}
-
 	ctx := r.Context()
+	var claims jwtverify.Claims
+	var err error
+	if ctxClaims, ok := jwtverify.FromContext(ctx); ok {
+		claims = ctxClaims
+	} else {
+		raw := r.Header.Get("Authorization")
+		if raw == "" || !strings.HasPrefix(raw, "Bearer ") {
+			commonhttp.WriteError(w, http.StatusUnauthorized, "missing authorization")
+			return
+		}
 
-	tokenString := strings.TrimPrefix(raw, "Bearer ")
-	claims, err := h.auth.ParseTokenForRevoke(ctx, tokenString)
-	if err != nil {
-		commonhttp.WriteError(w, http.StatusUnauthorized, "invalid token")
-		return
+		tokenString := strings.TrimPrefix(raw, "Bearer ")
+		claims, err = h.auth.ParseTokenForRevoke(ctx, tokenString)
+		if err != nil {
+			commonhttp.WriteError(w, http.StatusUnauthorized, "invalid token")
+			return
+		}
 	}
 
 	if claims.JTI == "" {
@@ -196,8 +205,7 @@ func (h *Handler) revoke(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.auth.RevokeAccessToken(ctx, claims.JTI, claims.UserID); err != nil {
-		h.log.Errorf("revoke access token failed: %v", err)
-		commonhttp.WriteError(w, http.StatusInternalServerError, "internal error")
+		commonhttp.HandleError(w, r, err, h.log)
 		return
 	}
 
@@ -237,18 +245,6 @@ func clearRefreshCookie(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, cookie)
 }
 
-func (h *Handler) writeError(w http.ResponseWriter, err error) {
-	if vErr, ok := service.AsValidationError(err); ok {
-		commonhttp.WriteError(w, http.StatusBadRequest, vErr.Error())
-		return
-	}
-
-	switch {
-	case errors.Is(err, service.ErrInvalidCredentials):
-		commonhttp.WriteError(w, http.StatusUnauthorized, "invalid credentials")
-	case errors.Is(err, service.ErrUsernameTaken):
-		commonhttp.WriteError(w, http.StatusConflict, "username already taken")
-	default:
-		commonhttp.WriteError(w, http.StatusInternalServerError, "internal error")
-	}
+func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, err error) {
+	commonhttp.HandleError(w, r, err, h.log)
 }

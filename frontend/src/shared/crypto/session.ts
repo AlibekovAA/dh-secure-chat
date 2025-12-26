@@ -35,7 +35,7 @@ export async function deriveSessionKey(
       name: 'AES-GCM',
       length: 256,
     },
-    false,
+    true,
     ['encrypt', 'decrypt'],
   );
 

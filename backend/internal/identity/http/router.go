@@ -3,12 +3,10 @@ package http
 import (
 	"context"
 	"encoding/base64"
-	"errors"
 	"net/http"
 	"strings"
 	"time"
 
-	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	commonhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/http"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/service"
@@ -106,21 +104,7 @@ func (h *Handler) handleIdentityRequest(
 
 	result, err := handler(ctx, userID)
 	if err != nil {
-		if errors.Is(err, commonerrors.ErrIdentityKeyNotFound) {
-			h.log.WithFields(ctx, logger.Fields{
-				"operation": operation,
-				"user_id":   userID,
-				"action":    "identity_not_found",
-			}).Warn("identity request failed: not found")
-			commonhttp.WriteError(w, http.StatusNotFound, "identity key not found")
-			return
-		}
-		h.log.WithFields(ctx, logger.Fields{
-			"operation": operation,
-			"user_id":   userID,
-			"action":    "identity_failed",
-		}).Errorf("identity request failed: %v", err)
-		commonhttp.WriteError(w, http.StatusInternalServerError, "internal error")
+		commonhttp.HandleError(w, r, err, h.log)
 		return
 	}
 

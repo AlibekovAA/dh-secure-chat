@@ -1,30 +1,30 @@
 package metrics
 
 import (
-	prommetrics "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/prometheus"
+	observabilitymetrics "github.com/AlibekovAA/dh-secure-chat/backend/internal/observability/metrics"
 )
 
 func IncrementActiveWebSocketConnections() {
-	prommetrics.ChatWebSocketConnectionsActive.Inc()
-	prommetrics.ChatWebSocketConnectionsTotal.Inc()
+	observabilitymetrics.ChatWebSocketConnectionsActive.Inc()
+	observabilitymetrics.ChatWebSocketConnectionsTotal.Inc()
 }
 
 func DecrementActiveWebSocketConnections() {
-	prommetrics.ChatWebSocketConnectionsActive.Dec()
+	observabilitymetrics.ChatWebSocketConnectionsActive.Dec()
 }
 
 func IncrementWebSocketError(errorType string) {
-	prommetrics.ChatWebSocketErrors.WithLabelValues(errorType).Inc()
+	observabilitymetrics.ChatWebSocketErrors.WithLabelValues(errorType).Inc()
 }
 
 func IncrementWebSocketMessage(messageType string) {
-	prommetrics.ChatWebSocketMessagesTotal.WithLabelValues(messageType).Inc()
+	observabilitymetrics.ChatWebSocketMessagesTotal.WithLabelValues(messageType).Inc()
 }
 
 func IncrementWebSocketFile() {
-	prommetrics.ChatWebSocketFilesTotal.Inc()
+	observabilitymetrics.ChatWebSocketFilesTotal.Inc()
 }
 
 func IncrementWebSocketFileChunk() {
-	prommetrics.ChatWebSocketFilesChunksTotal.Inc()
+	observabilitymetrics.ChatWebSocketFilesChunksTotal.Inc()
 }

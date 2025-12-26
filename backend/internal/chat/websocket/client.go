@@ -9,7 +9,7 @@ import (
 
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/jwtverify"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
-	prommetrics "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/prometheus"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/observability/metrics"
 )
 
 type Client struct {
@@ -29,6 +29,10 @@ type Client struct {
 	authTimeout         time.Duration
 	ctx                 context.Context
 	cancel              context.CancelFunc
+}
+
+func (c *Client) UserID() string {
+	return c.userID
 }
 
 func NewUnauthenticatedClient(hub HubInterface, conn *gorillaWS.Conn, jwtSecret string, log *logger.Logger, revokedTokenChecker jwtverify.RevokedTokenChecker, writeWait, pongWait, pingPeriod time.Duration, maxMsgSize int64, authTimeout time.Duration, sendBufSize int) *Client {
@@ -96,16 +100,16 @@ func (c *Client) readPump() {
 						"username": c.username,
 						"action":   "ws_read_error",
 					}).Warnf("websocket read error: %v", err)
-					prommetrics.ChatWebSocketDisconnections.WithLabelValues("read_error").Inc()
+					metrics.ChatWebSocketDisconnections.WithLabelValues("read_error").Inc()
 				} else {
 					c.log.WithFields(c.ctx, logger.Fields{
 						"action": "ws_read_error_unauthenticated",
 					}).Warnf("websocket read error: %v", err)
-					prommetrics.ChatWebSocketDisconnections.WithLabelValues("read_error_unauthenticated").Inc()
+					metrics.ChatWebSocketDisconnections.WithLabelValues("read_error_unauthenticated").Inc()
 				}
 			} else {
 				if c.authenticated {
-					prommetrics.ChatWebSocketDisconnections.WithLabelValues("normal_close").Inc()
+					metrics.ChatWebSocketDisconnections.WithLabelValues("normal_close").Inc()
 				}
 			}
 			return

@@ -3,6 +3,8 @@ package service
 import (
 	"errors"
 	"unicode"
+
+	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 )
 
 type ValidationError struct {
@@ -15,6 +17,16 @@ func (e ValidationError) Error() string {
 
 func (e ValidationError) Unwrap() error {
 	return ErrValidation
+}
+
+type CredentialValidator struct{}
+
+func NewCredentialValidator() *CredentialValidator {
+	return &CredentialValidator{}
+}
+
+func (cv *CredentialValidator) Validate(username, password string) error {
+	return validateCredentials(username, password)
 }
 
 func validateCredentials(username, password string) error {
@@ -50,6 +62,9 @@ func AsValidationError(err error) (ValidationError, bool) {
 	var v ValidationError
 	if errors.As(err, &v) {
 		return v, true
+	}
+	if domainErr, ok := commonerrors.AsDomainError(err); ok && domainErr.Code() == "VALIDATION_FAILED" {
+		return ValidationError{reason: domainErr.Message()}, true
 	}
 	return ValidationError{}, false
 }

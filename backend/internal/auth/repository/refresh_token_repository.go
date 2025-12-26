@@ -18,7 +18,7 @@ type RefreshTokenRepository interface {
 	CountByUserID(ctx context.Context, userID string) (int, error)
 	DeleteOldestByUserID(ctx context.Context, userID string) error
 	DeleteExpired(ctx context.Context) (int64, error)
-	BeginTx(ctx context.Context) (RefreshTokenTx, error)
+	TxManager() *RefreshTokenTxManager
 }
 
 type RefreshTokenTx interface {
@@ -29,11 +29,19 @@ type RefreshTokenTx interface {
 }
 
 type PgRefreshTokenRepository struct {
-	pool *pgxpool.Pool
+	pool  *pgxpool.Pool
+	txMgr *RefreshTokenTxManager
 }
 
 func NewPgRefreshTokenRepository(pool *pgxpool.Pool) *PgRefreshTokenRepository {
-	return &PgRefreshTokenRepository{pool: pool}
+	return &PgRefreshTokenRepository{
+		pool:  pool,
+		txMgr: NewRefreshTokenTxManager(pool),
+	}
+}
+
+func (r *PgRefreshTokenRepository) TxManager() *RefreshTokenTxManager {
+	return r.txMgr
 }
 
 func (r *PgRefreshTokenRepository) Create(ctx context.Context, token authdomain.RefreshToken) error {
@@ -123,16 +131,6 @@ func (r *PgRefreshTokenRepository) DeleteExpired(ctx context.Context) (int64, er
 	}
 	db.MeasureQueryDuration("delete expired refresh tokens", start)
 	return res.RowsAffected(), nil
-}
-
-func (r *PgRefreshTokenRepository) BeginTx(ctx context.Context) (RefreshTokenTx, error) {
-	start := time.Now()
-	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
-	if err != nil {
-		return nil, db.HandleExecError(err, "begin refresh token tx", start)
-	}
-	db.MeasureQueryDuration("begin refresh token tx", start)
-	return &pgRefreshTokenTx{tx: tx}, nil
 }
 
 type pgRefreshTokenTx struct {
