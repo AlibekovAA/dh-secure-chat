@@ -8,6 +8,7 @@ type Props = {
   onCopy: () => void;
   onReact: () => void;
   onReply?: () => void;
+  onEdit?: () => void;
   onDeleteForMe?: () => void;
   onDeleteForAll?: () => void;
   onClose: () => void;
@@ -24,6 +25,7 @@ export function MessageContextMenu({
   onCopy,
   onReact,
   onReply,
+  onEdit,
   onDeleteForMe,
   onDeleteForAll,
   onClose,
@@ -159,6 +161,18 @@ export function MessageContextMenu({
           className="w-full text-left px-4 py-2 text-sm text-emerald-50 hover:bg-emerald-500/20 transition-colors"
         >
           <span>Ответить</span>
+        </button>
+      )}
+
+      {canEdit && onEdit && (
+        <button
+          onClick={() => {
+            onEdit();
+            onClose();
+          }}
+          className="w-full text-left px-4 py-2 text-sm text-emerald-50 hover:bg-emerald-500/20 transition-colors"
+        >
+          <span>Редактировать</span>
         </button>
       )}
 

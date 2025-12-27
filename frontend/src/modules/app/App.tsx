@@ -224,6 +224,7 @@ export function App() {
       hasSearched={hasSearched}
       onLogout={handleLogout}
       onUserSelect={() => {}}
+      onTokenExpired={refreshAccessToken}
     />
   ) : (
     <AuthScreen onAuthenticated={setToken} />

@@ -8,12 +8,10 @@ import type {
   PeerOfflinePayload,
   PeerDisconnectedPayload,
   FileStartPayload,
-  FileChunkPayload,
-  FileCompletePayload,
-  AckPayload,
-  TypingPayload,
   ReactionPayload,
   MessageDeletePayload,
+  MessageEditPayload,
+  MessageReadPayload,
 } from '../../shared/websocket/types';
 import { generateEphemeralKeyPair } from '../../shared/crypto/ephemeral';
 import {
@@ -48,6 +46,8 @@ export type ChatSessionState =
   | 'peer_disconnected'
   | 'error';
 
+export type DeliveryStatus = 'sending' | 'delivered' | 'read';
+
 export type ChatMessage = {
   id: string;
   text?: string;
@@ -69,6 +69,7 @@ export type ChatMessage = {
   isOwn: boolean;
   isEdited?: boolean;
   isDeleted?: boolean;
+  deliveryStatus?: DeliveryStatus;
   reactions?: Record<string, string[]>;
   replyTo?: {
     id: string;
@@ -84,12 +85,14 @@ type UseChatSessionOptions = {
   token: string | null;
   peerId: string | null;
   enabled: boolean;
+  onTokenExpired?: () => Promise<string | null>;
 };
 
 export function useChatSession({
   token,
   peerId,
   enabled,
+  onTokenExpired,
 }: UseChatSessionOptions) {
   const [state, setState] = useState<ChatSessionState>('idle');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -129,6 +132,8 @@ export function useChatSession({
   >(new Map());
   const typingTimeoutRef = useRef<number | null>(null);
 
+  const pendingMessageAcksRef = useRef<Set<string>>(new Set());
+
   const { handleAck, sendWithAck, clearPendingAcks } = useAckManager({
     sendRef,
     pendingAcksRef,
@@ -139,6 +144,24 @@ export function useChatSession({
       setState('error');
     },
   });
+
+  const handleMessageAck = useCallback((messageId: string) => {
+    setMessages((prev) => {
+      const found = prev.find((msg) => msg.id === messageId && msg.isOwn);
+      if (!found) {
+        return prev;
+      }
+      return prev.map((msg) => {
+        if (msg.id === messageId && msg.isOwn) {
+          if (msg.deliveryStatus === 'sending' || !msg.deliveryStatus) {
+            return { ...msg, deliveryStatus: 'delivered' as const };
+          }
+        }
+        return msg;
+      });
+    });
+    pendingMessageAcksRef.current.delete(messageId);
+  }, []);
 
   const { handleIncomingFile, clearFileBuffers } = useFileTransfer({
     sessionKeyRef,
@@ -226,51 +249,64 @@ export function useChatSession({
     [peerId, token],
   );
 
-  const handleIncomingMessage = useCallback(async (payload: MessagePayload) => {
-    if (!sessionKeyRef.current) return;
+  const handleIncomingMessage = useCallback(
+    async (payload: MessagePayload) => {
+      if (!sessionKeyRef.current || !peerId) return;
 
-    try {
-      const decrypted = await decrypt(
-        sessionKeyRef.current,
-        payload.ciphertext,
-        payload.nonce,
-      );
+      try {
+        const decrypted = await decrypt(
+          sessionKeyRef.current,
+          payload.ciphertext,
+          payload.nonce,
+        );
 
-      setMessages((prev) => {
-        let replyTo: ChatMessage['replyTo'] | undefined;
+        setMessages((prev) => {
+          let replyTo: ChatMessage['replyTo'] | undefined;
 
-        if (payload.reply_to_message_id) {
-          const target = prev.find((m) => m.id === payload.reply_to_message_id);
-          if (target) {
-            replyTo = {
-              id: target.id,
-              text: target.text,
-              hasFile: !!target.file,
-              hasVoice: !!target.voice,
-              isOwn: target.isOwn,
-              isDeleted: target.isDeleted,
-            };
+          if (payload.reply_to_message_id) {
+            const target = prev.find(
+              (m) => m.id === payload.reply_to_message_id,
+            );
+            if (target) {
+              replyTo = {
+                id: target.id,
+                text: target.text,
+                hasFile: !!target.file,
+                hasVoice: !!target.voice,
+                isOwn: target.isOwn,
+                isDeleted: target.isDeleted,
+              };
+            }
           }
-        }
 
-        const newMessage: ChatMessage = {
-          id:
-            payload.message_id ||
-            `msg-${Date.now()}-${messageIdCounterRef.current++}`,
-          text: decrypted,
-          timestamp: Date.now(),
-          isOwn: false,
-          replyTo,
-        };
+          const newMessage: ChatMessage = {
+            id:
+              payload.message_id ||
+              `msg-${Date.now()}-${messageIdCounterRef.current++}`,
+            text: decrypted,
+            timestamp: Date.now(),
+            isOwn: false,
+            replyTo,
+          };
 
-        return [...prev, newMessage];
-      });
-    } catch (err) {
-      setError(
-        'Не удалось расшифровать сообщение. Возможно, сессия была прервана.',
-      );
-    }
-  }, []);
+          return [...prev, newMessage];
+        });
+
+        sendRef.current?.({
+          type: 'ack',
+          payload: {
+            to: payload.from || peerId,
+            message_id: payload.message_id,
+          },
+        });
+      } catch (err) {
+        setError(
+          'Не удалось расшифровать сообщение. Возможно, сессия была прервана.',
+        );
+      }
+    },
+    [peerId],
+  );
 
   const handleReaction = useCallback((payload: ReactionPayload) => {
     const currentUserId = localStorage.getItem('userId') || '';
@@ -342,6 +378,63 @@ export function useChatSession({
     [peerId],
   );
 
+  const handleMessageEdit = useCallback(
+    async (payload: MessageEditPayload) => {
+      if (!sessionKeyRef.current || payload.from !== peerId) return;
+
+      try {
+        const decrypted = await decrypt(
+          sessionKeyRef.current,
+          payload.ciphertext,
+          payload.nonce,
+        );
+
+        setMessages((prev) =>
+          prev.map((msg) => {
+            if (msg.id === payload.message_id) {
+              return {
+                ...msg,
+                text: decrypted,
+                isEdited: true,
+              };
+            }
+
+            if (msg.replyTo?.id === payload.message_id) {
+              return {
+                ...msg,
+                replyTo: {
+                  ...msg.replyTo,
+                  text: decrypted,
+                },
+              };
+            }
+
+            return msg;
+          }),
+        );
+      } catch (err) {
+        setError('Не удалось расшифровать отредактированное сообщение.');
+      }
+    },
+    [peerId, sessionKeyRef],
+  );
+
+  const handleMessageRead = useCallback(
+    (payload: MessageReadPayload) => {
+      if (payload.from === peerId) {
+        setMessages((prev) =>
+          prev.map((msg) => {
+            if (msg.id === payload.message_id && msg.isOwn) {
+              return { ...msg, deliveryStatus: 'read' as const };
+            }
+            return msg;
+          }),
+        );
+      }
+    },
+    [peerId],
+  );
+
   const handlePeerOffline = useCallback((_payload: PeerOfflinePayload) => {
     setState('peer_offline');
     setError('Собеседник не в сети. Сообщение не может быть доставлено.');
@@ -368,7 +461,12 @@ export function useChatSession({
     peerId,
     handlers: {
       onEphemeralKey: handlePeerEphemeralKey,
-      onAck: handleAck,
+      onAck: (messageId: string) => {
+        handleAck(messageId);
+        if (!messageId.startsWith('ephemeral-')) {
+          handleMessageAck(messageId);
+        }
+      },
       onSessionEstablished: handleSessionEstablished,
       onMessage: handleIncomingMessage,
       onPeerOffline: handlePeerOffline,
@@ -379,6 +477,8 @@ export function useChatSession({
       onTyping: () => {},
       onReaction: handleReaction,
       onMessageDelete: handleMessageDelete,
+      onMessageEdit: handleMessageEdit,
+      onMessageRead: handleMessageRead,
     },
     setState,
     setMessages,
@@ -399,6 +499,7 @@ export function useChatSession({
       setError(err.message);
       setState('error');
     }, []),
+    onTokenExpired,
   });
 
   useEffect(() => {
@@ -553,8 +654,11 @@ export function useChatSession({
             text: trimmed,
             timestamp: Date.now(),
             isOwn: true,
+            deliveryStatus: 'sending',
             replyTo,
           };
+
+          pendingMessageAcksRef.current.add(messageId);
 
           return [...prev, newMessage];
         });
@@ -878,6 +982,104 @@ export function useChatSession({
     [peerId, isConnected, send, state, messages],
   );
 
+  const editMessage = useCallback(
+    async (messageId: string, newText: string) => {
+      if (
+        !sessionKeyRef.current ||
+        !peerId ||
+        !isConnected ||
+        !send ||
+        state !== 'active'
+      ) {
+        return;
+      }
+
+      const message = messages.find((m) => m.id === messageId);
+      if (!message || !message.isOwn || !message.text) return;
+
+      const timeSinceSent = Date.now() - message.timestamp;
+      const EDIT_TIMEOUT = 15 * 60 * 1000;
+      if (timeSinceSent > EDIT_TIMEOUT) {
+        setError(
+          'Редактирование доступно только в течение 15 минут после отправки.',
+        );
+        return;
+      }
+
+      const trimmed = newText.trim();
+      if (!trimmed || trimmed === message.text) return;
+
+      if (trimmed.length > MAX_MESSAGE_LENGTH) {
+        setError(
+          `Сообщение слишком длинное (максимум ${MAX_MESSAGE_LENGTH} символов)`,
+        );
+        return;
+      }
+
+      try {
+        const { ciphertext, nonce } = await encrypt(
+          sessionKeyRef.current,
+          trimmed,
+        );
+
+        send({
+          type: 'message_edit',
+          payload: {
+            to: peerId,
+            message_id: messageId,
+            ciphertext,
+            nonce,
+          },
+        });
+
+        setMessages((prev) =>
+          prev.map((msg) => {
+            if (msg.id === messageId) {
+              return {
+                ...msg,
+                text: trimmed,
+                isEdited: true,
+              };
+            }
+
+            if (msg.replyTo?.id === messageId) {
+              return {
+                ...msg,
+                replyTo: {
+                  ...msg.replyTo,
+                  text: trimmed,
+                },
+              };
+            }
+
+            return msg;
+          }),
+        );
+      } catch (err) {
+        setError('Не удалось отредактировать сообщение. Попробуйте снова.');
+      }
+    },
+    [peerId, isConnected, send, state, messages, sessionKeyRef],
+  );
+
+  const markMessageAsRead = useCallback(
+    (messageId: string) => {
+      if (!peerId || !isConnected || !send || state !== 'active') return;
+
+      const message = messages.find((m) => m.id === messageId);
+      if (!message || message.isOwn) return;
+
+      send({
+        type: 'message_read',
+        payload: {
+          to: peerId,
+          message_id: messageId,
+        },
+      });
+    },
+    [peerId, isConnected, send, state, messages],
+  );
+
   return {
     state,
     messages,
@@ -888,6 +1090,8 @@ export function useChatSession({
     sendTyping,
     sendReaction,
     deleteMessage,
+    editMessage,
+    markMessageAsRead,
     isPeerTyping,
     isSessionActive: state === 'active',
   };

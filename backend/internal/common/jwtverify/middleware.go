@@ -2,7 +2,6 @@ package jwtverify
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -10,6 +9,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
+	commonhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/http"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/observability/metrics"
 )
@@ -40,33 +40,26 @@ type contextKey string
 
 const claimsKey contextKey = "jwt_claims"
 
-func writeError(w http.ResponseWriter, status int, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": message})
-}
-
 func Middleware(secret string, log *logger.Logger, checker RevokedTokenChecker) func(next http.Handler) http.Handler {
 	secretBytes := []byte(secret)
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			raw := r.Header.Get("Authorization")
-			if raw == "" || !strings.HasPrefix(raw, "Bearer ") {
+			tokenString, ok := ExtractTokenFromHeader(r)
+			if !ok {
 				incrementJWTValidationsTotal()
 				incrementJWTValidationsFailed()
 				log.Warnf("jwt auth failed path=%s: missing or invalid authorization header", r.URL.Path)
-				writeError(w, http.StatusUnauthorized, "missing or invalid authorization")
+				commonhttp.WriteError(w, http.StatusUnauthorized, "missing or invalid authorization")
 				return
 			}
 
-			tokenString := strings.TrimPrefix(raw, "Bearer ")
 			incrementJWTValidationsTotal()
 			claims, err := parseToken(tokenString, secretBytes)
 			if err != nil {
 				incrementJWTValidationsFailed()
 				log.Warnf("jwt auth failed path=%s: %v", r.URL.Path, err)
-				writeError(w, http.StatusUnauthorized, "invalid token")
+				commonhttp.WriteError(w, http.StatusUnauthorized, "invalid token")
 				return
 			}
 
@@ -76,13 +69,13 @@ func Middleware(secret string, log *logger.Logger, checker RevokedTokenChecker) 
 				if err != nil {
 					incrementJWTValidationsFailed()
 					log.Errorf("jwt auth failed path=%s: failed to check revoked token jti=%s: %v", r.URL.Path, claims.JTI, err)
-					writeError(w, http.StatusInternalServerError, "internal error")
+					commonhttp.WriteError(w, http.StatusInternalServerError, "internal error")
 					return
 				}
 				if revoked {
 					incrementJWTValidationsFailed()
 					log.Warnf("jwt auth failed path=%s: token revoked jti=%s", r.URL.Path, claims.JTI)
-					writeError(w, http.StatusUnauthorized, "token revoked")
+					commonhttp.WriteError(w, http.StatusUnauthorized, "token revoked")
 					return
 				}
 			}
@@ -102,11 +95,27 @@ func FromContext(ctx context.Context) (Claims, bool) {
 func RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := FromContext(r.Context()); !ok {
-			writeError(w, http.StatusUnauthorized, "unauthorized")
+			commonhttp.WriteError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
 		next(w, r)
 	}
+}
+
+func ExtractTokenFromHeader(r *http.Request) (string, bool) {
+	raw := r.Header.Get("Authorization")
+	if raw == "" || !strings.HasPrefix(raw, "Bearer ") {
+		return "", false
+	}
+	return strings.TrimPrefix(raw, "Bearer "), true
+}
+
+func ExtractAndParseToken(r *http.Request, secret []byte) (Claims, error) {
+	tokenString, ok := ExtractTokenFromHeader(r)
+	if !ok {
+		return Claims{}, commonerrors.ErrInvalidToken
+	}
+	return parseToken(tokenString, secret)
 }
 
 func ParseToken(tokenString string, secret []byte) (Claims, error) {

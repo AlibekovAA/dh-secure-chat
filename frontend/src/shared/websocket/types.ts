@@ -11,7 +11,9 @@ export type MessageType =
   | 'ack'
   | 'typing'
   | 'reaction'
-  | 'message_delete';
+  | 'message_delete'
+  | 'message_edit'
+  | 'message_read';
 
 export type ConnectionState =
   | 'connecting'
@@ -110,4 +112,18 @@ export type MessageDeletePayload = {
   from?: string;
   message_id: string;
   scope?: 'me' | 'all';
+};
+
+export type MessageEditPayload = {
+  to: string;
+  from?: string;
+  message_id: string;
+  ciphertext: string;
+  nonce: string;
+};
+
+export type MessageReadPayload = {
+  to: string;
+  from?: string;
+  message_id: string;
 };

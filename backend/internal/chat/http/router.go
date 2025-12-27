@@ -11,9 +11,9 @@ import (
 
 	authrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/repository"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/service"
-	chatdto "github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/service/dto"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/websocket"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/config"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/dto"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	commonhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/http"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/jwtverify"
@@ -167,9 +167,7 @@ func (h *Handler) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	var claims jwtverify.Claims
 	var authenticated bool
 
-	authHeader := r.Header.Get("Authorization")
-	if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+	if tokenString, ok := jwtverify.ExtractTokenFromHeader(r); ok {
 		parsedClaims, err := jwtverify.ParseToken(tokenString, []byte(h.jwtSecret))
 		if err == nil {
 			if parsedClaims.JTI != "" {
@@ -230,7 +228,7 @@ func (h *Handler) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	client.Start()
 }
 
-func toUserResponses(users []chatdto.UserSummary) []userResponse {
+func toUserResponses(users []dto.UserSummary) []userResponse {
 	result := make([]userResponse, 0, len(users))
 	for _, u := range users {
 		result = append(result, userResponse{

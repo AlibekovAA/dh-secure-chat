@@ -7,6 +7,7 @@ type UseWebSocketOptions = {
   enabled?: boolean;
   onMessage?: (message: WSMessage) => void;
   onError?: (error: Error) => void;
+  onTokenExpired?: () => Promise<string | null>;
 };
 
 export function useWebSocket({
@@ -14,6 +15,7 @@ export function useWebSocket({
   enabled = true,
   onMessage,
   onError,
+  onTokenExpired,
 }: UseWebSocketOptions) {
   const [state, setState] = useState<ConnectionState>('disconnected');
   const clientRef = useRef<WebSocketClient | null>(null);
@@ -46,6 +48,15 @@ export function useWebSocket({
       onError: (error) => {
         onErrorRef.current?.(error);
       },
+      onTokenExpired: onTokenExpired
+        ? async () => {
+            const newToken = await onTokenExpired();
+            if (newToken && clientRef.current) {
+              clientRef.current.updateToken(newToken);
+            }
+            return newToken;
+          }
+        : undefined,
     });
 
     clientRef.current = client;

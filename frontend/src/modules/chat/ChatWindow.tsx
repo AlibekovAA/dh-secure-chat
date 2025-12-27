@@ -11,6 +11,7 @@ import { getFingerprint } from './api';
 import {
   getVerifiedPeerFingerprint,
   isPeerVerified,
+  normalizeFingerprint,
 } from '../../shared/crypto/fingerprint';
 import { useToast } from '../../shared/ui/ToastProvider';
 import { MAX_FILE_SIZE, MAX_MESSAGE_LENGTH } from './constants';
@@ -20,9 +21,10 @@ type Props = {
   peer: UserSummary;
   myUserId: string;
   onClose(): void;
+  onTokenExpired?: () => Promise<string | null>;
 };
 
-export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
+export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: Props) {
   const [messageText, setMessageText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isSendingFile, setIsSendingFile] = useState(false);
@@ -32,6 +34,8 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
   const [peerFingerprint, setPeerFingerprint] = useState<string | null>(null);
   const [fingerprintWarning, setFingerprintWarning] = useState(false);
   const [isChatBlocked, setIsChatBlocked] = useState(false);
+  const [isFingerprintVerified, setIsFingerprintVerified] = useState(false);
+  const [isLoadingFingerprint, setIsLoadingFingerprint] = useState(true);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [showAccessDialog, setShowAccessDialog] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -43,6 +47,7 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
   const [hasShownMaxLengthToast, setHasShownMaxLengthToast] = useState(false);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [viewerFile, setViewerFile] = useState<{ filename: string; mimeType: string; blob: Blob; isProtected: boolean } | null>(null);
+  const [isEditingMessage, setIsEditingMessage] = useState(false);
 
   const {
     state,
@@ -54,12 +59,15 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
     sendTyping,
     sendReaction,
     deleteMessage,
+    editMessage,
+    markMessageAsRead,
     isPeerTyping,
     isSessionActive,
   } = useChatSession({
     token,
     peerId: peer.id,
-    enabled: true,
+    enabled: isFingerprintVerified,
+    onTokenExpired,
   });
 
   const scrollToBottom = useCallback(() => {
@@ -88,17 +96,23 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
       !isSending &&
       !isMediaActive &&
       !showAccessDialog &&
-      !viewerFile
+      !viewerFile &&
+      !isEditingMessage
     ) {
       const timer = setTimeout(() => {
-        inputRef.current?.focus();
+        const activeElement = document.activeElement;
+        const isEditing = document.querySelector('textarea[data-edit-input]') !== null;
+        if (!isEditing && activeElement?.tagName !== 'TEXTAREA' && activeElement?.tagName !== 'INPUT') {
+          inputRef.current?.focus();
+        }
       }, 100);
       return () => clearTimeout(timer);
     }
-  }, [isChatBlocked, isSessionActive, isSending, isMediaActive, showAccessDialog, viewerFile]);
+  }, [isChatBlocked, isSessionActive, isSending, isMediaActive, showAccessDialog, viewerFile, isEditingMessage]);
 
   useEffect(() => {
     const loadFingerprints = async () => {
+      setIsLoadingFingerprint(true);
       try {
         const [myResponse, peerResponse] = await Promise.all([
           getFingerprint(myUserId, token),
@@ -110,29 +124,43 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
 
         const storedFingerprint = getVerifiedPeerFingerprint(peer.id);
         const currentFingerprint = peerResponse.fingerprint;
+        const normalizedCurrent = normalizeFingerprint(currentFingerprint);
 
         if (!storedFingerprint) {
           setShowFingerprintModal(true);
           setIsChatBlocked(true);
+          setIsFingerprintVerified(false);
         } else {
-          const hasChanged = storedFingerprint !== currentFingerprint;
+          const storedNormalized = normalizeFingerprint(storedFingerprint);
+          const hasChanged = storedNormalized !== normalizedCurrent;
           const isVerified = isPeerVerified(peer.id, currentFingerprint);
 
           if (hasChanged && isVerified) {
             setFingerprintWarning(true);
             setIsChatBlocked(true);
             setShowFingerprintModal(true);
+            setIsFingerprintVerified(false);
             showToast('Коды безопасности изменились. Пожалуйста, верифицируйте identity снова для безопасного общения.', 'error');
+          } else if (!hasChanged && isVerified) {
+            setIsFingerprintVerified(true);
+            setIsChatBlocked(false);
+            setFingerprintWarning(false);
+          } else {
+            setIsFingerprintVerified(false);
+            setIsChatBlocked(true);
           }
         }
-      } catch {
+      } catch (err) {
+        setIsFingerprintVerified(false);
+        setIsChatBlocked(true);
+        showToast('Не удалось загрузить fingerprint. Попробуйте перезагрузить страницу.', 'error');
+      } finally {
+        setIsLoadingFingerprint(false);
       }
     };
 
-    if (isSessionActive) {
-      void loadFingerprints();
-    }
-  }, [token, myUserId, peer.id, isSessionActive, showToast]);
+    void loadFingerprints();
+  }, [token, myUserId, peer.id, showToast]);
 
 
 
@@ -159,7 +187,7 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
         }
         if (inputRef.current) {
           inputRef.current.style.height = '40px';
-          if (!showAccessDialog && !viewerFile) {
+          if (!showAccessDialog && !viewerFile && !isEditingMessage) {
             inputRef.current.focus();
           }
         }
@@ -228,14 +256,15 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
     }
     sendTyping(false);
 
-    if (!isChatBlocked && isSessionActive && !isSending && inputRef.current && !isMediaActive && !showAccessDialog && !viewerFile) {
+    if (!isChatBlocked && isSessionActive && !isSending && inputRef.current && !isMediaActive && !showAccessDialog && !viewerFile && !isEditingMessage) {
       setTimeout(() => {
-        if (inputRef.current && document.activeElement !== inputRef.current) {
+        const isEditing = document.querySelector('textarea[data-edit-input]') !== null;
+        if (inputRef.current && !isEditing && document.activeElement !== inputRef.current && document.activeElement?.tagName !== 'TEXTAREA' && document.activeElement?.tagName !== 'INPUT') {
           inputRef.current.focus();
         }
       }, 100);
     }
-  }, [isChatBlocked, isSessionActive, isSending, isMediaActive, sendTyping, showAccessDialog, viewerFile]);
+  }, [isChatBlocked, isSessionActive, isSending, isMediaActive, sendTyping, showAccessDialog, viewerFile, isEditingMessage]);
 
   const handleFileSelect = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -357,7 +386,9 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
             <div>
               <h2 className="text-sm font-semibold text-emerald-300 tracking-tight">{peer.username}</h2>
               <div className="flex items-center gap-2 mt-0.5">
-                {isSessionActive ? (
+                {isLoadingFingerprint ? (
+                  <span className="text-[10px] text-emerald-500/60">Проверка безопасности...</span>
+                ) : isSessionActive ? (
                   <>
                     <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
                     <span className="text-[10px] text-emerald-500/80">Защищённая сессия</span>
@@ -414,7 +445,16 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 scrollbar-custom relative chat-scroll-area">
-          {isLoading && (
+          {isLoadingFingerprint && (
+            <div className="flex items-center justify-center py-8">
+              <div className="flex flex-col items-center gap-3">
+                <div className="w-8 h-8 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+                <p className="text-xs text-emerald-500/80">Проверка безопасности...</p>
+              </div>
+            </div>
+          )}
+
+          {!isLoadingFingerprint && isLoading && (
             <div className="flex items-center justify-center py-8">
               <div className="flex flex-col items-center gap-3">
                 <div className="w-8 h-8 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
@@ -436,10 +476,14 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
               key={message.id}
               message={message}
               myUserId={myUserId}
+              peerUsername={peer.username}
               onReaction={sendReaction}
               onDelete={deleteMessage}
+              onEdit={editMessage}
+              onMarkAsRead={markMessageAsRead}
               onMediaActiveChange={handleMediaActiveChange}
               onReply={setReplyTo}
+              onEditingChange={setIsEditingMessage}
               onViewFile={(filename, mimeType, blob, isProtected) => {
                 if (inputRef.current) {
                   inputRef.current.blur();
@@ -626,13 +670,16 @@ export function ChatWindow({ token, peer, myUserId, onClose }: Props) {
             if (isVerified) {
               setFingerprintWarning(false);
               setIsChatBlocked(false);
+              setIsFingerprintVerified(true);
             } else {
               setIsChatBlocked(true);
+              setIsFingerprintVerified(false);
             }
           }}
           onVerified={() => {
             setFingerprintWarning(false);
             setIsChatBlocked(false);
+            setIsFingerprintVerified(true);
             showToast('Identity подтверждён. Безопасное общение установлено.', 'success');
           }}
         />

@@ -39,7 +39,11 @@ export function FingerprintVerificationModal({
         setPeerFingerprint(response.fingerprint);
         setIsVerified(isPeerVerified(peerId, response.fingerprint));
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Не удалось загрузить fingerprint');
+        setError(
+          err instanceof Error
+            ? err.message
+            : 'Не удалось загрузить fingerprint',
+        );
       } finally {
         setIsLoading(false);
       }
@@ -55,7 +59,9 @@ export function FingerprintVerificationModal({
     onVerified?.();
   }, [peerId, peerFingerprint, onVerified]);
 
-  const hasChanged = peerFingerprint ? hasPeerFingerprintChanged(peerId, peerFingerprint) : false;
+  const hasChanged = peerFingerprint
+    ? hasPeerFingerprintChanged(peerId, peerFingerprint)
+    : false;
 
   return (
     <div
@@ -70,14 +76,21 @@ export function FingerprintVerificationModal({
       >
         <div className="px-6 py-4 border-b border-emerald-700/60 bg-black/80">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-emerald-300">Верификация Identity</h2>
+            <h2 className="text-lg font-semibold text-emerald-300">
+              Верификация Identity
+            </h2>
             <button
               type="button"
               onClick={onClose}
               className="text-emerald-400 hover:text-emerald-200 transition-colors"
               aria-label="Закрыть"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -94,7 +107,9 @@ export function FingerprintVerificationModal({
             <div className="flex items-center justify-center py-8">
               <div className="flex flex-col items-center gap-3">
                 <div className="w-8 h-8 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
-                <p className="text-xs text-emerald-500/80">Загрузка fingerprint...</p>
+                <p className="text-xs text-emerald-500/80">
+                  Загрузка fingerprint...
+                </p>
               </div>
             </div>
           )}
@@ -128,8 +143,9 @@ export function FingerprintVerificationModal({
                         Внимание: Fingerprint изменился!
                       </p>
                       <p className="text-xs text-yellow-500/80 mt-1">
-                        Fingerprint этого пользователя отличается от сохранённого. Убедитесь, что
-                        вы общаетесь с правильным человеком.
+                        Fingerprint этого пользователя отличается от
+                        сохранённого. Убедитесь, что вы общаетесь с правильным
+                        человеком.
                       </p>
                     </div>
                   </div>
@@ -138,15 +154,23 @@ export function FingerprintVerificationModal({
 
               <div className="space-y-4">
                 <div>
-                  <p className="text-xs font-medium text-emerald-400 mb-2">Ваш Fingerprint</p>
+                  <p className="text-xs font-medium text-emerald-400 mb-2">
+                    Ваш Fingerprint
+                  </p>
                   <div className="bg-emerald-900/20 border border-emerald-700/40 rounded-lg px-4 py-3 space-y-2">
                     <p className="text-xs font-mono text-emerald-200 break-all">
-                      {myFingerprint ? formatFingerprint(myFingerprint) : 'Не загружен'}
+                      {myFingerprint
+                        ? formatFingerprint(myFingerprint)
+                        : 'Не загружен'}
                     </p>
                     {myFingerprint && (
                       <div className="flex items-center gap-2 pt-2 border-t border-emerald-700/30">
-                        <span className="text-xs text-emerald-400/80">Visual:</span>
-                        <span className="text-lg">{fingerprintToEmojis(myFingerprint)}</span>
+                        <span className="text-xs text-emerald-400/80">
+                          Visual:
+                        </span>
+                        <span className="text-lg">
+                          {fingerprintToEmojis(myFingerprint)}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -161,8 +185,12 @@ export function FingerprintVerificationModal({
                       {formatFingerprint(peerFingerprint)}
                     </p>
                     <div className="flex items-center gap-2 pt-2 border-t border-emerald-700/30">
-                      <span className="text-xs text-emerald-400/80">Visual:</span>
-                      <span className="text-lg">{fingerprintToEmojis(peerFingerprint)}</span>
+                      <span className="text-xs text-emerald-400/80">
+                        Visual:
+                      </span>
+                      <span className="text-lg">
+                        {fingerprintToEmojis(peerFingerprint)}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -170,37 +198,43 @@ export function FingerprintVerificationModal({
 
               <div className="bg-emerald-900/10 border border-emerald-700/30 rounded-lg px-4 py-3">
                 <p className="text-xs text-emerald-400/90 leading-relaxed mb-2">
-                  <strong className="text-emerald-300">Инструкция:</strong> Сравните эти
-                  fingerprint'ы вне приложения (например, по телефону или в другом канале связи).
-                  Если они совпадают, нажмите "Подтвердить". Это защитит вас от атак типа
+                  <strong className="text-emerald-300">Инструкция:</strong>{' '}
+                  Сравните эти fingerprint'ы вне приложения (например, по
+                  телефону или в другом канале связи). Если они совпадают,
+                  нажмите "Подтвердить". Это защитит вас от атак типа
                   man-in-the-middle.
                 </p>
                 <p className="text-xs text-emerald-500/70">
-                  💡 <strong>Совет:</strong> Используйте визуальные коды (эмодзи) для быстрого
-                  сравнения по телефону — они легче запоминаются и произносятся.
+                  💡 <strong>Совет:</strong> Используйте визуальные коды
+                  (эмодзи) для быстрого сравнения по телефону — они легче
+                  запоминаются и произносятся.
                 </p>
               </div>
 
-              {isVerified && (
-                <div className="bg-emerald-900/20 border border-emerald-500/40 rounded-lg px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <svg
-                      className="w-5 h-5 text-emerald-400"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
-                    <p className="text-sm text-emerald-300">Identity подтверждён</p>
-                  </div>
+              <div
+                className={`bg-emerald-900/20 border border-emerald-500/40 rounded-lg px-4 py-3 transition-opacity duration-300 min-h-[3.5rem] ${
+                  isVerified ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <svg
+                    className="w-5 h-5 text-emerald-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                  <p className="text-sm text-emerald-300">
+                    Identity подтверждён
+                  </p>
                 </div>
-              )}
+              </div>
             </>
           )}
         </div>

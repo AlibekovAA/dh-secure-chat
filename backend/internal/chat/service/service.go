@@ -5,10 +5,10 @@ import (
 	"errors"
 	"strings"
 
-	chatdto "github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/service/dto"
-	chatmapper "github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/service/mapper"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/dto"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/mapper"
 	identityservice "github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/service"
 	userdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
 	userrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/repository"
@@ -28,18 +28,18 @@ func NewChatService(repo userrepo.Repository, identityService identityservice.Se
 	}
 }
 
-func (s *ChatService) GetMe(ctx context.Context, userID string) (chatdto.User, error) {
+func (s *ChatService) GetMe(ctx context.Context, userID string) (dto.User, error) {
 	user, err := s.repo.FindByID(ctx, userdomain.ID(userID))
 	if err != nil {
 		if errors.Is(err, userrepo.ErrUserNotFound) {
-			return chatdto.User{}, commonerrors.ErrUserNotFound.WithCause(err)
+			return dto.User{}, commonerrors.ErrUserNotFound.WithCause(err)
 		}
-		return chatdto.User{}, commonerrors.ErrUserGetFailed.WithCause(err)
+		return dto.User{}, commonerrors.ErrUserGetFailed.WithCause(err)
 	}
-	return chatmapper.UserToDTO(user), nil
+	return mapper.UserToDTO(user), nil
 }
 
-func (s *ChatService) SearchUsers(ctx context.Context, query string, limit int) ([]chatdto.UserSummary, error) {
+func (s *ChatService) SearchUsers(ctx context.Context, query string, limit int) ([]dto.UserSummary, error) {
 	q := strings.TrimSpace(query)
 	if q == "" {
 		return nil, commonerrors.ErrEmptyQuery
@@ -56,7 +56,7 @@ func (s *ChatService) SearchUsers(ctx context.Context, query string, limit int) 
 		}).Errorf("search users failed: %v", err)
 		return nil, commonerrors.ErrUserSearchFailed.WithCause(err)
 	}
-	return chatmapper.UserSummariesToDTO(users), nil
+	return mapper.UserSummariesToDTO(users), nil
 }
 
 func (s *ChatService) GetIdentityKey(ctx context.Context, userID string) ([]byte, error) {

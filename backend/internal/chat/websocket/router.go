@@ -85,6 +85,8 @@ func (p *TypingPayload) SetFrom(from string)        { p.From = from }
 func (p *ReactionPayload) SetFrom(from string)      { p.From = from }
 func (p *MessagePayload) SetFrom(from string)       { p.From = from }
 func (p *MessageDeletePayload) SetFrom(from string) { p.From = from }
+func (p *MessageEditPayload) SetFrom(from string)   { p.From = from }
+func (p *MessageReadPayload) SetFrom(from string)   { p.From = from }
 
 func (r *messageRouter) Route(ctx context.Context, client *Client, msg *WSMessage) error {
 	switch msg.Type {
@@ -117,6 +119,12 @@ func (r *messageRouter) Route(ctx context.Context, client *Client, msg *WSMessag
 
 	case TypeMessageDelete:
 		return r.routeWithModifiedPayload(ctx, client, msg, &MessageDeletePayload{}, "message_delete", true)
+
+	case TypeMessageEdit:
+		return r.routeWithModifiedPayload(ctx, client, msg, &MessageEditPayload{}, "message_edit", true)
+
+	case TypeMessageRead:
+		return r.routeWithModifiedPayload(ctx, client, msg, &MessageReadPayload{}, "message_read", true)
 
 	default:
 		r.log.WithFields(ctx, logger.Fields{

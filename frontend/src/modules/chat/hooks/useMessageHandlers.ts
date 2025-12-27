@@ -13,6 +13,8 @@ import type {
   TypingPayload,
   ReactionPayload,
   MessageDeletePayload,
+  MessageEditPayload,
+  MessageReadPayload,
 } from '../../../shared/websocket/types';
 import type { ChatMessage, ChatSessionState } from '../useChatSession';
 
@@ -29,6 +31,8 @@ type MessageHandlers = {
   onTyping: (payload: TypingPayload) => void;
   onReaction: (payload: ReactionPayload) => void;
   onMessageDelete: (payload: MessageDeletePayload) => void;
+  onMessageEdit: (payload: MessageEditPayload) => void;
+  onMessageRead: (payload: MessageReadPayload) => void;
 };
 
 type MessageHandlerOptions = {
@@ -192,6 +196,18 @@ export function useMessageHandler({
         case 'message_delete': {
           const payload = message.payload as MessageDeletePayload;
           handlers.onMessageDelete(payload);
+          break;
+        }
+
+        case 'message_edit': {
+          const payload = message.payload as MessageEditPayload;
+          handlers.onMessageEdit(payload);
+          break;
+        }
+
+        case 'message_read': {
+          const payload = message.payload as MessageReadPayload;
+          handlers.onMessageRead(payload);
           break;
         }
       }

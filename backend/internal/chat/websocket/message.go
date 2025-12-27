@@ -18,6 +18,8 @@ const (
 	TypeTyping             MessageType = "typing"
 	TypeReaction           MessageType = "reaction"
 	TypeMessageDelete      MessageType = "message_delete"
+	TypeMessageEdit        MessageType = "message_edit"
+	TypeMessageRead        MessageType = "message_read"
 	TypeError              MessageType = "error"
 )
 
@@ -29,7 +31,8 @@ func (mt MessageType) IsValid() bool {
 	switch mt {
 	case TypeAuth, TypeEphemeralKey, TypeMessage, TypeSessionEstablished,
 		TypePeerOffline, TypePeerDisconnected, TypeFileStart, TypeFileChunk,
-		TypeFileComplete, TypeAck, TypeTyping, TypeReaction, TypeMessageDelete, TypeError:
+		TypeFileComplete, TypeAck, TypeTyping, TypeReaction, TypeMessageDelete,
+		TypeMessageEdit, TypeMessageRead, TypeError:
 		return true
 	default:
 		return false
@@ -128,6 +131,20 @@ type MessageDeletePayload struct {
 	From      string `json:"from,omitempty"`
 	MessageID string `json:"message_id"`
 	Scope     string `json:"scope,omitempty"`
+}
+
+type MessageEditPayload struct {
+	To         string `json:"to"`
+	From       string `json:"from,omitempty"`
+	MessageID  string `json:"message_id"`
+	Ciphertext string `json:"ciphertext"`
+	Nonce      string `json:"nonce"`
+}
+
+type MessageReadPayload struct {
+	To        string `json:"to"`
+	From      string `json:"from,omitempty"`
+	MessageID string `json:"message_id"`
 }
 
 type ErrorPayload struct {

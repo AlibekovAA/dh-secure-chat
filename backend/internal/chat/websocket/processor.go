@@ -44,6 +44,7 @@ func NewMessageProcessor(workers int, router MessageRouter, log *logger.Logger, 
 
 func (p *MessageProcessor) worker() {
 	for task := range p.queue {
+		metrics.ChatWebSocketMessageProcessorQueueSize.Set(float64(len(p.queue)))
 		p.process(task.ctx, task.client, task.msg)
 	}
 }

@@ -7,6 +7,7 @@ type EventHandlers = {
   onStateChange?: (state: ConnectionState) => void;
   onMessage?: MessageHandler;
   onError?: (error: Error) => void;
+  onTokenExpired?: () => Promise<string | null>;
 };
 
 export class WebSocketClient {
@@ -20,6 +21,7 @@ export class WebSocketClient {
   private reconnectTimer: number | null = null;
   private state: ConnectionState = 'disconnected';
   private sequenceManager: SequenceManager;
+  private isRefreshingToken = false;
 
   constructor(token: string, handlers: EventHandlers = {}) {
     this.token = token;
@@ -72,10 +74,60 @@ export class WebSocketClient {
                 if (payload.authenticated === true) {
                   this.setState('connected');
                   this.reconnectAttempts = 0;
+                  this.isRefreshingToken = false;
                   continue;
                 }
                 if (payload.error) {
-                  this.handlers.onError?.(new Error(payload.error));
+                  const errorMessage = payload.error.toLowerCase();
+                  const isTokenError =
+                    errorMessage.includes('token') ||
+                    errorMessage.includes('invalid') ||
+                    errorMessage.includes('expired') ||
+                    errorMessage.includes('unauthorized');
+
+                  if (
+                    isTokenError &&
+                    this.handlers.onTokenExpired &&
+                    !this.isRefreshingToken
+                  ) {
+                    this.isRefreshingToken = true;
+                    this.ws?.close();
+                    (async () => {
+                      try {
+                        const newToken = await this.handlers.onTokenExpired!();
+                        if (newToken) {
+                          this.token = newToken;
+                          this.reconnectAttempts = 0;
+                          setTimeout(() => {
+                            this.connect();
+                          }, 500);
+                          return;
+                        }
+                        this.isRefreshingToken = false;
+                        this.handlers.onError?.(
+                          new Error(
+                            'Не удалось обновить токен доступа. Войдите снова.',
+                          ),
+                        );
+                      } catch (err) {
+                        this.isRefreshingToken = false;
+                        this.handlers.onError?.(
+                          new Error(
+                            'Ошибка при обновлении токена доступа. Войдите снова.',
+                          ),
+                        );
+                      }
+                    })();
+                    return;
+                  }
+
+                  this.handlers.onError?.(
+                    new Error(
+                      isTokenError
+                        ? 'Токен доступа истек. Попытка обновления...'
+                        : payload.error,
+                    ),
+                  );
                   this.ws?.close();
                   return;
                 }
@@ -126,6 +178,10 @@ export class WebSocketClient {
         this.ws = null;
         this.sequenceManager.reset();
 
+        if (this.isRefreshingToken) {
+          return;
+        }
+
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
           this.scheduleReconnect();
         } else {
@@ -159,6 +215,11 @@ export class WebSocketClient {
 
     this.setState('disconnected');
     this.reconnectAttempts = this.maxReconnectAttempts;
+  }
+
+  updateToken(newToken: string): void {
+    this.token = newToken;
+    this.isRefreshingToken = false;
   }
 
   send(message: WSMessage, addSequence = true): void {

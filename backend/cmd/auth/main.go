@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
@@ -24,9 +24,10 @@ import (
 )
 
 func main() {
-	log := logger.GetInstance()
-	if err := log.Initialize(os.Getenv("LOG_DIR"), "auth", os.Getenv("LOG_LEVEL")); err != nil {
-		log.Fatalf("failed to initialize logger: %v", err)
+	log, err := logger.New(os.Getenv("LOG_DIR"), "auth", os.Getenv("LOG_LEVEL"))
+	if err != nil {
+		os.Stderr.WriteString(fmt.Sprintf("failed to initialize logger: %v\n", err))
+		os.Exit(1)
 	}
 
 	cfg, err := config.LoadAuthConfig()
@@ -89,14 +90,8 @@ func main() {
 
 	finalHandler := rateLimitMiddleware(baseHandler)
 
-	server := &http.Server{
-		Addr:              ":" + cfg.HTTPPort,
-		Handler:           finalHandler,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      10 * time.Second,
-		IdleTimeout:       120 * time.Second,
-	}
+	serverConfig := srv.DefaultServerConfig(cfg.HTTPPort)
+	server := srv.NewServer(serverConfig, finalHandler)
 
 	shutdownHooks := []srv.ShutdownHook{
 		func(ctx context.Context) error {

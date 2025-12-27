@@ -10,23 +10,25 @@ import (
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 )
 
-type AuthConfig struct {
-	HTTPPort                string        `validate:"required"`
+type BaseConfig struct {
 	DatabaseURL             string        `validate:"required,url"`
 	JWTSecret               string        `validate:"required"`
-	RequestTimeout          time.Duration `validate:"gt=0"`
-	AccessTokenTTL          time.Duration `validate:"gt=0"`
-	RefreshTokenTTL         time.Duration `validate:"gt=0"`
-	MaxRefreshTokensPerUser int           `validate:"gt=0"`
+	HTTPPort                string        `validate:"required"`
 	CircuitBreakerThreshold int32         `validate:"gt=0"`
 	CircuitBreakerTimeout   time.Duration `validate:"gt=0"`
 	CircuitBreakerReset     time.Duration `validate:"gt=0"`
 }
 
+type AuthConfig struct {
+	BaseConfig
+	RequestTimeout          time.Duration `validate:"gt=0"`
+	AccessTokenTTL          time.Duration `validate:"gt=0"`
+	RefreshTokenTTL         time.Duration `validate:"gt=0"`
+	MaxRefreshTokensPerUser int           `validate:"gt=0"`
+}
+
 type ChatConfig struct {
-	HTTPPort                string        `validate:"required"`
-	DatabaseURL             string        `validate:"required,url"`
-	JWTSecret               string        `validate:"required"`
+	BaseConfig
 	WebSocketWriteWait      time.Duration `validate:"gt=0"`
 	WebSocketPongWait       time.Duration `validate:"gt=0"`
 	WebSocketPingPeriod     time.Duration `validate:"gt=0"`
@@ -37,40 +39,48 @@ type ChatConfig struct {
 	LastSeenUpdateInterval  time.Duration `validate:"gt=0"`
 	RequestTimeout          time.Duration `validate:"gt=0"`
 	SearchTimeout           time.Duration `validate:"gt=0"`
-	CircuitBreakerThreshold int32         `validate:"gt=0"`
-	CircuitBreakerTimeout   time.Duration `validate:"gt=0"`
-	CircuitBreakerReset     time.Duration `validate:"gt=0"`
 	WebSocketMaxConnections int           `validate:"gt=0"`
 }
 
 var validate = validator.New()
 
-func LoadAuthConfig() (AuthConfig, error) {
+func loadBaseConfig(prefix string, defaultPort string) (BaseConfig, error) {
 	jwtSecret, err := mustEnv("JWT_SECRET")
 	if err != nil {
-		return AuthConfig{}, err
+		return BaseConfig{}, err
 	}
 
 	if err := validateJWTSecret(jwtSecret); err != nil {
-		return AuthConfig{}, err
+		return BaseConfig{}, err
 	}
 
 	databaseURL, err := mustEnv("DATABASE_URL")
+	if err != nil {
+		return BaseConfig{}, err
+	}
+
+	return BaseConfig{
+		DatabaseURL:             databaseURL,
+		JWTSecret:               jwtSecret,
+		HTTPPort:                getEnv(prefix+"_HTTP_PORT", defaultPort),
+		CircuitBreakerThreshold: int32(getIntEnv(prefix+"_CIRCUIT_BREAKER_THRESHOLD", 5)),
+		CircuitBreakerTimeout:   getDurationEnv(prefix+"_CIRCUIT_BREAKER_TIMEOUT", 5*time.Second),
+		CircuitBreakerReset:     getDurationEnv(prefix+"_CIRCUIT_BREAKER_RESET", 30*time.Second),
+	}, nil
+}
+
+func LoadAuthConfig() (AuthConfig, error) {
+	base, err := loadBaseConfig("AUTH", "8081")
 	if err != nil {
 		return AuthConfig{}, err
 	}
 
 	cfg := AuthConfig{
-		HTTPPort:                getEnv("AUTH_HTTP_PORT", "8081"),
-		DatabaseURL:             databaseURL,
-		JWTSecret:               jwtSecret,
+		BaseConfig:              base,
 		RequestTimeout:          getDurationEnv("AUTH_REQUEST_TIMEOUT", 5*time.Second),
 		AccessTokenTTL:          getDurationEnv("AUTH_ACCESS_TOKEN_TTL", 15*time.Minute),
 		RefreshTokenTTL:         getDurationEnv("AUTH_REFRESH_TOKEN_TTL", 7*24*time.Hour),
 		MaxRefreshTokensPerUser: getIntEnv("AUTH_MAX_REFRESH_TOKENS_PER_USER", 5),
-		CircuitBreakerThreshold: int32(getIntEnv("AUTH_CIRCUIT_BREAKER_THRESHOLD", 5)),
-		CircuitBreakerTimeout:   getDurationEnv("AUTH_CIRCUIT_BREAKER_TIMEOUT", 5*time.Second),
-		CircuitBreakerReset:     getDurationEnv("AUTH_CIRCUIT_BREAKER_RESET", 30*time.Second),
 	}
 
 	if err := validate.Struct(cfg); err != nil {
@@ -81,24 +91,13 @@ func LoadAuthConfig() (AuthConfig, error) {
 }
 
 func LoadChatConfig() (ChatConfig, error) {
-	jwtSecret, err := mustEnv("JWT_SECRET")
-	if err != nil {
-		return ChatConfig{}, err
-	}
-
-	if err := validateJWTSecret(jwtSecret); err != nil {
-		return ChatConfig{}, err
-	}
-
-	databaseURL, err := mustEnv("DATABASE_URL")
+	base, err := loadBaseConfig("CHAT", "8082")
 	if err != nil {
 		return ChatConfig{}, err
 	}
 
 	cfg := ChatConfig{
-		HTTPPort:                getEnv("CHAT_HTTP_PORT", "8082"),
-		DatabaseURL:             databaseURL,
-		JWTSecret:               jwtSecret,
+		BaseConfig:              base,
 		WebSocketWriteWait:      getDurationEnv("CHAT_WS_WRITE_WAIT", 10*time.Second),
 		WebSocketPongWait:       getDurationEnv("CHAT_WS_PONG_WAIT", 60*time.Second),
 		WebSocketPingPeriod:     getDurationEnv("CHAT_WS_PING_PERIOD", 54*time.Second),
@@ -109,9 +108,6 @@ func LoadChatConfig() (ChatConfig, error) {
 		LastSeenUpdateInterval:  getDurationEnv("CHAT_LAST_SEEN_INTERVAL", 1*time.Minute),
 		RequestTimeout:          getDurationEnv("CHAT_REQUEST_TIMEOUT", 5*time.Second),
 		SearchTimeout:           getDurationEnv("CHAT_SEARCH_TIMEOUT", 10*time.Second),
-		CircuitBreakerThreshold: int32(getIntEnv("CHAT_CIRCUIT_BREAKER_THRESHOLD", 5)),
-		CircuitBreakerTimeout:   getDurationEnv("CHAT_CIRCUIT_BREAKER_TIMEOUT", 5*time.Second),
-		CircuitBreakerReset:     getDurationEnv("CHAT_CIRCUIT_BREAKER_RESET", 30*time.Second),
 		WebSocketMaxConnections: getIntEnv("CHAT_WS_MAX_CONNECTIONS", 10000),
 	}
 

@@ -39,6 +39,23 @@ var levelNames = map[LogLevel]string{
 	CRITICAL: "CRITICAL",
 }
 
+type LoggerInterface interface {
+	Debug(msg string)
+	DebugSampled(prob float64, msg string)
+	Info(msg string)
+	Warn(msg string)
+	Error(msg string)
+	Critical(msg string)
+	Debugf(format string, args ...any)
+	Infof(format string, args ...any)
+	Warnf(format string, args ...any)
+	Errorf(format string, args ...any)
+	Criticalf(format string, args ...any)
+	Fatal(msg string)
+	Fatalf(format string, args ...any)
+	WithFields(ctx context.Context, fields Fields) *Entry
+}
+
 type Logger struct {
 	level       LogLevel
 	out         *log.Logger
@@ -48,27 +65,22 @@ type Logger struct {
 	samplerMu   sync.Mutex
 }
 
-var (
-	instance *Logger
-	once     sync.Once
-)
+func New(logDir, serviceName, level string) (*Logger, error) {
+	l := &Logger{
+		level:       INFO,
+		out:         log.New(os.Stderr, "", log.LstdFlags|log.Lshortfile),
+		serviceName: "",
+		sampler:     rand.New(rand.NewSource(time.Now().UnixNano())),
+	}
 
-func GetInstance() *Logger {
-	once.Do(func() {
-		instance = &Logger{
-			level:       INFO,
-			out:         log.New(os.Stderr, "", log.LstdFlags|log.Lshortfile),
-			serviceName: "",
-			sampler:     rand.New(rand.NewSource(time.Now().UnixNano())),
-		}
-	})
-	return instance
+	if err := l.initialize(logDir, serviceName, level); err != nil {
+		return nil, err
+	}
+
+	return l, nil
 }
 
-func (l *Logger) Initialize(logDir, serviceName, level string) error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
+func (l *Logger) initialize(logDir, serviceName, level string) error {
 	if logDir == "" {
 		logDir = "/var/log/dh-secure-chat"
 	}
@@ -88,8 +100,11 @@ func (l *Logger) Initialize(logDir, serviceName, level string) error {
 	}
 
 	multiWriter := io.MultiWriter(os.Stdout, fileWriter)
-	l.out = log.New(multiWriter, "", log.LstdFlags)
 
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	l.out = log.New(multiWriter, "", log.LstdFlags)
 	l.level = parseLevel(level)
 	l.serviceName = serviceName
 	l.sampler = rand.New(rand.NewSource(time.Now().UnixNano()))

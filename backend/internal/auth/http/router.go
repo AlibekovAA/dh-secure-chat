@@ -3,7 +3,6 @@ package http
 import (
 	"encoding/base64"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/service"
@@ -75,7 +74,7 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 		IdentityPubKey: pubKey,
 	})
 	if err != nil {
-		h.writeError(w, r, err)
+		commonhttp.HandleError(w, r, err, h.log)
 		return
 	}
 
@@ -98,7 +97,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		Password: req.Password,
 	})
 	if err != nil {
-		h.writeError(w, r, err)
+		commonhttp.HandleError(w, r, err, h.log)
 		return
 	}
 
@@ -118,7 +117,7 @@ func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.auth.RefreshAccessToken(ctx, cookie.Value, clientIP)
 	if err != nil {
-		h.writeError(w, r, err)
+		commonhttp.HandleError(w, r, err, h.log)
 		return
 	}
 
@@ -133,9 +132,7 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 	if ctxClaims, ok := jwtverify.FromContext(ctx); ok {
 		claims = ctxClaims
 	} else {
-		raw := r.Header.Get("Authorization")
-		if raw != "" && strings.HasPrefix(raw, "Bearer ") {
-			tokenString := strings.TrimPrefix(raw, "Bearer ")
+		if tokenString, ok := jwtverify.ExtractTokenFromHeader(r); ok {
 			claims, err = h.auth.ParseTokenForRevoke(ctx, tokenString)
 			if err != nil {
 				claims = jwtverify.Claims{}
@@ -167,13 +164,12 @@ func (h *Handler) revoke(w http.ResponseWriter, r *http.Request) {
 	if ctxClaims, ok := jwtverify.FromContext(ctx); ok {
 		claims = ctxClaims
 	} else {
-		raw := r.Header.Get("Authorization")
-		if raw == "" || !strings.HasPrefix(raw, "Bearer ") {
+		tokenString, ok := jwtverify.ExtractTokenFromHeader(r)
+		if !ok {
 			commonhttp.WriteError(w, http.StatusUnauthorized, "missing authorization")
 			return
 		}
 
-		tokenString := strings.TrimPrefix(raw, "Bearer ")
 		claims, err = h.auth.ParseTokenForRevoke(ctx, tokenString)
 		if err != nil {
 			commonhttp.WriteError(w, http.StatusUnauthorized, "invalid token")
@@ -225,8 +221,4 @@ func clearRefreshCookie(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.SetCookie(w, cookie)
-}
-
-func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, err error) {
-	commonhttp.HandleError(w, r, err, h.log)
 }

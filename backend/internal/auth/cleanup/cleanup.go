@@ -28,9 +28,10 @@ func StartCleanup(ctx context.Context, repo ExpiredDeleter, log *logger.Logger, 
 				continue
 			}
 			if deleted > 0 {
-				if repoName == "refresh token" {
+				switch repoName {
+				case "refresh token":
 					metrics.RefreshTokensCleanupDeleted.Add(float64(deleted))
-				} else if repoName == "revoked token" {
+				case "revoked token":
 					metrics.RevokedTokensCleanupDeleted.Add(float64(deleted))
 				}
 				log.Infof("%s cleanup: deleted %d expired tokens", repoName, deleted)

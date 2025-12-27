@@ -11,8 +11,11 @@ type Props = {
   peerUsername?: string;
   onReaction: (messageId: string, emoji: string, action: 'add' | 'remove') => void;
   onDelete?: (messageId: string, scope: 'me' | 'all') => void;
+  onEdit?: (messageId: string, newText: string) => void;
+  onMarkAsRead?: (messageId: string) => void;
   onMediaActiveChange?: (active: boolean) => void;
   onReply?: (message: ChatMessage) => void;
+  onEditingChange?: (editing: boolean) => void;
   onViewFile?: (filename: string, mimeType: string, blob: Blob, isProtected: boolean) => void;
 };
 
@@ -22,13 +25,19 @@ function MessageBubbleComponent({
   peerUsername,
   onReaction,
   onDelete,
+  onEdit,
+  onMarkAsRead,
   onMediaActiveChange,
   onReply,
+  onEditingChange,
   onViewFile,
 }: Props) {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [emojiPicker, setEmojiPicker] = useState<{ x: number; y: number } | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState('');
   const messageRef = useRef<HTMLDivElement>(null);
+  const editInputRef = useRef<HTMLTextAreaElement>(null);
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -64,6 +73,60 @@ function MessageBubbleComponent({
     const hasReacted = emojiReactions.includes(myUserId);
     onReaction(message.id, emoji, hasReacted ? 'remove' : 'add');
   };
+
+  const handleEdit = () => {
+    if (!message.text || !onEdit) return;
+    setEditText(message.text);
+    setIsEditing(true);
+    onEditingChange?.(true);
+    setContextMenu(null);
+  };
+
+  const handleSaveEdit = () => {
+    if (!onEdit || !editText.trim() || editText.trim() === message.text) {
+      setIsEditing(false);
+      onEditingChange?.(false);
+      return;
+    }
+    onEdit(message.id, editText.trim());
+    setIsEditing(false);
+    onEditingChange?.(false);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    onEditingChange?.(false);
+    setEditText('');
+  };
+
+  useEffect(() => {
+    if (isEditing && editInputRef.current) {
+      editInputRef.current.focus();
+      editInputRef.current.select();
+    }
+  }, [isEditing]);
+
+  useEffect(() => {
+    if (!message.isOwn || !onMarkAsRead || !messageRef.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting && message.deliveryStatus === 'delivered') {
+            onMarkAsRead(message.id);
+            observer.disconnect();
+          }
+        });
+      },
+      { threshold: 0.5 },
+    );
+
+    observer.observe(messageRef.current);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [message.id, message.isOwn, message.deliveryStatus, onMarkAsRead]);
 
   if (message.isDeleted) {
     return (
@@ -145,10 +208,52 @@ function MessageBubbleComponent({
           )}
 
           <div className="px-3 pb-2 pt-2">
-            {message.text && (
-              <p className="text-sm whitespace-pre-wrap break-words leading-relaxed text-emerald-50/95">
-                {message.text}
-              </p>
+            {isEditing ? (
+              <div className="space-y-2">
+                <textarea
+                  ref={editInputRef}
+                  data-edit-input
+                  value={editText}
+                  onChange={(e) => setEditText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSaveEdit();
+                    } else if (e.key === 'Escape') {
+                      handleCancelEdit();
+                    }
+                  }}
+                  className="w-full rounded-md bg-black/60 border border-emerald-500/60 px-3 py-2 text-sm text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+                  rows={Math.min(editText.split('\n').length, 5)}
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleSaveEdit}
+                    className="px-3 py-1 text-xs rounded-md bg-emerald-500 hover:bg-emerald-400 text-black transition-colors"
+                  >
+                    Сохранить
+                  </button>
+                  <button
+                    onClick={handleCancelEdit}
+                    className="px-3 py-1 text-xs rounded-md bg-emerald-900/40 hover:bg-emerald-900/60 text-emerald-300 transition-colors"
+                  >
+                    Отмена
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {message.text && (
+                  <p className="text-sm whitespace-pre-wrap break-words leading-relaxed text-emerald-50/95">
+                    {message.text}
+                    {message.isEdited && (
+                      <span className="ml-2 text-[10px] text-emerald-500/60 italic">
+                        (изменено)
+                      </span>
+                    )}
+                  </p>
+                )}
+              </>
             )}
             {message.voice && (
               <VoiceMessage
@@ -210,6 +315,25 @@ function MessageBubbleComponent({
                   minute: '2-digit',
                 })}
               </p>
+              {message.isOwn && message.deliveryStatus && (
+                <div className="flex items-center gap-1">
+                  {message.deliveryStatus === 'sending' && (
+                    <svg className="w-3.5 h-3.5 text-emerald-500/50" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                  {message.deliveryStatus === 'delivered' && (
+                    <svg className="w-3.5 h-3.5 text-emerald-500/70" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                  {message.deliveryStatus === 'read' && (
+                    <svg className="w-3.5 h-3.5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -225,10 +349,11 @@ function MessageBubbleComponent({
             x={contextMenu.x}
             y={contextMenu.y}
             isOwn={message.isOwn}
-            canEdit={false}
+            canEdit={message.isOwn && !!message.text && !message.isDeleted && (Date.now() - message.timestamp) <= 15 * 60 * 1000}
             onCopy={handleCopy}
             onReact={handleReact}
             onReply={onReply ? () => onReply(message) : undefined}
+            onEdit={message.isOwn && !!message.text && !message.isDeleted ? handleEdit : undefined}
             onDeleteForMe={message.isOwn ? () => onDelete?.(message.id, 'me') : undefined}
             onDeleteForAll={message.isOwn ? () => onDelete?.(message.id, 'all') : undefined}
             onClose={() => setContextMenu(null)}
@@ -261,6 +386,7 @@ export const MessageBubble = memo(MessageBubbleComponent, (prevProps, nextProps)
     prevProps.message.replyTo?.id === nextProps.message.replyTo?.id &&
     prevProps.message.replyTo?.isDeleted === nextProps.message.replyTo?.isDeleted &&
     prevProps.message.replyTo?.text === nextProps.message.replyTo?.text &&
+    prevProps.message.deliveryStatus === nextProps.message.deliveryStatus &&
     prevProps.myUserId === nextProps.myUserId &&
     prevProps.peerUsername === nextProps.peerUsername
   );

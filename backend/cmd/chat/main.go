@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"strconv"
@@ -27,9 +28,10 @@ import (
 )
 
 func main() {
-	log := logger.GetInstance()
-	if err := log.Initialize(os.Getenv("LOG_DIR"), "chat", os.Getenv("LOG_LEVEL")); err != nil {
-		log.Fatalf("failed to initialize logger: %v", err)
+	log, err := logger.New(os.Getenv("LOG_DIR"), "chat", os.Getenv("LOG_LEVEL"))
+	if err != nil {
+		os.Stderr.WriteString(fmt.Sprintf("failed to initialize logger: %v\n", err))
+		os.Exit(1)
 	}
 
 	cfg, err := config.LoadChatConfig()
@@ -114,14 +116,8 @@ func main() {
 	mainMux.Handle("/ws/", handler)
 	mainMux.Handle("/", wrappedRestMux)
 
-	server := &http.Server{
-		Addr:              ":" + cfg.HTTPPort,
-		Handler:           mainMux,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      10 * time.Second,
-		IdleTimeout:       120 * time.Second,
-	}
+	serverConfig := srv.DefaultServerConfig(cfg.HTTPPort)
+	server := srv.NewServer(serverConfig, mainMux)
 
 	shutdownHooks := []srv.ShutdownHook{
 		func(ctx context.Context) error {

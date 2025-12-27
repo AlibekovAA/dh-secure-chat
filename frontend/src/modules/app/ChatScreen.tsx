@@ -18,6 +18,7 @@ type Props = {
   onUserSelect(user: UserSummary): void;
   isSearching?: boolean;
   hasSearched?: boolean;
+  onTokenExpired?: () => Promise<string | null>;
 };
 
 const RESULTS_PER_PAGE = 4;
@@ -33,6 +34,7 @@ export function ChatScreen({
   onUserSelect,
   isSearching = false,
   hasSearched = false,
+  onTokenExpired,
 }: Props) {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedPeer, setSelectedPeer] = useState<UserSummary | null>(null);
@@ -211,6 +213,7 @@ export function ChatScreen({
           peer={selectedPeer}
           myUserId={profile.id}
           onClose={() => setSelectedPeer(null)}
+          onTokenExpired={onTokenExpired}
         />
       )}
     </div>

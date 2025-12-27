@@ -357,6 +357,8 @@ func (p AckPayload) GetTo() string                { return p.To }
 func (p TypingPayload) GetTo() string             { return p.To }
 func (p ReactionPayload) GetTo() string           { return p.To }
 func (p MessageDeletePayload) GetTo() string      { return p.To }
+func (p MessageEditPayload) GetTo() string        { return p.To }
+func (p MessageReadPayload) GetTo() string        { return p.To }
 
 func (h *Hub) forwardMessage(ctx context.Context, msg *WSMessage, payload payloadWithTo, requireOnline bool, fromUserID string) bool {
 	to := payload.GetTo()
