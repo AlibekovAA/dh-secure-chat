@@ -13,6 +13,7 @@ import (
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/service"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/websocket"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/config"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/dto"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	commonhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/http"
@@ -43,8 +44,8 @@ func NewHandler(chat *service.ChatService, hub websocket.HubInterface, cfg confi
 		cfg:       cfg,
 		pool:      pool,
 		upgrader: gorillaWS.Upgrader{
-			ReadBufferSize:    1024,
-			WriteBufferSize:   1024,
+			ReadBufferSize:    constants.WebSocketReadBufferSize,
+			WriteBufferSize:   constants.WebSocketWriteBufferSize,
 			EnableCompression: true,
 			CheckOrigin: func(r *http.Request) bool {
 				origin := r.Header.Get("Origin")
@@ -98,9 +99,9 @@ func (h *Handler) searchUsers(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query().Get("username")
 	limitStr := r.URL.Query().Get("limit")
 
-	limit := 20
+	limit := constants.DefaultSearchUsersLimit
 	if limitStr != "" {
-		if v, err := strconv.Atoi(limitStr); err == nil && v > 0 && v <= 100 {
+		if v, err := strconv.Atoi(limitStr); err == nil && v > 0 && v <= constants.MaxSearchResultsLimit {
 			limit = v
 		}
 	}

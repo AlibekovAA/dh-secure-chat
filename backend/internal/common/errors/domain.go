@@ -26,6 +26,8 @@ type DomainError interface {
 	Message() string
 	Unwrap() error
 	WithCause(cause error) DomainError
+	WithTraceID(traceID string) DomainError
+	TraceID() string
 }
 
 type domainError struct {
@@ -34,6 +36,7 @@ type domainError struct {
 	status   int
 	message  string
 	cause    error
+	traceID  string
 }
 
 func (e *domainError) Error() string {
@@ -70,7 +73,23 @@ func (e *domainError) WithCause(cause error) DomainError {
 		status:   e.status,
 		message:  e.message,
 		cause:    cause,
+		traceID:  e.traceID,
 	}
+}
+
+func (e *domainError) WithTraceID(traceID string) DomainError {
+	return &domainError{
+		code:     e.code,
+		category: e.category,
+		status:   e.status,
+		message:  e.message,
+		cause:    e.cause,
+		traceID:  traceID,
+	}
+}
+
+func (e *domainError) TraceID() string {
+	return e.traceID
 }
 
 func NewDomainError(code string, category ErrorCategory, status int, message string) DomainError {

@@ -1,3 +1,9 @@
+import {
+  parseApiError,
+  UNAUTHORIZED_MESSAGE,
+  type ApiErrorResponse,
+} from '../../shared/api/error-handler';
+
 const API_BASE = '/api/chat';
 
 export type MeResponse = {
@@ -10,8 +16,12 @@ export type UserSummary = {
   username: string;
 };
 
-export const UNAUTHORIZED_MESSAGE = 'unauthorized';
-export const SESSION_EXPIRED_ERROR = 'session_expired';
+export type ChatErrorResponse = ApiErrorResponse;
+
+export {
+  UNAUTHORIZED_MESSAGE,
+  SESSION_EXPIRED_ERROR,
+} from '../../shared/api/error-handler';
 
 export async function fetchMe(token: string): Promise<MeResponse> {
   const res = await fetch(`${API_BASE}/me`, {
@@ -24,10 +34,12 @@ export async function fetchMe(token: string): Promise<MeResponse> {
     if (res.status === 401) {
       throw new Error(UNAUTHORIZED_MESSAGE);
     }
-    throw new Error('Failed to load profile');
+    const errorMessage = await parseApiError(res);
+    throw new Error(errorMessage);
   }
 
-  return (await res.json()) as MeResponse;
+  const json = (await res.json()) as MeResponse;
+  return json;
 }
 
 export async function searchUsers(
@@ -45,10 +57,12 @@ export async function searchUsers(
     if (res.status === 401) {
       throw new Error(UNAUTHORIZED_MESSAGE);
     }
-    throw new Error('Search failed');
+    const errorMessage = await parseApiError(res);
+    throw new Error(errorMessage);
   }
 
-  return (await res.json()) as UserSummary[];
+  const json = (await res.json()) as UserSummary[];
+  return json;
 }
 
 export type IdentityKeyResponse = {
@@ -69,10 +83,12 @@ export async function getIdentityKey(
     if (res.status === 401) {
       throw new Error(UNAUTHORIZED_MESSAGE);
     }
-    throw new Error('Failed to get identity key');
+    const errorMessage = await parseApiError(res);
+    throw new Error(errorMessage);
   }
 
-  return (await res.json()) as IdentityKeyResponse;
+  const json = (await res.json()) as IdentityKeyResponse;
+  return json;
 }
 
 export type FingerprintResponse = {
@@ -94,24 +110,15 @@ export async function getFingerprint(
     if (res.status === 401) {
       throw new Error(UNAUTHORIZED_MESSAGE);
     }
-    const contentType = res.headers.get('content-type');
-    if (contentType && contentType.includes('application/json')) {
-      const error = await res.json().catch(() => ({}));
-      throw new Error(
-        typeof error === 'object' && 'error' in error
-          ? String(error.error)
-          : 'Failed to get fingerprint',
-      );
-    }
-    throw new Error(
-      `Failed to get fingerprint: ${res.status} ${res.statusText}`,
-    );
+    const errorMessage = await parseApiError(res);
+    throw new Error(errorMessage);
   }
 
   const contentType = res.headers.get('content-type');
   if (!contentType || !contentType.includes('application/json')) {
-    throw new Error('Invalid response format from server');
+    throw new Error('Неверный формат ответа от сервера');
   }
 
-  return (await res.json()) as FingerprintResponse;
+  const json = (await res.json()) as FingerprintResponse;
+  return json;
 }

@@ -7,7 +7,6 @@ import (
 	"os"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
@@ -15,37 +14,23 @@ import (
 	chathttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/http"
 	chatservice "github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/service"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/websocket"
-	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/config"
-	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/db"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/bootstrap"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	commonhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/http"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/jwtverify"
-	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 	srv "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/server"
 	identityhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/http"
-	identityrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/repository"
-	identityservice "github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/service"
-	userrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/repository"
 )
 
 func main() {
-	log, err := logger.New(os.Getenv("LOG_DIR"), "chat", os.Getenv("LOG_LEVEL"))
+	app, err := bootstrap.NewChatApp()
 	if err != nil {
-		os.Stderr.WriteString(fmt.Sprintf("failed to initialize logger: %v\n", err))
+		os.Stderr.WriteString(fmt.Sprintf("failed to initialize app: %v\n", err))
 		os.Exit(1)
 	}
+	defer app.Pool.Close()
 
-	cfg, err := config.LoadChatConfig()
-	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
-	}
-
-	pool := db.NewPool(log, cfg.DatabaseURL)
-	defer pool.Close()
-
-	userRepo := userrepo.NewPgRepository(pool)
-	identityRepo := identityrepo.NewPgRepository(pool)
-	identityService := identityservice.NewIdentityService(identityRepo, log)
-	chatSvc := chatservice.NewChatService(userRepo, identityService, log)
+	chatSvc := chatservice.NewChatService(app.UserRepo, app.IdentityService, app.Log)
 
 	shardCount := 0
 	if v := os.Getenv("CHAT_WS_SHARD_COUNT"); v != "" {
@@ -55,20 +40,20 @@ func main() {
 	}
 
 	hubConfig := websocket.HubConfig{
-		MaxFileSize:             50 * 1024 * 1024,
-		MaxVoiceSize:            10 * 1024 * 1024,
-		ProcessorWorkers:        10,
-		ProcessorQueueSize:      10000,
-		LastSeenUpdateInterval:  cfg.LastSeenUpdateInterval,
-		CircuitBreakerThreshold: cfg.CircuitBreakerThreshold,
-		CircuitBreakerTimeout:   cfg.CircuitBreakerTimeout,
-		CircuitBreakerReset:     cfg.CircuitBreakerReset,
-		FileTransferTimeout:     10 * time.Minute,
-		IdempotencyTTL:          5 * time.Minute,
-		SendTimeout:             cfg.WebSocketSendTimeout,
+		MaxFileSize:             constants.MaxFileSizeBytes,
+		MaxVoiceSize:            constants.MaxVoiceSizeBytes,
+		ProcessorWorkers:        constants.WebSocketProcessorWorkers,
+		ProcessorQueueSize:      constants.WebSocketProcessorQueueSize,
+		LastSeenUpdateInterval:  app.Config.LastSeenUpdateInterval,
+		CircuitBreakerThreshold: app.Config.CircuitBreakerThreshold,
+		CircuitBreakerTimeout:   app.Config.CircuitBreakerTimeout,
+		CircuitBreakerReset:     app.Config.CircuitBreakerReset,
+		FileTransferTimeout:     constants.FileTransferTimeout,
+		IdempotencyTTL:          constants.IdempotencyTTL,
+		SendTimeout:             app.Config.WebSocketSendTimeout,
 		ShardCount:              shardCount,
-		MaxConnections:          cfg.WebSocketMaxConnections,
-		DebugSampleRate:         0.01,
+		MaxConnections:          app.Config.WebSocketMaxConnections,
+		DebugSampleRate:         constants.WebSocketDebugSampleRate,
 	}
 
 	var hub websocket.HubInterface
@@ -76,18 +61,18 @@ func main() {
 	var wg sync.WaitGroup
 
 	if shardCount > 0 {
-		shardedHub := websocket.NewShardedHub(log, userRepo, hubConfig, shardCount)
+		shardedHub := websocket.NewShardedHub(app.Log, app.UserRepo, hubConfig, shardCount)
 		hub = shardedHub
-		log.Infof("using sharded hub with %d shards", shardCount)
+		app.Log.Infof("using sharded hub with %d shards", shardCount)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			shardedHub.Run(ctx)
 		}()
 	} else {
-		regularHub := websocket.NewHub(log, userRepo, hubConfig)
+		regularHub := websocket.NewHub(app.Log, app.UserRepo, hubConfig)
 		hub = regularHub
-		log.Infof("using regular hub")
+		app.Log.Infof("using regular hub")
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -95,33 +80,33 @@ func main() {
 		}()
 	}
 
-	handler := chathttp.NewHandler(chatSvc, hub, cfg, log, pool)
+	handler := chathttp.NewHandler(chatSvc, hub, app.Config, app.Log, app.Pool)
 
 	restMux := http.NewServeMux()
-	restMux.HandleFunc("/health", commonhttp.HealthHandler(log))
+	restMux.HandleFunc("/health", commonhttp.HealthHandler(app.Log))
 	restMux.Handle("/metrics", promhttp.Handler())
 
-	identityHandler := identityhttp.NewHandler(identityService, log)
+	identityHandler := identityhttp.NewHandler(app.IdentityService, app.Log)
 
-	revokedTokenRepo := authrepo.NewPgRevokedTokenRepository(pool)
-	jwtMw := jwtverify.Middleware(cfg.JWTSecret, log, revokedTokenRepo)
+	revokedTokenRepo := authrepo.NewPgRevokedTokenRepository(app.Pool)
+	jwtMw := jwtverify.Middleware(app.Config.JWTSecret, app.Log, revokedTokenRepo)
 	restMux.Handle("/api/chat/me", jwtMw(handler))
 	restMux.Handle("/api/chat/users", jwtMw(handler))
 	restMux.Handle("/api/chat/users/", jwtMw(handler))
 	restMux.Handle("/api/identity/", jwtMw(identityHandler))
 
-	wrappedRestMux := commonhttp.BuildBaseHandler("chat", log, restMux)
+	wrappedRestMux := commonhttp.BuildBaseHandler("chat", app.Log, restMux)
 
 	mainMux := http.NewServeMux()
 	mainMux.Handle("/ws/", handler)
 	mainMux.Handle("/", wrappedRestMux)
 
-	serverConfig := srv.DefaultServerConfig(cfg.HTTPPort)
+	serverConfig := srv.DefaultServerConfig(app.Config.HTTPPort)
 	server := srv.NewServer(serverConfig, mainMux)
 
 	shutdownHooks := []srv.ShutdownHook{
 		func(ctx context.Context) error {
-			log.Infof("chat service: shutting down WebSocket hub")
+			app.Log.Infof("chat service: shutting down WebSocket hub")
 			hub.Shutdown()
 			cancel()
 			wg.Wait()
@@ -129,5 +114,5 @@ func main() {
 		},
 	}
 
-	srv.StartWithGracefulShutdownAndHooks(server, log, "chat", shutdownHooks)
+	srv.StartWithGracefulShutdownAndHooks(server, app.Log, "chat", shutdownHooks)
 }

@@ -7,6 +7,7 @@ import (
 
 	"golang.org/x/time/rate"
 
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/observability/metrics"
 )
 
@@ -23,7 +24,7 @@ func NewRateLimiter(requestsPerSecond float64, burst int) *RateLimiter {
 		limiters: make(map[string]*rate.Limiter),
 		rate:     rate.Limit(requestsPerSecond),
 		burst:    burst,
-		cleanup:  time.NewTicker(5 * time.Minute),
+		cleanup:  time.NewTicker(constants.RateLimitCleanupInterval),
 	}
 
 	go rl.cleanupLimiters()
@@ -117,12 +118,12 @@ type StrictRateLimiter struct {
 
 func NewStrictRateLimiter() *StrictRateLimiter {
 	return &StrictRateLimiter{
-		loginLimiter:    NewRateLimiter(3.0, 3),
-		registerLimiter: NewRateLimiter(2.0, 1),
-		refreshLimiter:  NewRateLimiter(1.0, 3),
-		logoutLimiter:   NewRateLimiter(1.0, 2),
-		revokeLimiter:   NewRateLimiter(1.0, 2),
-		generalLimiter:  NewRateLimiter(100.0, 100),
+		loginLimiter:    NewRateLimiter(constants.RateLimitLoginRequestsPerSecond, constants.RateLimitLoginBurst),
+		registerLimiter: NewRateLimiter(constants.RateLimitRegisterRequestsPerSecond, constants.RateLimitRegisterBurst),
+		refreshLimiter:  NewRateLimiter(constants.RateLimitRefreshRequestsPerSecond, constants.RateLimitRefreshBurst),
+		logoutLimiter:   NewRateLimiter(constants.RateLimitLogoutRequestsPerSecond, constants.RateLimitLogoutBurst),
+		revokeLimiter:   NewRateLimiter(constants.RateLimitRevokeRequestsPerSecond, constants.RateLimitRevokeBurst),
+		generalLimiter:  NewRateLimiter(constants.RateLimitGeneralRequestsPerSecond, constants.RateLimitGeneralBurst),
 	}
 }
 

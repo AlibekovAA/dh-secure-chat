@@ -2,7 +2,7 @@ module github.com/AlibekovAA/dh-secure-chat/backend
 
 go 1.24.0
 
-toolchain go1.24.2
+toolchain go1.24.11
 
 require (
 	github.com/go-playground/validator/v10 v10.30.0

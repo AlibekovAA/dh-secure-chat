@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/clock"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/observability/metrics"
 )
 
@@ -27,7 +28,7 @@ type IdempotencyTracker struct {
 
 func NewIdempotencyTracker(ctx context.Context, ttl time.Duration, clock clock.Clock) *IdempotencyTracker {
 	if ttl <= 0 {
-		ttl = 5 * time.Minute
+		ttl = constants.IdempotencyTTL
 	}
 
 	trackerCtx, cancel := context.WithCancel(ctx)

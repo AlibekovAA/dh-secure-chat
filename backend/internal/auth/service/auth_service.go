@@ -101,6 +101,14 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (AuthRe
 			"username": input.Username,
 			"action":   "register_validation_failed",
 		}).Warnf("register validation failed: %v", err)
+		if validationErr, ok := AsValidationError(err); ok {
+			return AuthResult{}, commonerrors.NewDomainError(
+				"VALIDATION_FAILED",
+				commonerrors.CategoryValidation,
+				400,
+				validationErr.Error(),
+			)
+		}
 		return AuthResult{}, err
 	}
 
@@ -211,6 +219,14 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (AuthResult, 
 			"username": input.Username,
 			"action":   "login_validation_failed",
 		}).Warnf("login validation failed: %v", err)
+		if validationErr, ok := AsValidationError(err); ok {
+			return AuthResult{}, commonerrors.NewDomainError(
+				"VALIDATION_FAILED",
+				commonerrors.CategoryValidation,
+				400,
+				validationErr.Error(),
+			)
+		}
 		return AuthResult{}, err
 	}
 

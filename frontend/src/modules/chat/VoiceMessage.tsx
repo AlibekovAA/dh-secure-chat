@@ -5,6 +5,7 @@ type Props = {
   blob?: Blob;
   isOwn: boolean;
   onPlaybackChange?: (active: boolean) => void;
+  onMarkAsRead?: () => void;
 };
 
 function formatDuration(seconds: number): string {
@@ -13,13 +14,14 @@ function formatDuration(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-export function VoiceMessage({ duration, blob, isOwn, onPlaybackChange }: Props) {
+export function VoiceMessage({ duration, blob, isOwn, onPlaybackChange, onMarkAsRead }: Props) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [metadataDuration, setMetadataDuration] = useState<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const readMarkedRef = useRef(false);
 
   useEffect(() => {
     if (!blob) {
@@ -35,6 +37,7 @@ export function VoiceMessage({ duration, blob, isOwn, onPlaybackChange }: Props)
       setCurrentTime(0);
       setIsPlaying(false);
       setMetadataDuration(null);
+      readMarkedRef.current = false;
       return;
     }
 
@@ -104,6 +107,10 @@ export function VoiceMessage({ duration, blob, isOwn, onPlaybackChange }: Props)
       if (dur && !isNaN(dur) && dur > 0 && dur !== Infinity) {
         const newDuration = Math.floor(dur);
         setMetadataDuration(newDuration);
+        if (!isOwn && onMarkAsRead && !readMarkedRef.current && current >= dur * 0.5) {
+          readMarkedRef.current = true;
+          onMarkAsRead();
+        }
       }
     };
 

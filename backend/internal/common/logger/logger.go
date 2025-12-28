@@ -16,6 +16,7 @@ import (
 
 	"gopkg.in/natefinch/lumberjack.v2"
 
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 )
 
@@ -93,9 +94,9 @@ func (l *Logger) initialize(logDir, serviceName, level string) error {
 
 	fileWriter := &lumberjack.Logger{
 		Filename:   logFile,
-		MaxSize:    100,
-		MaxBackups: 3,
-		MaxAge:     28,
+		MaxSize:    constants.LoggerMaxSize,
+		MaxBackups: constants.LoggerMaxBackups,
+		MaxAge:     constants.LoggerMaxAge,
 		Compress:   true,
 	}
 
@@ -164,7 +165,7 @@ func (l *Logger) logWithFields(level LogLevel, ctx context.Context, msg string, 
 	}
 
 	file, line := l.getCallerInfo()
-	l.out.Output(0, fmt.Sprintf("%s %s:%d %s", prefix, file, line, msg))
+	_ = l.out.Output(0, fmt.Sprintf("%s %s:%d %s", prefix, file, line, msg))
 }
 
 func (l *Logger) Debug(msg string) { l.log(DEBUG, msg) }

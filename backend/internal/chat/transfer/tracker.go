@@ -30,6 +30,7 @@ type Tracker interface {
 	UpdateProgress(fileID string, chunkIndex int) error
 	Complete(fileID string) error
 	GetTransfersForUser(userID string) []*Transfer
+	GetTransferByID(fileID string) (*Transfer, bool)
 	CleanupStale() int
 }
 
@@ -37,6 +38,16 @@ type InMemoryTracker struct {
 	transfers sync.Map
 	timeout   time.Duration
 	clock     clock.Clock
+}
+
+func (t *InMemoryTracker) GetTransferByID(fileID string) (*Transfer, bool) {
+	value, ok := t.transfers.Load(fileID)
+	if !ok {
+		return nil, false
+	}
+	transfer := value.(*Transfer)
+	copy := *transfer
+	return &copy, true
 }
 
 func NewTracker(timeout time.Duration, clock clock.Clock) Tracker {

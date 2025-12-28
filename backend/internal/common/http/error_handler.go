@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
@@ -23,16 +24,23 @@ func (h *ErrorHandler) HandleError(w http.ResponseWriter, r *http.Request, err e
 	}
 
 	ctx := r.Context()
+	traceID := getTraceIDFromContext(ctx)
 
 	if domainErr, ok := commonerrors.AsDomainError(err); ok {
 		h.handleDomainError(w, r, domainErr)
 		return
 	}
 
-	h.log.WithFields(ctx, logger.Fields{
+	logFields := logger.Fields{
 		"error":  err.Error(),
 		"action": "unhandled_error",
-	}).Errorf("unhandled error: %v", err)
+	}
+	if traceID != "" {
+		logFields["trace_id"] = traceID
+		w.Header().Set("X-Trace-ID", traceID)
+	}
+
+	h.log.WithFields(ctx, logFields).Errorf("unhandled error: %v", err)
 
 	metrics.HTTPErrorsTotal.WithLabelValues(
 		strconv.Itoa(http.StatusInternalServerError),
@@ -44,20 +52,32 @@ func (h *ErrorHandler) HandleError(w http.ResponseWriter, r *http.Request, err e
 }
 
 func (h *ErrorHandler) handleDomainError(w http.ResponseWriter, r *http.Request, err commonerrors.DomainError) {
-	status := err.HTTPStatus()
-	message := err.Message()
-
 	ctx := r.Context()
-	h.log.WithFields(ctx, logger.Fields{
-		"error_code": err.Code(),
-		"category":   string(err.Category()),
+	traceID := getTraceIDFromContext(ctx)
+
+	var domainErr commonerrors.DomainError = err
+	if traceID != "" && err.TraceID() == "" {
+		domainErr = err.WithTraceID(traceID)
+	}
+
+	status := domainErr.HTTPStatus()
+	message := domainErr.Message()
+
+	logFields := logger.Fields{
+		"error_code": domainErr.Code(),
+		"category":   string(domainErr.Category()),
 		"status":     status,
 		"action":     "domain_error",
-	}).Debugf("domain error: %s", err.Error())
+	}
+	if traceID != "" {
+		logFields["trace_id"] = traceID
+	}
+
+	h.log.WithFields(ctx, logFields).Debugf("domain error: %s", domainErr.Error())
 
 	metrics.DomainErrorsTotal.WithLabelValues(
-		string(err.Category()),
-		err.Code(),
+		string(domainErr.Category()),
+		domainErr.Code(),
 		strconv.Itoa(status),
 	).Inc()
 
@@ -67,10 +87,23 @@ func (h *ErrorHandler) handleDomainError(w http.ResponseWriter, r *http.Request,
 		r.Method,
 	).Inc()
 
+	if traceID != "" {
+		w.Header().Set("X-Trace-ID", traceID)
+	}
+
 	WriteError(w, status, message)
 }
 
 func HandleError(w http.ResponseWriter, r *http.Request, err error, log *logger.Logger) {
 	handler := NewErrorHandler(log)
 	handler.HandleError(w, r, err)
+}
+
+func getTraceIDFromContext(ctx context.Context) string {
+	type contextKey string
+	const traceIDKey contextKey = "trace_id"
+	if traceID, ok := ctx.Value(traceIDKey).(string); ok && traceID != "" {
+		return traceID
+	}
+	return ""
 }

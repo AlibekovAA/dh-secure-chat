@@ -6,8 +6,8 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 )
 
@@ -40,13 +40,13 @@ func StartWithGracefulShutdownAndHooks(
 
 	log.Infof("shutting down %s service...", serviceName)
 
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), constants.ShutdownTimeout)
 	defer shutdownCancel()
 
-	drainCtx, drainCancel := context.WithTimeout(shutdownCtx, 10*time.Second)
+	drainCtx, drainCancel := context.WithTimeout(shutdownCtx, constants.DrainTimeout)
 	defer drainCancel()
 
-	log.Infof("%s service: stopping accepting new connections (drain period: %v)", serviceName, 10*time.Second)
+	log.Infof("%s service: stopping accepting new connections (drain period: %v)", serviceName, constants.DrainTimeout)
 	server.SetKeepAlivesEnabled(false)
 
 	if len(hooks) > 0 {

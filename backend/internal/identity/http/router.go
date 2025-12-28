@@ -5,8 +5,8 @@ import (
 	"encoding/base64"
 	"net/http"
 	"strings"
-	"time"
 
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	commonhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/http"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
@@ -25,7 +25,7 @@ func NewHandler(identity *service.IdentityService, log *logger.Logger) http.Hand
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/identity/users/", commonhttp.RequireMethod(http.MethodGet)(commonhttp.WithTimeout(5*time.Second)(h.handleIdentityRoutes)))
+	mux.HandleFunc("/api/identity/users/", commonhttp.RequireMethod(http.MethodGet)(commonhttp.WithTimeout(constants.IdentityRequestTimeout)(h.handleIdentityRoutes)))
 
 	return mux
 }

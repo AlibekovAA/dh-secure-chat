@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/observability/metrics"
 )
@@ -24,7 +25,7 @@ type MessageProcessor struct {
 
 func NewMessageProcessor(workers int, router MessageRouter, log *logger.Logger, queueSize int) *MessageProcessor {
 	if queueSize <= 0 {
-		queueSize = 1000
+		queueSize = constants.WebSocketProcessorDefaultQueueSize
 	}
 
 	p := &MessageProcessor{
@@ -51,7 +52,7 @@ func (p *MessageProcessor) worker() {
 
 func (p *MessageProcessor) process(ctx context.Context, client *Client, msg *WSMessage) {
 	start := time.Now()
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, constants.WebSocketProcessorTimeout)
 	defer cancel()
 
 	if err := p.router.Route(ctx, client, msg); err != nil {

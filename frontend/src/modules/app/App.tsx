@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { useToast } from "../../shared/ui/ToastProvider";
-import { fetchMe, searchUsers, SESSION_EXPIRED_ERROR, UNAUTHORIZED_MESSAGE, type UserSummary } from "../chat/api";
+import {
+  getFriendlyErrorMessage,
+  isUnauthorizedError,
+  isSessionExpiredError,
+  SESSION_EXPIRED_ERROR,
+} from "../../shared/api/error-handler";
+import { fetchMe, searchUsers, type UserSummary } from "../chat/api";
 import { AuthScreen } from "./AuthScreen";
 import { ChatScreen } from "./ChatScreen";
 
@@ -12,10 +18,7 @@ async function fetchWithRetry<T>(
   try {
     return await fetcher(token);
   } catch (err) {
-    const isUnauthorized =
-      err instanceof Error && err.message.toLowerCase().includes(UNAUTHORIZED_MESSAGE);
-
-    if (!isUnauthorized) {
+    if (!isUnauthorizedError(err)) {
       throw err;
     }
 
@@ -125,10 +128,11 @@ export function App() {
         localStorage.setItem('userId', data.id);
       })
       .catch((err) => {
-        if (err instanceof Error && err.message === SESSION_EXPIRED_ERROR) {
+        if (isSessionExpiredError(err)) {
           showToast("Сессия истекла. Войдите снова.", "error");
         } else {
-          showToast("Не удалось получить профиль. Войдите снова.", "error");
+          const friendly = getFriendlyErrorMessage(err, "Не удалось получить профиль. Войдите снова.");
+          showToast(friendly, "error");
         }
         setToken(null);
         setProfile(null);
@@ -159,13 +163,14 @@ export function App() {
       setSearchResults(filtered);
       setHasSearched(true);
     } catch (err) {
-      if (err instanceof Error && err.message === SESSION_EXPIRED_ERROR) {
+      if (isSessionExpiredError(err)) {
         showToast("Сессия истекла. Войдите снова.", "error");
         setToken(null);
         setProfile(null);
         setSearchResults([]);
       } else {
-        showToast("Ошибка поиска пользователей", "error");
+        const friendly = getFriendlyErrorMessage(err, "Ошибка поиска пользователей");
+        showToast(friendly, "error");
         setSearchResults([]);
         setHasSearched(true);
       }

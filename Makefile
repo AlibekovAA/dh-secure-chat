@@ -102,10 +102,14 @@ frontend:
 
 go-fmt:
 	@echo "Running go fmt..."
-	cd backend && go fmt ./...
+	cd backend && goimports -w .
 
 go-vet:
 	@echo "Running go vet..."
 	cd backend && go vet ./...
 
-format:  go-vet go-fmt
+go-lint:
+	@echo "Running go lint..."
+	cd backend && golangci-lint run ./...
+
+format:  go-vet go-fmt go-lint

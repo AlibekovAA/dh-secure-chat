@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-playground/validator/v10"
 
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 )
 
@@ -63,24 +64,24 @@ func loadBaseConfig(prefix string, defaultPort string) (BaseConfig, error) {
 		DatabaseURL:             databaseURL,
 		JWTSecret:               jwtSecret,
 		HTTPPort:                getEnv(prefix+"_HTTP_PORT", defaultPort),
-		CircuitBreakerThreshold: int32(getIntEnv(prefix+"_CIRCUIT_BREAKER_THRESHOLD", 5)),
-		CircuitBreakerTimeout:   getDurationEnv(prefix+"_CIRCUIT_BREAKER_TIMEOUT", 5*time.Second),
-		CircuitBreakerReset:     getDurationEnv(prefix+"_CIRCUIT_BREAKER_RESET", 30*time.Second),
+		CircuitBreakerThreshold: int32(getIntEnv(prefix+"_CIRCUIT_BREAKER_THRESHOLD", constants.DefaultCircuitBreakerThreshold)),
+		CircuitBreakerTimeout:   getDurationEnv(prefix+"_CIRCUIT_BREAKER_TIMEOUT", constants.DefaultCircuitBreakerTimeout),
+		CircuitBreakerReset:     getDurationEnv(prefix+"_CIRCUIT_BREAKER_RESET", constants.DefaultCircuitBreakerReset),
 	}, nil
 }
 
 func LoadAuthConfig() (AuthConfig, error) {
-	base, err := loadBaseConfig("AUTH", "8081")
+	base, err := loadBaseConfig("AUTH", constants.DefaultAuthHTTPPort)
 	if err != nil {
 		return AuthConfig{}, err
 	}
 
 	cfg := AuthConfig{
 		BaseConfig:              base,
-		RequestTimeout:          getDurationEnv("AUTH_REQUEST_TIMEOUT", 5*time.Second),
-		AccessTokenTTL:          getDurationEnv("AUTH_ACCESS_TOKEN_TTL", 15*time.Minute),
-		RefreshTokenTTL:         getDurationEnv("AUTH_REFRESH_TOKEN_TTL", 7*24*time.Hour),
-		MaxRefreshTokensPerUser: getIntEnv("AUTH_MAX_REFRESH_TOKENS_PER_USER", 5),
+		RequestTimeout:          getDurationEnv("AUTH_REQUEST_TIMEOUT", constants.DefaultAuthRequestTimeout),
+		AccessTokenTTL:          getDurationEnv("AUTH_ACCESS_TOKEN_TTL", constants.DefaultAccessTokenTTL),
+		RefreshTokenTTL:         getDurationEnv("AUTH_REFRESH_TOKEN_TTL", constants.DefaultRefreshTokenTTL),
+		MaxRefreshTokensPerUser: getIntEnv("AUTH_MAX_REFRESH_TOKENS_PER_USER", constants.DefaultMaxRefreshTokensPerUser),
 	}
 
 	if err := validate.Struct(cfg); err != nil {
@@ -91,24 +92,24 @@ func LoadAuthConfig() (AuthConfig, error) {
 }
 
 func LoadChatConfig() (ChatConfig, error) {
-	base, err := loadBaseConfig("CHAT", "8082")
+	base, err := loadBaseConfig("CHAT", constants.DefaultChatHTTPPort)
 	if err != nil {
 		return ChatConfig{}, err
 	}
 
 	cfg := ChatConfig{
 		BaseConfig:              base,
-		WebSocketWriteWait:      getDurationEnv("CHAT_WS_WRITE_WAIT", 10*time.Second),
-		WebSocketPongWait:       getDurationEnv("CHAT_WS_PONG_WAIT", 60*time.Second),
-		WebSocketPingPeriod:     getDurationEnv("CHAT_WS_PING_PERIOD", 54*time.Second),
-		WebSocketMaxMsgSize:     getInt64Env("CHAT_WS_MAX_MSG_SIZE", 20*1024*1024),
-		WebSocketSendBufSize:    getIntEnv("CHAT_WS_SEND_BUF_SIZE", 256),
-		WebSocketAuthTimeout:    getDurationEnv("CHAT_WS_AUTH_TIMEOUT", 10*time.Second),
-		WebSocketSendTimeout:    getDurationEnv("CHAT_WS_SEND_TIMEOUT", 2*time.Second),
-		LastSeenUpdateInterval:  getDurationEnv("CHAT_LAST_SEEN_INTERVAL", 1*time.Minute),
-		RequestTimeout:          getDurationEnv("CHAT_REQUEST_TIMEOUT", 5*time.Second),
-		SearchTimeout:           getDurationEnv("CHAT_SEARCH_TIMEOUT", 10*time.Second),
-		WebSocketMaxConnections: getIntEnv("CHAT_WS_MAX_CONNECTIONS", 10000),
+		WebSocketWriteWait:      getDurationEnv("CHAT_WS_WRITE_WAIT", constants.DefaultWebSocketWriteWait),
+		WebSocketPongWait:       getDurationEnv("CHAT_WS_PONG_WAIT", constants.DefaultWebSocketPongWait),
+		WebSocketPingPeriod:     getDurationEnv("CHAT_WS_PING_PERIOD", constants.DefaultWebSocketPingPeriod),
+		WebSocketMaxMsgSize:     getInt64Env("CHAT_WS_MAX_MSG_SIZE", constants.DefaultWebSocketMaxMsgSize),
+		WebSocketSendBufSize:    getIntEnv("CHAT_WS_SEND_BUF_SIZE", constants.DefaultWebSocketSendBufSize),
+		WebSocketAuthTimeout:    getDurationEnv("CHAT_WS_AUTH_TIMEOUT", constants.DefaultWebSocketAuthTimeout),
+		WebSocketSendTimeout:    getDurationEnv("CHAT_WS_SEND_TIMEOUT", constants.DefaultWebSocketSendTimeout),
+		LastSeenUpdateInterval:  getDurationEnv("CHAT_LAST_SEEN_INTERVAL", constants.DefaultLastSeenUpdateInterval),
+		RequestTimeout:          getDurationEnv("CHAT_REQUEST_TIMEOUT", constants.DefaultChatRequestTimeout),
+		SearchTimeout:           getDurationEnv("CHAT_SEARCH_TIMEOUT", constants.DefaultSearchTimeout),
+		WebSocketMaxConnections: getIntEnv("CHAT_WS_MAX_CONNECTIONS", constants.DefaultWebSocketMaxConnections),
 	}
 
 	if err := validate.Struct(cfg); err != nil {
@@ -119,7 +120,7 @@ func LoadChatConfig() (ChatConfig, error) {
 }
 
 func validateJWTSecret(secret string) error {
-	if len(secret) < 32 {
+	if len(secret) < constants.JWTSecretMinLength {
 		return commonerrors.ErrInvalidJWTSecret
 	}
 	return nil

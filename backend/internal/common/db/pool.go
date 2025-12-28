@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v4/pgxpool"
 
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 )
 
@@ -22,22 +23,22 @@ type PoolConfig struct {
 
 func DefaultPoolConfig() PoolConfig {
 	return PoolConfig{
-		MaxOpenConns:    25,
-		MinOpenConns:    5,
-		ConnMaxLifetime: 5 * time.Minute,
-		ConnMaxIdleTime: 10 * time.Minute,
-		HealthCheck:     time.Minute,
-		ConnectTimeout:  5 * time.Second,
-		MaxAttempts:     10,
-		RetryDelay:      time.Second,
+		MaxOpenConns:    constants.DBPoolMaxOpenConns,
+		MinOpenConns:    constants.DBPoolMinOpenConns,
+		ConnMaxLifetime: constants.DBPoolConnMaxLifetime,
+		ConnMaxIdleTime: constants.DBPoolConnMaxIdleTime,
+		HealthCheck:     constants.DBPoolHealthCheck,
+		ConnectTimeout:  constants.DBPoolConnectTimeout,
+		MaxAttempts:     constants.DBPoolMaxAttempts,
+		RetryDelay:      constants.DBPoolRetryDelay,
 	}
 }
 
 func NewPool(log *logger.Logger, databaseURL string) *pgxpool.Pool {
-	return NewPoolWithConfig(log, databaseURL, DefaultPoolConfig())
+	return NewPoolWithConfig(context.Background(), log, databaseURL, DefaultPoolConfig())
 }
 
-func NewPoolWithConfig(log *logger.Logger, databaseURL string, cfg PoolConfig) *pgxpool.Pool {
+func NewPoolWithConfig(ctx context.Context, log *logger.Logger, databaseURL string, cfg PoolConfig) *pgxpool.Pool {
 	pgxCfg, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
 		log.Fatalf("failed to parse database url: %v", err)
@@ -61,10 +62,9 @@ func NewPoolWithConfig(log *logger.Logger, databaseURL string, cfg PoolConfig) *
 	}
 
 	for attempt := 1; attempt <= cfg.MaxAttempts; attempt++ {
-		pool, err := pgxpool.ConnectConfig(context.Background(), pgxCfg)
+		pool, err := pgxpool.ConnectConfig(ctx, pgxCfg)
 		if err == nil {
 			log.Infof("database connection pool initialized: max=%d, min=%d", pgxCfg.MaxConns, pgxCfg.MinConns)
-			StartPoolMetrics(pool, 30*time.Second)
 			return pool
 		}
 
@@ -75,7 +75,12 @@ func NewPoolWithConfig(log *logger.Logger, databaseURL string, cfg PoolConfig) *
 			return nil
 		}
 
-		time.Sleep(cfg.RetryDelay)
+		select {
+		case <-ctx.Done():
+			log.Fatalf("database connection interrupted: %v", ctx.Err())
+			return nil
+		case <-time.After(cfg.RetryDelay):
+		}
 	}
 
 	log.Fatalf("failed to connect to database after %d attempts", cfg.MaxAttempts)

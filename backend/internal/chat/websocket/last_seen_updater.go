@@ -6,17 +6,11 @@ import (
 	"time"
 
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/clock"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/resilience"
 	userdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
 	userrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/repository"
-)
-
-const (
-	lastSeenQueueSize     = 100
-	lastSeenBatchSize     = 100
-	lastSeenFlushEvery    = 500 * time.Millisecond
-	lastSeenUpdateTimeout = 3 * time.Second
 )
 
 type LastSeenUpdater struct {
@@ -43,7 +37,7 @@ func NewLastSeenUpdater(ctx context.Context, repo userrepo.Repository, log *logg
 		circuitBreaker: circuitBreaker,
 		clock:          clock,
 		updateInterval: updateInterval,
-		queue:          make(chan string, lastSeenQueueSize),
+		queue:          make(chan string, constants.LastSeenQueueSize),
 		lastSeenCache:  make(map[string]time.Time),
 	}
 
@@ -82,7 +76,7 @@ func (u *LastSeenUpdater) Stop() {
 func (u *LastSeenUpdater) run() {
 	defer u.wg.Done()
 
-	ticker := time.NewTicker(lastSeenFlushEvery)
+	ticker := time.NewTicker(constants.LastSeenFlushEvery)
 	defer ticker.Stop()
 
 	pending := make(map[string]struct{})
@@ -94,7 +88,7 @@ func (u *LastSeenUpdater) run() {
 			return
 		case userID := <-u.queue:
 			pending[userID] = struct{}{}
-			if len(pending) >= lastSeenBatchSize {
+			if len(pending) >= constants.LastSeenBatchSize {
 				u.flush(pending)
 			}
 		case <-ticker.C:
@@ -113,7 +107,7 @@ func (u *LastSeenUpdater) flush(pending map[string]struct{}) {
 		ids = append(ids, userdomain.ID(id))
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), lastSeenUpdateTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), constants.LastSeenUpdateTimeout)
 	defer cancel()
 
 	var err error

@@ -5,12 +5,13 @@ import (
 
 	"github.com/jackc/pgx/v4/pgxpool"
 
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/observability/metrics"
 )
 
 func StartPoolMetrics(pool *pgxpool.Pool, interval time.Duration) {
 	if interval <= 0 {
-		interval = 30 * time.Second
+		interval = constants.DBPoolMetricsInterval
 	}
 
 	ticker := time.NewTicker(interval)

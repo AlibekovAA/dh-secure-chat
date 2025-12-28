@@ -74,7 +74,7 @@ func NewAuthenticatedClient(hub HubInterface, conn *gorillaWS.Conn, claims jwtve
 		ctx:           ctx,
 		cancel:        cancel,
 	}
-	client.conn.SetReadDeadline(time.Now().Add(client.pongWait))
+	_ = client.conn.SetReadDeadline(time.Now().Add(client.pongWait))
 	return client
 }
 
@@ -103,13 +103,13 @@ func (c *Client) readPump() {
 	}()
 
 	if !c.authenticated {
-		c.conn.SetReadDeadline(time.Now().Add(c.authTimeout))
+		_ = c.conn.SetReadDeadline(time.Now().Add(c.authTimeout))
 	} else {
-		c.conn.SetReadDeadline(time.Now().Add(c.pongWait))
+		_ = c.conn.SetReadDeadline(time.Now().Add(c.pongWait))
 	}
 	c.conn.SetReadLimit(c.maxMsgSize)
 	c.conn.SetPongHandler(func(string) error {
-		c.conn.SetReadDeadline(time.Now().Add(c.pongWait))
+		_ = c.conn.SetReadDeadline(time.Now().Add(c.pongWait))
 		return nil
 	})
 
@@ -166,7 +166,7 @@ func (c *Client) readPump() {
 					"type":   string(msg.Type),
 					"action": "ws_unauthorized_message",
 				}).Warn("websocket unauthenticated client sent non-auth message")
-				c.conn.WriteMessage(gorillaWS.CloseMessage, gorillaWS.FormatCloseMessage(gorillaWS.ClosePolicyViolation, "authentication required"))
+				_ = c.conn.WriteMessage(gorillaWS.CloseMessage, gorillaWS.FormatCloseMessage(gorillaWS.ClosePolicyViolation, "authentication required"))
 				break
 			}
 
@@ -175,7 +175,7 @@ func (c *Client) readPump() {
 				c.log.WithFields(c.ctx, logger.Fields{
 					"action": "ws_invalid_auth_payload",
 				}).Warnf("websocket invalid auth payload: %v", err)
-				c.conn.WriteMessage(gorillaWS.CloseMessage, gorillaWS.FormatCloseMessage(gorillaWS.CloseInvalidFramePayloadData, "invalid auth payload"))
+				_ = c.conn.WriteMessage(gorillaWS.CloseMessage, gorillaWS.FormatCloseMessage(gorillaWS.CloseInvalidFramePayloadData, "invalid auth payload"))
 				break
 			}
 
@@ -184,7 +184,7 @@ func (c *Client) readPump() {
 				c.log.WithFields(c.ctx, logger.Fields{
 					"action": "ws_auth_failed",
 				}).Warnf("websocket authentication failed: %v", err)
-				c.conn.WriteMessage(gorillaWS.CloseMessage, gorillaWS.FormatCloseMessage(gorillaWS.ClosePolicyViolation, "invalid token"))
+				_ = c.conn.WriteMessage(gorillaWS.CloseMessage, gorillaWS.FormatCloseMessage(gorillaWS.ClosePolicyViolation, "invalid token"))
 				break
 			}
 
@@ -195,7 +195,7 @@ func (c *Client) readPump() {
 						"jti":    claims.JTI,
 						"action": "ws_auth_revoked_check_failed",
 					}).Errorf("websocket authentication failed: failed to check revoked token: %v", err)
-					c.conn.WriteMessage(gorillaWS.CloseMessage, gorillaWS.FormatCloseMessage(gorillaWS.CloseInternalServerErr, "internal error"))
+					_ = c.conn.WriteMessage(gorillaWS.CloseMessage, gorillaWS.FormatCloseMessage(gorillaWS.CloseInternalServerErr, "internal error"))
 					break
 				}
 				if revoked {
@@ -203,7 +203,7 @@ func (c *Client) readPump() {
 						"jti":    claims.JTI,
 						"action": "ws_auth_token_revoked",
 					}).Warn("websocket authentication failed: token revoked")
-					c.conn.WriteMessage(gorillaWS.CloseMessage, gorillaWS.FormatCloseMessage(gorillaWS.ClosePolicyViolation, "token revoked"))
+					_ = c.conn.WriteMessage(gorillaWS.CloseMessage, gorillaWS.FormatCloseMessage(gorillaWS.ClosePolicyViolation, "token revoked"))
 					break
 				}
 			}
@@ -211,7 +211,7 @@ func (c *Client) readPump() {
 			c.userID = claims.UserID
 			c.username = claims.Username
 			c.authenticated = true
-			c.conn.SetReadDeadline(time.Now().Add(c.pongWait))
+			_ = c.conn.SetReadDeadline(time.Now().Add(c.pongWait))
 
 			authResponse := WSMessage{
 				Type:    TypeAuth,
@@ -252,13 +252,13 @@ func (c *Client) writePump() {
 	for {
 		select {
 		case <-c.ctx.Done():
-			c.conn.WriteMessage(gorillaWS.CloseMessage, []byte{})
+			_ = c.conn.WriteMessage(gorillaWS.CloseMessage, []byte{})
 			return
 
 		case message, ok := <-c.send:
-			c.conn.SetWriteDeadline(time.Now().Add(c.writeWait))
+			_ = c.conn.SetWriteDeadline(time.Now().Add(c.writeWait))
 			if !ok {
-				c.conn.WriteMessage(gorillaWS.CloseMessage, []byte{})
+				_ = c.conn.WriteMessage(gorillaWS.CloseMessage, []byte{})
 				return
 			}
 
@@ -266,7 +266,7 @@ func (c *Client) writePump() {
 			if err != nil {
 				return
 			}
-			w.Write(message)
+			_, _ = w.Write(message)
 
 			n := len(c.send)
 			for i := 0; i < n; i++ {
@@ -275,8 +275,8 @@ func (c *Client) writePump() {
 					w.Close()
 					return
 				case msg := <-c.send:
-					w.Write([]byte{'\n'})
-					w.Write(msg)
+					_, _ = w.Write([]byte{'\n'})
+					_, _ = w.Write(msg)
 				}
 			}
 
@@ -285,7 +285,7 @@ func (c *Client) writePump() {
 			}
 
 		case <-ticker.C:
-			c.conn.SetWriteDeadline(time.Now().Add(c.writeWait))
+			_ = c.conn.SetWriteDeadline(time.Now().Add(c.writeWait))
 			if err := c.conn.WriteMessage(gorillaWS.PingMessage, nil); err != nil {
 				return
 			}

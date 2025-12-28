@@ -1,3 +1,5 @@
+import { getFriendlyErrorMessage, parseApiError, type ApiErrorResponse } from '../../shared/api/error-handler';
+
 const API_BASE = '/api/auth';
 
 export type AuthToken = string;
@@ -6,9 +8,7 @@ export type AuthResponse = {
   token: AuthToken;
 };
 
-export type AuthError = {
-  error: string;
-};
+export type AuthErrorResponse = ApiErrorResponse;
 
 export async function register(
   username: string,
@@ -36,17 +36,13 @@ export async function register(
     body: JSON.stringify(body),
   });
 
-  const json = (await res.json()) as AuthResponse | AuthError;
-
   if (!res.ok) {
-    const errorMsg = 'error' in json ? json.error : 'Registration failed';
-    if (res.status === 409) {
-      throw new Error(errorMsg);
-    }
-    throw new Error(errorMsg);
+    const errorMessage = await parseApiError(res);
+    throw new Error(errorMessage);
   }
 
-  return json as AuthResponse;
+  const json = (await res.json()) as AuthResponse;
+  return json;
 }
 
 export async function login(
@@ -62,11 +58,11 @@ export async function login(
     body: JSON.stringify({ username, password }),
   });
 
-  const json = (await res.json()) as AuthResponse | AuthError;
-
   if (!res.ok) {
-    throw new Error('error' in json ? json.error : 'Login failed');
+    const errorMessage = await parseApiError(res);
+    throw new Error(errorMessage);
   }
 
-  return json as AuthResponse;
+  const json = (await res.json()) as AuthResponse;
+  return json;
 }

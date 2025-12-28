@@ -3,6 +3,8 @@ package server
 import (
 	"net/http"
 	"time"
+
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 )
 
 type ServerConfig struct {
@@ -16,10 +18,10 @@ type ServerConfig struct {
 func DefaultServerConfig(port string) ServerConfig {
 	return ServerConfig{
 		Addr:              ":" + port,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      10 * time.Second,
-		IdleTimeout:       120 * time.Second,
+		ReadHeaderTimeout: constants.ServerReadHeaderTimeout,
+		ReadTimeout:       constants.ServerReadTimeout,
+		WriteTimeout:      constants.ServerWriteTimeout,
+		IdleTimeout:       constants.ServerIdleTimeout,
 	}
 }
 

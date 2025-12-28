@@ -4,6 +4,7 @@ import { decryptFile } from '../../../shared/crypto/file-encryption';
 import type { SessionKey } from '../../../shared/crypto/session';
 import type { ChatMessage } from '../useChatSession';
 import { extractDurationFromFilename } from '../utils';
+import type { WSMessage } from '../../../shared/websocket/types';
 
 type FileBuffer = {
   chunks: Array<{ ciphertext: string; nonce: string }>;
@@ -16,6 +17,8 @@ type UseFileTransferOptions = {
   fileBuffersRef: React.MutableRefObject<Map<string, FileBuffer>>;
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   setError: (error: string | null) => void;
+  sendRef: React.MutableRefObject<((message: WSMessage) => void) | null>;
+  peerId: string | null;
 };
 
 export function useFileTransfer({
@@ -23,6 +26,8 @@ export function useFileTransfer({
   fileBuffersRef,
   setMessages,
   setError,
+  sendRef,
+  peerId,
 }: UseFileTransferOptions) {
   const handleIncomingFile = useCallback(
     async (fileId: string) => {
@@ -114,6 +119,16 @@ export function useFileTransfer({
 
         setMessages((prev) => [...prev, newMessage]);
         fileBuffersRef.current.delete(fileId);
+
+        if (sendRef.current && peerId && metadata.from) {
+          sendRef.current({
+            type: 'ack',
+            payload: {
+              to: metadata.from,
+              message_id: fileId,
+            },
+          });
+        }
       } catch (err) {
         setError(
           'Не удалось расшифровать файл. Возможно, сессия была прервана.',
@@ -121,7 +136,7 @@ export function useFileTransfer({
         fileBuffersRef.current.delete(fileId);
       }
     },
-    [sessionKeyRef, setMessages, setError],
+    [sessionKeyRef, setMessages, setError, sendRef, peerId],
   );
 
   const clearFileBuffers = useCallback(() => {

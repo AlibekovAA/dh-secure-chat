@@ -5,8 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -15,6 +15,7 @@ import (
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/transfer"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/websocket/middleware"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/clock"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/resilience"
@@ -23,10 +24,22 @@ import (
 	userrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/repository"
 )
 
-var audioMimePattern = regexp.MustCompile(`^(audio/(webm|ogg|mpeg|mp4|wav|x-m4a))`)
+var validAudioMimeTypes = map[string]bool{
+	"audio/webm":  true,
+	"audio/ogg":   true,
+	"audio/mpeg":  true,
+	"audio/mp4":   true,
+	"audio/wav":   true,
+	"audio/x-m4a": true,
+}
 
-const userExistenceCacheTTL = 5 * time.Minute
-const userExistenceCacheCleanupInterval = 1 * time.Minute
+func normalizeAudioMimeType(mimeType string) string {
+	mimeType = strings.ToLower(strings.TrimSpace(mimeType))
+	if idx := strings.Index(mimeType, ";"); idx != -1 {
+		mimeType = mimeType[:idx]
+	}
+	return strings.TrimSpace(mimeType)
+}
 
 type userExistenceCacheEntry struct {
 	exists    bool
@@ -40,7 +53,8 @@ var jsonBufferPool = sync.Pool{
 }
 
 func isValidAudioMimeType(mimeType string) bool {
-	return audioMimePattern.MatchString(mimeType)
+	normalized := normalizeAudioMimeType(mimeType)
+	return validAudioMimeTypes[normalized]
 }
 
 type Hub struct {
@@ -201,7 +215,7 @@ func (h *Hub) shutdown() {
 	for _, client := range clients {
 		client.Stop()
 		if err == nil {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), constants.WebSocketShutdownNotificationTimeout)
 			select {
 			case client.send <- shutdownMsg:
 			case <-ctx.Done():
@@ -234,7 +248,7 @@ func (h *Hub) SendToUser(userID string, message *WSMessage) bool {
 func (h *Hub) SendToUserWithContext(ctx context.Context, userID string, message *WSMessage) error {
 	startTime := h.clock.Now()
 	defer func() {
-		duration := time.Since(startTime).Seconds()
+		duration := h.clock.Since(startTime).Seconds()
 		observabilitymetrics.ChatWebSocketMessageSendDurationSeconds.WithLabelValues(string(message.Type)).Observe(duration)
 	}()
 
@@ -594,13 +608,9 @@ func (h *Hub) updateFileTransferProgress(fileID string, chunkIndex int) {
 }
 
 func (h *Hub) completeFileTransfer(fileID string) {
-	transfers := h.fileTracker.GetTransfersForUser("")
 	var tr *transfer.Transfer
-	for _, t := range transfers {
-		if t.FileID == fileID {
-			tr = t
-			break
-		}
+	if value, ok := h.fileTracker.GetTransferByID(fileID); ok {
+		tr = value
 	}
 
 	if err := h.fileTracker.Complete(fileID); err != nil {
@@ -620,7 +630,7 @@ func (h *Hub) completeFileTransfer(fileID string) {
 	}
 
 	if tr != nil {
-		duration := time.Since(tr.StartedAt).Seconds()
+		duration := h.clock.Since(tr.StartedAt).Seconds()
 		observabilitymetrics.ChatWebSocketFileTransferDurationSeconds.WithLabelValues("success").Observe(duration)
 	}
 }
@@ -630,7 +640,7 @@ func (h *Hub) notifyFileTransferFailed(tr *transfer.Transfer) {
 		return
 	}
 
-	duration := time.Since(tr.StartedAt).Seconds()
+	duration := h.clock.Since(tr.StartedAt).Seconds()
 	observabilitymetrics.ChatWebSocketFileTransferDurationSeconds.WithLabelValues("failed").Observe(duration)
 	observabilitymetrics.ChatWebSocketFileTransferFailures.WithLabelValues("timeout_or_disconnect").Inc()
 
@@ -656,7 +666,7 @@ func (h *Hub) notifyFileTransferFailed(tr *transfer.Transfer) {
 }
 
 func (h *Hub) fileTrackerCleanup() {
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(constants.WebSocketFileTrackerCleanupInterval)
 	defer ticker.Stop()
 
 	for {
@@ -691,14 +701,14 @@ func (h *Hub) checkUserExists(ctx context.Context, userID string) (bool, error) 
 
 	h.userExistenceCache.Store(userID, &userExistenceCacheEntry{
 		exists:    exists,
-		expiresAt: h.clock.Now().Add(userExistenceCacheTTL),
+		expiresAt: h.clock.Now().Add(constants.UserExistenceCacheTTL),
 	})
 
 	return exists, nil
 }
 
 func (h *Hub) userExistenceCacheCleanup() {
-	ticker := time.NewTicker(userExistenceCacheCleanupInterval)
+	ticker := time.NewTicker(constants.UserExistenceCacheCleanupInterval)
 	defer ticker.Stop()
 
 	for {

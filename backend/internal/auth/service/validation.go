@@ -2,8 +2,10 @@ package service
 
 import (
 	"errors"
+	"regexp"
 	"unicode"
 
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 )
 
@@ -29,33 +31,63 @@ func (cv *CredentialValidator) Validate(username, password string) error {
 	return validateCredentials(username, password)
 }
 
+var (
+	usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+)
+
 func validateCredentials(username, password string) error {
-	if len(username) < 3 || len(username) > 32 {
+	if len(username) < constants.UsernameMinLength || len(username) > constants.UsernameMaxLength {
 		return ValidationError{reason: "username must be between 3 and 32 characters"}
 	}
 
-	if len(password) < 8 || len(password) > 72 {
+	if len(password) < constants.PasswordMinLength || len(password) > constants.PasswordMaxLength {
 		return ValidationError{reason: "password must be between 8 and 72 characters"}
 	}
 
-	if !isSafeUsername(username) {
+	if !isValidUsername(username) {
 		return ValidationError{reason: "username may contain only letters, digits, underscore and dash"}
+	}
+
+	if !isValidPassword(password) {
+		return ValidationError{reason: "password must contain at least one letter and one digit"}
 	}
 
 	return nil
 }
 
-func isSafeUsername(value string) bool {
-	for _, r := range value {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			continue
-		}
-		if r == '_' || r == '-' {
-			continue
-		}
+func isValidUsername(value string) bool {
+	if !usernameRegex.MatchString(value) {
 		return false
 	}
+
+	if !unicode.IsLetter(rune(value[0])) && !unicode.IsDigit(rune(value[0])) {
+		return false
+	}
+
+	if !unicode.IsLetter(rune(value[len(value)-1])) && !unicode.IsDigit(rune(value[len(value)-1])) {
+		return false
+	}
+
 	return true
+}
+
+func isValidPassword(value string) bool {
+	hasLetter := false
+	hasDigit := false
+
+	for _, r := range value {
+		if unicode.IsLetter(r) {
+			hasLetter = true
+		}
+		if unicode.IsDigit(r) {
+			hasDigit = true
+		}
+		if hasLetter && hasDigit {
+			return true
+		}
+	}
+
+	return hasLetter && hasDigit
 }
 
 func AsValidationError(err error) (ValidationError, bool) {

@@ -1,6 +1,7 @@
 import { FormEvent, useState } from "react";
 import { login, register } from "./api";
 import { useToast } from "../../shared/ui/ToastProvider";
+import { getFriendlyErrorMessage } from "../../shared/api/error-handler";
 import {
   generateIdentityKeyPair,
   exportPublicKey,
@@ -75,22 +76,7 @@ export function AuthForm({ onAuthenticated }: Props) {
       setConfirmPassword("");
       setSubmitting(false);
     } catch (err) {
-      const raw = err instanceof Error ? err.message : "Ошибка аутентификации";
-
-      let friendly = "Произошла ошибка. Попробуйте ещё раз.";
-
-      if (raw.includes("invalid credentials")) {
-        friendly = "Неверное имя пользователя или пароль.";
-      } else if (raw.includes("username already taken") || raw.includes("username already exists")) {
-        friendly = "Это имя пользователя уже занято.";
-      } else if (raw.includes("username must be between")) {
-        friendly = "Имя пользователя должно быть от 3 до 32 символов и содержать только буквы, цифры, _ или -.";
-      } else if (raw.includes("password must be between")) {
-        friendly = "Пароль должен быть от 8 до 72 символов.";
-      } else if (raw.includes("username may contain only")) {
-        friendly = "Имя пользователя может содержать только буквы, цифры, подчёркивание и дефис.";
-      }
-
+      const friendly = getFriendlyErrorMessage(err);
       showToast(friendly, "error");
     } finally {
       setSubmitting(false);

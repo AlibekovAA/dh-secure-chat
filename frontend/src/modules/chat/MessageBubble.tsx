@@ -107,12 +107,12 @@ function MessageBubbleComponent({
   }, [isEditing]);
 
   useEffect(() => {
-    if (!message.isOwn || !onMarkAsRead || !messageRef.current) return;
+    if (message.isOwn || !onMarkAsRead || !messageRef.current) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
-          if (entry.isIntersecting && message.deliveryStatus === 'delivered') {
+          if (entry.isIntersecting) {
             onMarkAsRead(message.id);
             observer.disconnect();
           }
@@ -126,7 +126,7 @@ function MessageBubbleComponent({
     return () => {
       observer.disconnect();
     };
-  }, [message.id, message.isOwn, message.deliveryStatus, onMarkAsRead]);
+  }, [message.id, message.isOwn, onMarkAsRead]);
 
   if (message.isDeleted) {
     return (
@@ -261,6 +261,9 @@ function MessageBubbleComponent({
                 blob={message.voice.blob}
                 isOwn={message.isOwn}
                 onPlaybackChange={onMediaActiveChange}
+                onMarkAsRead={!message.isOwn && onMarkAsRead ? () => {
+                  onMarkAsRead(message.id);
+                } : undefined}
               />
             )}
             {message.file && !message.voice && (
@@ -273,6 +276,9 @@ function MessageBubbleComponent({
                 accessMode={message.file.accessMode}
                 onDownloadStateChange={onMediaActiveChange}
                 onView={message.file.blob && onViewFile ? () => {
+                  if (!message.isOwn && onMarkAsRead) {
+                    onMarkAsRead(message.id);
+                  }
                   onViewFile(
                     message.file!.filename,
                     message.file!.mimeType,

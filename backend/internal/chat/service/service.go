@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/dto"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
@@ -44,8 +45,19 @@ func (s *ChatService) SearchUsers(ctx context.Context, query string, limit int) 
 	if q == "" {
 		return nil, commonerrors.ErrEmptyQuery
 	}
+	if len(q) > constants.MaxSearchQueryLength {
+		return nil, commonerrors.NewDomainError(
+			"QUERY_TOO_LONG",
+			commonerrors.CategoryValidation,
+			400,
+			"query is too long",
+		)
+	}
 	if limit <= 0 {
-		limit = 20
+		limit = constants.DefaultSearchLimit
+	}
+	if limit > constants.MaxSearchResultsLimit {
+		limit = constants.MaxSearchResultsLimit
 	}
 	users, err := s.repo.SearchByUsername(ctx, q, limit)
 	if err != nil {

@@ -3,10 +3,12 @@ package http
 import (
 	"io"
 	"net/http"
+
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 )
 
 const (
-	DefaultMaxRequestSize = 1 << 20
+	DefaultMaxRequestSize = constants.DefaultMaxRequestSize
 )
 
 type maxBytesReader struct {
