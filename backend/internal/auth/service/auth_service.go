@@ -34,39 +34,44 @@ type AuthService struct {
 	credentialValidator *CredentialValidator
 }
 
-func NewAuthService(
-	repo userrepo.Repository,
-	identityService identityservice.Service,
-	refreshTokenRepo authrepo.RefreshTokenRepository,
-	revokedTokenRepo authrepo.RevokedTokenRepository,
-	hasher commoncrypto.PasswordHasher,
-	idGenerator commoncrypto.IDGenerator,
-	jwtSecret string,
-	accessTokenTTL time.Duration,
-	refreshTokenTTL time.Duration,
-	maxRefreshTokens int,
-	circuitBreakerThreshold int32,
-	circuitBreakerTimeout time.Duration,
-	circuitBreakerReset time.Duration,
-	log *logger.Logger,
-) *AuthService {
-	dbCB := db.NewDBCircuitBreaker(circuitBreakerThreshold, circuitBreakerTimeout, circuitBreakerReset, log)
+type AuthServiceConfig struct {
+	JWTSecret               string
+	AccessTokenTTL          time.Duration
+	RefreshTokenTTL         time.Duration
+	MaxRefreshTokens        int
+	CircuitBreakerThreshold int32
+	CircuitBreakerTimeout   time.Duration
+	CircuitBreakerReset     time.Duration
+}
+
+type AuthServiceDeps struct {
+	Repo             userrepo.Repository
+	IdentityService  identityservice.Service
+	RefreshTokenRepo authrepo.RefreshTokenRepository
+	RevokedTokenRepo authrepo.RevokedTokenRepository
+	Hasher           commoncrypto.PasswordHasher
+	IDGenerator      commoncrypto.IDGenerator
+	Log              *logger.Logger
+}
+
+func NewAuthService(deps AuthServiceDeps, config AuthServiceConfig) *AuthService {
+	dbCB := db.NewDBCircuitBreaker(config.CircuitBreakerThreshold, config.CircuitBreakerTimeout, config.CircuitBreakerReset, deps.Log)
 	clk := clock.NewRealClock()
-	tokenIssuer := NewTokenIssuer(jwtSecret, idGenerator, accessTokenTTL, clk)
-	refreshTokenRotator := NewRefreshTokenRotator(refreshTokenRepo, dbCB, idGenerator, refreshTokenTTL, maxRefreshTokens, clk, log)
+	tokenIssuer := NewTokenIssuer(config.JWTSecret, deps.IDGenerator, config.AccessTokenTTL, clk)
+	refreshTokenRotator := NewRefreshTokenRotator(deps.RefreshTokenRepo, dbCB, deps.IDGenerator, config.RefreshTokenTTL, config.MaxRefreshTokens, clk, deps.Log)
 	credentialValidator := NewCredentialValidator()
 
 	return &AuthService{
-		repo:                repo,
-		identityService:     identityService,
-		refreshTokenRepo:    refreshTokenRepo,
-		revokedTokenRepo:    revokedTokenRepo,
-		hasher:              hasher,
-		idGenerator:         idGenerator,
+		repo:                deps.Repo,
+		identityService:     deps.IdentityService,
+		refreshTokenRepo:    deps.RefreshTokenRepo,
+		revokedTokenRepo:    deps.RevokedTokenRepo,
+		hasher:              deps.Hasher,
+		idGenerator:         deps.IDGenerator,
 		clock:               clk,
-		log:                 log,
+		log:                 deps.Log,
 		dbCircuitBreaker:    dbCB,
-		accessTokenTTL:      accessTokenTTL,
+		accessTokenTTL:      config.AccessTokenTTL,
 		tokenIssuer:         tokenIssuer,
 		refreshTokenRotator: refreshTokenRotator,
 		credentialValidator: credentialValidator,
@@ -141,30 +146,7 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (AuthRe
 		return s.repo.Create(ctx, user)
 	})
 	if err != nil {
-		if errors.Is(err, commonerrors.ErrCircuitOpen) {
-			s.log.WithFields(ctx, logger.Fields{
-				"username": input.Username,
-				"action":   "register_db_circuit_open",
-			}).Error("register failed: database circuit breaker is open")
-			return AuthResult{}, ErrServiceUnavailable.WithCause(err)
-		}
-		if errors.Is(err, commonerrors.ErrUsernameAlreadyExists) {
-			s.log.WithFields(ctx, logger.Fields{
-				"username": input.Username,
-				"action":   "register_username_exists",
-			}).Warn("register failed: already exists")
-			return AuthResult{}, ErrUsernameTaken
-		}
-		s.log.WithFields(ctx, logger.Fields{
-			"username": input.Username,
-			"action":   "register_create_failed",
-		}).Errorf("register failed: %v", err)
-		return AuthResult{}, commonerrors.NewDomainError(
-			"DB_ERROR",
-			commonerrors.CategoryInternal,
-			500,
-			"failed to create user",
-		).WithCause(err)
+		return s.handleDBCreateError(ctx, err, input.Username)
 	}
 
 	if len(input.IdentityPubKey) > 0 {
@@ -237,30 +219,7 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (AuthResult, 
 		return fetchErr
 	})
 	if err != nil {
-		if errors.Is(err, commonerrors.ErrCircuitOpen) {
-			s.log.WithFields(ctx, logger.Fields{
-				"username": input.Username,
-				"action":   "login_db_circuit_open",
-			}).Error("login failed: database circuit breaker is open")
-			return AuthResult{}, ErrServiceUnavailable.WithCause(err)
-		}
-		if errors.Is(err, userrepo.ErrUserNotFound) {
-			s.log.WithFields(ctx, logger.Fields{
-				"username": input.Username,
-				"action":   "login_user_not_found",
-			}).Warn("login failed: not found")
-			return AuthResult{}, ErrInvalidCredentials
-		}
-		s.log.WithFields(ctx, logger.Fields{
-			"username": input.Username,
-			"action":   "login_fetch_failed",
-		}).Errorf("login failed: %v", err)
-		return AuthResult{}, commonerrors.NewDomainError(
-			"DB_ERROR",
-			commonerrors.CategoryInternal,
-			500,
-			"failed to fetch user",
-		).WithCause(err)
+		return s.handleDBFetchError(ctx, err, input.Username)
 	}
 
 	if err := s.hasher.Compare(user.PasswordHash, input.Password); err != nil {
@@ -480,6 +439,60 @@ func (s *AuthService) RevokeAccessToken(ctx context.Context, jti string, userID 
 
 func (s *AuthService) ParseTokenForRevoke(ctx context.Context, tokenString string) (jwtverify.Claims, error) {
 	return s.tokenIssuer.ParseToken(tokenString)
+}
+
+func (s *AuthService) handleDBCreateError(ctx context.Context, err error, username string) (AuthResult, error) {
+	if errors.Is(err, commonerrors.ErrCircuitOpen) {
+		s.log.WithFields(ctx, logger.Fields{
+			"username": username,
+			"action":   "register_db_circuit_open",
+		}).Error("register failed: database circuit breaker is open")
+		return AuthResult{}, ErrServiceUnavailable.WithCause(err)
+	}
+	if errors.Is(err, commonerrors.ErrUsernameAlreadyExists) {
+		s.log.WithFields(ctx, logger.Fields{
+			"username": username,
+			"action":   "register_username_exists",
+		}).Warn("register failed: already exists")
+		return AuthResult{}, ErrUsernameTaken
+	}
+	s.log.WithFields(ctx, logger.Fields{
+		"username": username,
+		"action":   "register_create_failed",
+	}).Errorf("register failed: %v", err)
+	return AuthResult{}, commonerrors.NewDomainError(
+		"DB_ERROR",
+		commonerrors.CategoryInternal,
+		500,
+		"failed to create user",
+	).WithCause(err)
+}
+
+func (s *AuthService) handleDBFetchError(ctx context.Context, err error, username string) (AuthResult, error) {
+	if errors.Is(err, commonerrors.ErrCircuitOpen) {
+		s.log.WithFields(ctx, logger.Fields{
+			"username": username,
+			"action":   "login_db_circuit_open",
+		}).Error("login failed: database circuit breaker is open")
+		return AuthResult{}, ErrServiceUnavailable.WithCause(err)
+	}
+	if errors.Is(err, userrepo.ErrUserNotFound) {
+		s.log.WithFields(ctx, logger.Fields{
+			"username": username,
+			"action":   "login_user_not_found",
+		}).Warn("login failed: not found")
+		return AuthResult{}, ErrInvalidCredentials
+	}
+	s.log.WithFields(ctx, logger.Fields{
+		"username": username,
+		"action":   "login_fetch_failed",
+	}).Errorf("login failed: %v", err)
+	return AuthResult{}, commonerrors.NewDomainError(
+		"DB_ERROR",
+		commonerrors.CategoryInternal,
+		500,
+		"failed to fetch user",
+	).WithCause(err)
 }
 
 func (s *AuthService) issueTokens(ctx context.Context, user userdomain.User) (string, authdomain.RefreshToken, error) {

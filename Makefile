@@ -8,49 +8,93 @@ else
 	endif
 endif
 
-COMPOSE_FILES = -f docker-compose.yml \
+COMPOSE_FILES_DEVELOP = -f docker-compose.yml \
 	-f yaml/db.yml \
 	-f yaml/auth.yml \
 	-f yaml/chat.yml \
 	-f yaml/frontend.yml \
 	-f yaml/proxy.yml
 
-.PHONY: down down-volumes up up-build restart reup rebuild clean help backend frontend go-fmt go-vet go-test format
+COMPOSE_FILES_PROD = -f docker-compose.yml \
+	-f yaml/db.yml \
+	-f yaml/auth.yml \
+	-f yaml/chat.yml \
+	-f yaml/frontend.yml \
+	-f yaml/proxy.yml \
+	-f yaml/prometheus.yml \
+	-f yaml/grafana.yml
 
-down:
-	@echo "Stopping containers..."
-	$(DOCKER_COMPOSE) $(COMPOSE_FILES) down
+.PHONY: clean help backend frontend go-fmt go-vet go-test format develop-up develop-up-build develop-down develop-down-volumes develop-restart develop-reup develop-rebuild prod-up prod-up-build prod-down prod-down-volumes prod-restart prod-reup prod-rebuild
+
+develop-up:
+	@echo "Starting containers (DEVELOP mode - minimal)..."
+	$(DOCKER_COMPOSE) $(COMPOSE_FILES_DEVELOP) up
+
+develop-up-build:
+	@echo "Starting containers with build (DEVELOP mode - minimal)..."
+	$(DOCKER_COMPOSE) $(COMPOSE_FILES_DEVELOP) up --build
+
+develop-down:
+	@echo "Stopping containers (DEVELOP mode)..."
+	$(DOCKER_COMPOSE) $(COMPOSE_FILES_DEVELOP) down
 	@echo "Done!"
 
-down-volumes:
-	@echo "Stopping containers and removing volumes..."
-	$(DOCKER_COMPOSE) $(COMPOSE_FILES) down -v
+develop-down-volumes:
+	@echo "Stopping containers and removing volumes (DEVELOP mode)..."
+	$(DOCKER_COMPOSE) $(COMPOSE_FILES_DEVELOP) down -v
 	@echo "Done!"
 
-up:
-	@echo "Starting containers..."
-	$(DOCKER_COMPOSE) $(COMPOSE_FILES) up
-
-up-build:
-	@echo "Starting containers with build..."
-	$(DOCKER_COMPOSE) $(COMPOSE_FILES) up --build
-
-restart:
-	@echo "Restarting containers (keeps volumes and cache)..."
-	$(DOCKER_COMPOSE) $(COMPOSE_FILES) restart
+develop-restart:
+	@echo "Restarting containers (DEVELOP mode - keeps volumes and cache)..."
+	$(DOCKER_COMPOSE) $(COMPOSE_FILES_DEVELOP) restart
 	@echo "Done!"
 
-reup:
-	@echo "Stopping containers and removing volumes..."
-	$(DOCKER_COMPOSE) $(COMPOSE_FILES) down -v
-	@echo "Starting containers with build..."
-	$(DOCKER_COMPOSE) $(COMPOSE_FILES) up --build
+develop-reup:
+	@echo "Stopping containers and removing volumes (DEVELOP mode)..."
+	$(DOCKER_COMPOSE) $(COMPOSE_FILES_DEVELOP) down -v
+	@echo "Starting containers with build (DEVELOP mode)..."
+	$(DOCKER_COMPOSE) $(COMPOSE_FILES_DEVELOP) up --build
 
-rebuild:
-	@echo "Rebuilding images with no cache..."
-	$(DOCKER_COMPOSE) $(COMPOSE_FILES) build --no-cache
-	@echo "Starting containers..."
-	$(DOCKER_COMPOSE) $(COMPOSE_FILES) up
+develop-rebuild:
+	@echo "Rebuilding images with no cache (DEVELOP mode)..."
+	$(DOCKER_COMPOSE) $(COMPOSE_FILES_DEVELOP) build --no-cache
+	@echo "Starting containers (DEVELOP mode)..."
+	$(DOCKER_COMPOSE) $(COMPOSE_FILES_DEVELOP) up
+
+prod-up:
+	@echo "Starting containers (PROD mode - full stack)..."
+	$(DOCKER_COMPOSE) $(COMPOSE_FILES_PROD) up
+
+prod-up-build:
+	@echo "Starting containers with build (PROD mode - full stack)..."
+	$(DOCKER_COMPOSE) $(COMPOSE_FILES_PROD) up --build
+
+prod-down:
+	@echo "Stopping containers (PROD mode)..."
+	$(DOCKER_COMPOSE) $(COMPOSE_FILES_PROD) down
+	@echo "Done!"
+
+prod-down-volumes:
+	@echo "Stopping containers and removing volumes (PROD mode)..."
+	$(DOCKER_COMPOSE) $(COMPOSE_FILES_PROD) down -v
+	@echo "Done!"
+
+prod-restart:
+	@echo "Restarting containers (PROD mode - keeps volumes and cache)..."
+	$(DOCKER_COMPOSE) $(COMPOSE_FILES_PROD) restart
+	@echo "Done!"
+
+prod-reup:
+	@echo "Stopping containers and removing volumes (PROD mode)..."
+	$(DOCKER_COMPOSE) $(COMPOSE_FILES_PROD) down -v
+	@echo "Starting containers with build (PROD mode)..."
+	$(DOCKER_COMPOSE) $(COMPOSE_FILES_PROD) up --build
+
+prod-rebuild:
+	@echo "Rebuilding images with no cache (PROD mode)..."
+	$(DOCKER_COMPOSE) $(COMPOSE_FILES_PROD) build --no-cache
+	@echo "Starting containers (PROD mode)..."
+	$(DOCKER_COMPOSE) $(COMPOSE_FILES_PROD) up
 
 clean:
 	@echo "Stopping all containers..."
@@ -77,21 +121,33 @@ endif
 
 help:
 	@echo "Available targets:"
-	@echo "  up           - Start containers (fast, no build)"
-	@echo "  up-build     - Start containers with build"
-	@echo "  down         - Stop containers (keeps volumes)"
-	@echo "  down-volumes - Stop containers and remove volumes (database will be removed!)"
-	@echo "  restart      - Restart containers (fastest, keeps everything)"
-	@echo "  reup         - Stop + rebuild + start (keeps volumes/database)"
-	@echo "  rebuild      - Full rebuild without cache (slowest)"
+	@echo ""
+	@echo "DEVELOP MODE (minimal - without Prometheus/Grafana):"
+	@echo "  develop-up           - Start containers (fast, no build)"
+	@echo "  develop-up-build     - Start containers with build"
+	@echo "  develop-down         - Stop containers (keeps volumes)"
+	@echo "  develop-down-volumes - Stop containers and remove volumes"
+	@echo "  develop-restart      - Restart containers (fastest, keeps everything)"
+	@echo "  develop-reup         - Stop + rebuild + start"
+	@echo "  develop-rebuild      - Full rebuild without cache"
+	@echo ""
+	@echo "PROD MODE (full - with Prometheus/Grafana):"
+	@echo "  prod-up           - Start containers (fast, no build)"
+	@echo "  prod-up-build     - Start containers with build"
+	@echo "  prod-down         - Stop containers (keeps volumes)"
+	@echo "  prod-down-volumes - Stop containers and remove volumes"
+	@echo "  prod-restart      - Restart containers (fastest, keeps everything)"
+	@echo "  prod-reup         - Stop + rebuild + start"
+	@echo "  prod-rebuild      - Full rebuild without cache"
+	@echo ""
+	@echo "UTILITIES:"
 	@echo "  clean        - Remove ALL Docker containers, images, and volumes"
-	@echo "  help         - Show this help message"
 	@echo "  backend      - Run backend services locally without Docker"
 	@echo "  frontend     - Run frontend locally without Docker"
 	@echo "  go-fmt       - Run go fmt for all backend packages"
 	@echo "  go-vet       - Run go vet for all backend packages"
 	@echo "  go-test      - Run go test for all backend packages"
-	@echo "  format       - Alias for go-fmt"
+	@echo "  format       - Run go-vet, go-fmt, and go-lint"
 
 backend:
 	cd backend && go run ./cmd/auth &

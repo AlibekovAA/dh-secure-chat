@@ -47,6 +47,7 @@ const (
 	DBPoolMaxAttempts     = 10
 	DBPoolRetryDelay      = 1 * time.Second
 	DBPoolMetricsInterval = 30 * time.Second
+	DBQueryTimeout        = 5 * time.Second
 
 	ServerReadHeaderTimeout = 5 * time.Second
 	ServerReadTimeout       = 10 * time.Second

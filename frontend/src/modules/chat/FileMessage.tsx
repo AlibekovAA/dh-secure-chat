@@ -17,6 +17,7 @@ function formatFileSize(bytes: number): string {
 
 function getFileIcon(mimeType: string): string {
   if (mimeType.startsWith('image/')) return '🖼️';
+  if (mimeType.startsWith('video/')) return '🎬';
   if (mimeType === 'application/pdf') return '📄';
   if (mimeType.includes('word') || mimeType.includes('document')) return '📝';
   if (mimeType.includes('sheet') || mimeType.includes('excel')) return '📊';
@@ -83,7 +84,7 @@ export function FileMessage({
             <button
               type="button"
               onClick={onView}
-              className="text-xs text-emerald-400 hover:text-emerald-200 transition-colors flex items-center gap-1 px-2 py-1 rounded bg-emerald-900/20 hover:bg-emerald-900/40 border border-emerald-700/40"
+              className="text-xs text-emerald-400 hover:text-emerald-200 transition-colors duration-150 flex items-center gap-1 px-2 py-1 rounded bg-emerald-900/20 hover:bg-emerald-900/40 border border-emerald-700/40"
               title="Просмотреть файл"
             >
               <svg
@@ -112,7 +113,7 @@ export function FileMessage({
             <button
               type="button"
               onClick={handleDownload}
-              className="text-xs text-emerald-400 hover:text-emerald-200 transition-colors flex items-center gap-1 px-2 py-1 rounded bg-emerald-900/20 hover:bg-emerald-900/40 border border-emerald-700/40"
+              className="text-xs text-emerald-400 hover:text-emerald-200 transition-colors duration-150 flex items-center gap-1 px-2 py-1 rounded bg-emerald-900/20 hover:bg-emerald-900/40 border border-emerald-700/40"
               title="Скачать файл"
             >
               <svg

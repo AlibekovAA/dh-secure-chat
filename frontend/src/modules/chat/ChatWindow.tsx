@@ -49,6 +49,14 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
   const [viewerFile, setViewerFile] = useState<{ filename: string; mimeType: string; blob: Blob; isProtected: boolean } | null>(null);
   const [isEditingMessage, setIsEditingMessage] = useState(false);
 
+  useEffect(() => {
+    if (token) {
+      import('../../shared/api/client').then(({ apiClient }) => {
+        apiClient.setToken(token);
+      });
+    }
+  }, [token]);
+
   const {
     state,
     messages,
@@ -115,8 +123,8 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
       setIsLoadingFingerprint(true);
       try {
         const [myResponse, peerResponse] = await Promise.all([
-          getFingerprint(myUserId, token),
-          getFingerprint(peer.id, token),
+          getFingerprint(myUserId),
+          getFingerprint(peer.id),
         ]);
 
         setMyFingerprint(myResponse.fingerprint);

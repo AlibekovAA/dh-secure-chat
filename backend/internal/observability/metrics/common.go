@@ -6,6 +6,31 @@ import (
 )
 
 var (
+	HTTPRequestsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "http_requests_total",
+			Help: "Total number of HTTP requests",
+		},
+		[]string{"service", "method", "path"},
+	)
+
+	HTTPRequestsInFlight = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "http_requests_in_flight",
+			Help: "Number of HTTP requests currently being processed",
+		},
+		[]string{"service"},
+	)
+
+	HTTPRequestDurationSeconds = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "http_request_duration_seconds",
+			Help:    "Duration of HTTP requests in seconds",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"service", "method", "path", "status"},
+	)
+
 	RateLimitBlocked = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "rate_limit_blocked_total",

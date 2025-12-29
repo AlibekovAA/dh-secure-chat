@@ -1,9 +1,10 @@
-import React from "react";
+import React, { lazy, Suspense } from "react";
 import ReactDOM from "react-dom/client";
-import { App } from "./modules/app/App";
 import { ToastProvider } from "./shared/ui/ToastProvider";
 import { ErrorBoundary } from "./shared/ui/ErrorBoundary";
 import "./styles/index.css";
+
+const App = lazy(() => import("./modules/app/App").then((module) => ({ default: module.App })));
 
 window.addEventListener('error', (event) => {
   if (event.target && (event.target as HTMLElement).tagName === 'IMG') {
@@ -36,7 +37,18 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <ErrorBoundary>
       <ToastProvider>
-        <App />
+        <Suspense
+          fallback={
+            <div className="min-h-screen flex items-center justify-center bg-black text-emerald-50">
+              <div className="flex flex-col items-center gap-3">
+                <div className="w-8 h-8 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+                <p className="text-xs text-emerald-500/80">Загрузка...</p>
+              </div>
+            </div>
+          }
+        >
+          <App />
+        </Suspense>
       </ToastProvider>
     </ErrorBoundary>
   </React.StrictMode>

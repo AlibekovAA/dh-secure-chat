@@ -21,11 +21,17 @@ type ChatService struct {
 	log             *logger.Logger
 }
 
-func NewChatService(repo userrepo.Repository, identityService identityservice.Service, log *logger.Logger) *ChatService {
+type ChatServiceDeps struct {
+	Repo            userrepo.Repository
+	IdentityService identityservice.Service
+	Log             *logger.Logger
+}
+
+func NewChatService(deps ChatServiceDeps) *ChatService {
 	return &ChatService{
-		repo:            repo,
-		identityService: identityService,
-		log:             log,
+		repo:            deps.Repo,
+		identityService: deps.IdentityService,
+		log:             deps.Log,
 	}
 }
 

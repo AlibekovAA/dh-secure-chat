@@ -6,30 +6,6 @@ import (
 )
 
 var (
-	ChatRequestsTotal = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "chat_requests_total",
-			Help: "Total number of chat requests",
-		},
-		[]string{"method", "path"},
-	)
-
-	ChatRequestsInFlight = promauto.NewGauge(
-		prometheus.GaugeOpts{
-			Name: "chat_requests_in_flight",
-			Help: "Number of chat requests currently being processed",
-		},
-	)
-
-	ChatRequestDurationSeconds = promauto.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "chat_request_duration_seconds",
-			Help:    "Duration of chat requests in seconds",
-			Buckets: prometheus.DefBuckets,
-		},
-		[]string{"method", "path", "status"},
-	)
-
 	ChatWebSocketConnectionsActive = promauto.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "chat_websocket_connections_active",

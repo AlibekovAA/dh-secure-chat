@@ -31,20 +31,24 @@ func main() {
 	hasher := &commoncrypto.BcryptHasher{}
 	idGenerator := &commoncrypto.UUIDGenerator{}
 	authService := service.NewAuthService(
-		app.UserRepo,
-		app.IdentityService,
-		refreshTokenRepo,
-		revokedTokenRepo,
-		hasher,
-		idGenerator,
-		app.Config.JWTSecret,
-		app.Config.AccessTokenTTL,
-		app.Config.RefreshTokenTTL,
-		app.Config.MaxRefreshTokensPerUser,
-		app.Config.CircuitBreakerThreshold,
-		app.Config.CircuitBreakerTimeout,
-		app.Config.CircuitBreakerReset,
-		app.Log,
+		service.AuthServiceDeps{
+			Repo:             app.UserRepo,
+			IdentityService:  app.IdentityService,
+			RefreshTokenRepo: refreshTokenRepo,
+			RevokedTokenRepo: revokedTokenRepo,
+			Hasher:           hasher,
+			IDGenerator:      idGenerator,
+			Log:              app.Log,
+		},
+		service.AuthServiceConfig{
+			JWTSecret:               app.Config.JWTSecret,
+			AccessTokenTTL:          app.Config.AccessTokenTTL,
+			RefreshTokenTTL:         app.Config.RefreshTokenTTL,
+			MaxRefreshTokens:        app.Config.MaxRefreshTokensPerUser,
+			CircuitBreakerThreshold: app.Config.CircuitBreakerThreshold,
+			CircuitBreakerTimeout:   app.Config.CircuitBreakerTimeout,
+			CircuitBreakerReset:     app.Config.CircuitBreakerReset,
+		},
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())

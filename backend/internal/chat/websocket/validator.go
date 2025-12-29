@@ -39,6 +39,12 @@ func NewDefaultValidator(maxFileSize, maxVoiceSize int64) *DefaultValidator {
 		"application/x-tar":            true,
 		"application/gzip":             true,
 		"application/octet-stream":     true,
+		"video/mp4":                    true,
+		"video/webm":                   true,
+		"video/ogg":                    true,
+		"video/quicktime":              true,
+		"video/x-msvideo":              true,
+		"video/x-matroska":             true,
 	}
 
 	return &DefaultValidator{

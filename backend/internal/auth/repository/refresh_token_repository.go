@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 
 	authdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/domain"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/db"
 )
 
@@ -45,6 +46,9 @@ func (r *PgRefreshTokenRepository) TxManager() *RefreshTokenTxManager {
 }
 
 func (r *PgRefreshTokenRepository) Create(ctx context.Context, token authdomain.RefreshToken) error {
+	ctx, cancel := context.WithTimeout(ctx, constants.DBQueryTimeout)
+	defer cancel()
+
 	start := time.Now()
 	_, err := r.pool.Exec(
 		ctx,
@@ -60,6 +64,9 @@ func (r *PgRefreshTokenRepository) Create(ctx context.Context, token authdomain.
 }
 
 func (r *PgRefreshTokenRepository) FindByTokenHash(ctx context.Context, hash string) (authdomain.RefreshToken, error) {
+	ctx, cancel := context.WithTimeout(ctx, constants.DBQueryTimeout)
+	defer cancel()
+
 	start := time.Now()
 	row := r.pool.QueryRow(
 		ctx,
@@ -78,6 +85,9 @@ func (r *PgRefreshTokenRepository) FindByTokenHash(ctx context.Context, hash str
 }
 
 func (r *PgRefreshTokenRepository) DeleteByTokenHash(ctx context.Context, hash string) error {
+	ctx, cancel := context.WithTimeout(ctx, constants.DBQueryTimeout)
+	defer cancel()
+
 	start := time.Now()
 	_, err := r.pool.Exec(
 		ctx,
@@ -88,6 +98,9 @@ func (r *PgRefreshTokenRepository) DeleteByTokenHash(ctx context.Context, hash s
 }
 
 func (r *PgRefreshTokenRepository) CountByUserID(ctx context.Context, userID string) (int, error) {
+	ctx, cancel := context.WithTimeout(ctx, constants.DBQueryTimeout)
+	defer cancel()
+
 	start := time.Now()
 	row := r.pool.QueryRow(
 		ctx,
@@ -104,6 +117,9 @@ func (r *PgRefreshTokenRepository) CountByUserID(ctx context.Context, userID str
 }
 
 func (r *PgRefreshTokenRepository) DeleteOldestByUserID(ctx context.Context, userID string) error {
+	ctx, cancel := context.WithTimeout(ctx, constants.DBQueryTimeout)
+	defer cancel()
+
 	start := time.Now()
 	_, err := r.pool.Exec(
 		ctx,
@@ -121,6 +137,9 @@ func (r *PgRefreshTokenRepository) DeleteOldestByUserID(ctx context.Context, use
 }
 
 func (r *PgRefreshTokenRepository) DeleteExpired(ctx context.Context) (int64, error) {
+	ctx, cancel := context.WithTimeout(ctx, constants.DBQueryTimeout)
+	defer cancel()
+
 	start := time.Now()
 	res, err := r.pool.Exec(
 		ctx,

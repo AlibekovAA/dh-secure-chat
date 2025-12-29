@@ -90,7 +90,6 @@ type HubConfig struct {
 	FileTransferTimeout     time.Duration
 	IdempotencyTTL          time.Duration
 	SendTimeout             time.Duration
-	ShardCount              int
 	MaxConnections          int
 	DebugSampleRate         float64
 }

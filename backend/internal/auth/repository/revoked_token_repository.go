@@ -8,6 +8,7 @@ import (
 	pgx "github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/db"
 )
 
@@ -26,6 +27,9 @@ func NewPgRevokedTokenRepository(pool *pgxpool.Pool) *PgRevokedTokenRepository {
 }
 
 func (r *PgRevokedTokenRepository) Revoke(ctx context.Context, jti string, userID string, expiresAt time.Time) error {
+	ctx, cancel := context.WithTimeout(ctx, constants.DBQueryTimeout)
+	defer cancel()
+
 	start := time.Now()
 	_, err := r.pool.Exec(
 		ctx,
@@ -40,6 +44,9 @@ func (r *PgRevokedTokenRepository) Revoke(ctx context.Context, jti string, userI
 }
 
 func (r *PgRevokedTokenRepository) IsRevoked(ctx context.Context, jti string) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, constants.DBQueryTimeout)
+	defer cancel()
+
 	start := time.Now()
 	row := r.pool.QueryRow(
 		ctx,
@@ -63,6 +70,9 @@ func (r *PgRevokedTokenRepository) IsRevoked(ctx context.Context, jti string) (b
 }
 
 func (r *PgRevokedTokenRepository) DeleteExpired(ctx context.Context) (int64, error) {
+	ctx, cancel := context.WithTimeout(ctx, constants.DBQueryTimeout)
+	defer cancel()
+
 	start := time.Now()
 	res, err := r.pool.Exec(
 		ctx,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getFingerprint } from './api';
 import {
   fingerprintToEmojis,
@@ -35,7 +35,7 @@ export function FingerprintVerificationModal({
       try {
         setIsLoading(true);
         setError(null);
-        const response = await getFingerprint(peerId, token);
+        const response = await getFingerprint(peerId);
         setPeerFingerprint(response.fingerprint);
         setIsVerified(isPeerVerified(peerId, response.fingerprint));
       } catch (err) {
@@ -59,20 +59,45 @@ export function FingerprintVerificationModal({
     onVerified?.();
   }, [peerId, peerFingerprint, onVerified]);
 
-  const hasChanged = peerFingerprint
-    ? hasPeerFingerprintChanged(peerId, peerFingerprint)
-    : false;
+  const hasChanged = useMemo(
+    () =>
+      peerFingerprint
+        ? hasPeerFingerprintChanged(peerId, peerFingerprint)
+        : false,
+    [peerId, peerFingerprint],
+  );
+
+  const formattedMyFingerprint = useMemo(
+    () => (myFingerprint ? formatFingerprint(myFingerprint) : null),
+    [myFingerprint],
+  );
+
+  const formattedPeerFingerprint = useMemo(
+    () => (peerFingerprint ? formatFingerprint(peerFingerprint) : null),
+    [peerFingerprint],
+  );
+
+  const myFingerprintEmojis = useMemo(
+    () => (myFingerprint ? fingerprintToEmojis(myFingerprint) : null),
+    [myFingerprint],
+  );
+
+  const peerFingerprintEmojis = useMemo(
+    () => (peerFingerprint ? fingerprintToEmojis(peerFingerprint) : null),
+    [peerFingerprint],
+  );
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 backdrop-blur-sm"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90"
       onClick={onClose}
-      style={{ willChange: 'opacity' }}
     >
       <div
-        className="w-full max-w-lg mx-4 bg-black border border-emerald-700 rounded-xl overflow-hidden animate-[fadeIn_0.3s_ease-out,scaleIn_0.3s_ease-out] shadow-2xl shadow-emerald-900/30"
+        className="w-full max-w-lg mx-4 bg-black border border-emerald-700 rounded-xl overflow-hidden shadow-lg shadow-emerald-900/20"
         onClick={(e) => e.stopPropagation()}
-        style={{ willChange: 'transform, opacity' }}
+        style={{
+          animation: 'modalEnter 0.2s ease-out',
+        }}
       >
         <div className="px-6 py-4 border-b border-emerald-700/60 bg-black/80">
           <div className="flex items-center justify-between">
@@ -159,18 +184,14 @@ export function FingerprintVerificationModal({
                   </p>
                   <div className="bg-emerald-900/20 border border-emerald-700/40 rounded-lg px-4 py-3 space-y-2">
                     <p className="text-xs font-mono text-emerald-200 break-all">
-                      {myFingerprint
-                        ? formatFingerprint(myFingerprint)
-                        : 'Не загружен'}
+                      {formattedMyFingerprint || 'Не загружен'}
                     </p>
-                    {myFingerprint && (
+                    {myFingerprintEmojis && (
                       <div className="flex items-center gap-2 pt-2 border-t border-emerald-700/30">
                         <span className="text-xs text-emerald-400/80">
                           Visual:
                         </span>
-                        <span className="text-lg">
-                          {fingerprintToEmojis(myFingerprint)}
-                        </span>
+                        <span className="text-lg">{myFingerprintEmojis}</span>
                       </div>
                     )}
                   </div>
@@ -182,15 +203,13 @@ export function FingerprintVerificationModal({
                   </p>
                   <div className="bg-emerald-900/20 border border-emerald-700/40 rounded-lg px-4 py-3 space-y-2">
                     <p className="text-xs font-mono text-emerald-200 break-all">
-                      {formatFingerprint(peerFingerprint)}
+                      {formattedPeerFingerprint}
                     </p>
                     <div className="flex items-center gap-2 pt-2 border-t border-emerald-700/30">
                       <span className="text-xs text-emerald-400/80">
                         Visual:
                       </span>
-                      <span className="text-lg">
-                        {fingerprintToEmojis(peerFingerprint)}
-                      </span>
+                      <span className="text-lg">{peerFingerprintEmojis}</span>
                     </div>
                   </div>
                 </div>
@@ -212,9 +231,16 @@ export function FingerprintVerificationModal({
               </div>
 
               <div
-                className={`bg-emerald-900/20 border border-emerald-500/40 rounded-lg px-4 py-3 transition-opacity duration-300 min-h-[3.5rem] ${
-                  isVerified ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                className={`bg-emerald-900/20 border border-emerald-500/40 rounded-lg px-4 py-3 min-h-[3.5rem] transition-all duration-200 ease-out ${
+                  isVerified
+                    ? 'opacity-100 translate-y-0'
+                    : 'opacity-0 translate-y-2 pointer-events-none'
                 }`}
+                style={{
+                  transform: isVerified
+                    ? 'translateY(0) translateZ(0)'
+                    : 'translateY(8px) translateZ(0)',
+                }}
               >
                 <div className="flex items-center gap-2">
                   <svg

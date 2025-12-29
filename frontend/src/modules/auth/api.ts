@@ -1,4 +1,5 @@
-import { getFriendlyErrorMessage, parseApiError, type ApiErrorResponse } from '../../shared/api/error-handler';
+import { apiClient } from '../../shared/api/client';
+import type { ApiErrorResponse } from '../../shared/api/error-handler';
 
 const API_BASE = '/api/auth';
 
@@ -27,42 +28,18 @@ export async function register(
     body.identity_pub_key = identityPubKey;
   }
 
-  const res = await fetch(`${API_BASE}/register`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+  return apiClient.post<AuthResponse>(`${API_BASE}/register`, body, {
     credentials: 'include',
-    body: JSON.stringify(body),
   });
-
-  if (!res.ok) {
-    const errorMessage = await parseApiError(res);
-    throw new Error(errorMessage);
-  }
-
-  const json = (await res.json()) as AuthResponse;
-  return json;
 }
 
 export async function login(
   username: string,
   password: string,
 ): Promise<AuthResponse> {
-  const res = await fetch(`${API_BASE}/login`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    credentials: 'include',
-    body: JSON.stringify({ username, password }),
-  });
-
-  if (!res.ok) {
-    const errorMessage = await parseApiError(res);
-    throw new Error(errorMessage);
-  }
-
-  const json = (await res.json()) as AuthResponse;
-  return json;
+  return apiClient.post<AuthResponse>(
+    `${API_BASE}/login`,
+    { username, password },
+    { credentials: 'include' },
+  );
 }

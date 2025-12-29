@@ -197,7 +197,7 @@ export function useChatSession({
 
       try {
         if (!peerIdentityPublicKeyRef.current) {
-          const identityKeyResponse = await getIdentityKey(peerId, token);
+          const identityKeyResponse = await getIdentityKey(peerId);
           peerIdentityPublicKeyRef.current = identityKeyResponse.public_key;
         }
 

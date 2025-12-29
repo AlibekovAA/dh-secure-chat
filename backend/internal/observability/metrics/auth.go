@@ -6,30 +6,6 @@ import (
 )
 
 var (
-	AuthRequestsTotal = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "auth_requests_total",
-			Help: "Total number of auth requests",
-		},
-		[]string{"method", "path"},
-	)
-
-	AuthRequestsInFlight = promauto.NewGauge(
-		prometheus.GaugeOpts{
-			Name: "auth_requests_in_flight",
-			Help: "Number of auth requests currently being processed",
-		},
-	)
-
-	AuthRequestDurationSeconds = promauto.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "auth_request_duration_seconds",
-			Help:    "Duration of auth requests in seconds",
-			Buckets: prometheus.DefBuckets,
-		},
-		[]string{"method", "path", "status"},
-	)
-
 	RefreshTokensIssued = promauto.NewCounter(
 		prometheus.CounterOpts{
 			Name: "refresh_tokens_issued_total",

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"strconv"
 	"sync"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -30,14 +29,11 @@ func main() {
 	}
 	defer app.Pool.Close()
 
-	chatSvc := chatservice.NewChatService(app.UserRepo, app.IdentityService, app.Log)
-
-	shardCount := 0
-	if v := os.Getenv("CHAT_WS_SHARD_COUNT"); v != "" {
-		if count, err := strconv.Atoi(v); err == nil && count > 0 {
-			shardCount = count
-		}
-	}
+	chatSvc := chatservice.NewChatService(chatservice.ChatServiceDeps{
+		Repo:            app.UserRepo,
+		IdentityService: app.IdentityService,
+		Log:             app.Log,
+	})
 
 	hubConfig := websocket.HubConfig{
 		MaxFileSize:             constants.MaxFileSizeBytes,
@@ -51,34 +47,18 @@ func main() {
 		FileTransferTimeout:     constants.FileTransferTimeout,
 		IdempotencyTTL:          constants.IdempotencyTTL,
 		SendTimeout:             app.Config.WebSocketSendTimeout,
-		ShardCount:              shardCount,
 		MaxConnections:          app.Config.WebSocketMaxConnections,
 		DebugSampleRate:         constants.WebSocketDebugSampleRate,
 	}
 
-	var hub websocket.HubInterface
+	hub := websocket.NewHub(app.Log, app.UserRepo, hubConfig)
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
-
-	if shardCount > 0 {
-		shardedHub := websocket.NewShardedHub(app.Log, app.UserRepo, hubConfig, shardCount)
-		hub = shardedHub
-		app.Log.Infof("using sharded hub with %d shards", shardCount)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			shardedHub.Run(ctx)
-		}()
-	} else {
-		regularHub := websocket.NewHub(app.Log, app.UserRepo, hubConfig)
-		hub = regularHub
-		app.Log.Infof("using regular hub")
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			regularHub.Run(ctx)
-		}()
-	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		hub.Run(ctx)
+	}()
 
 	handler := chathttp.NewHandler(chatSvc, hub, app.Config, app.Log, app.Pool)
 

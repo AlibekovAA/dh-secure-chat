@@ -1,4 +1,10 @@
 import { useEffect, useState, useRef } from 'react';
+import {
+  VIDEO_MIME_TYPES,
+  IMAGE_MIME_TYPES,
+  PDF_MIME_TYPE,
+  TEXT_MIME_TYPES,
+} from './constants';
 
 type Props = {
   filename: string;
@@ -8,20 +14,30 @@ type Props = {
   protected?: boolean;
 };
 
-const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp', 'image/svg+xml'];
-const PDF_TYPE = 'application/pdf';
-const TEXT_TYPES = ['text/plain', 'text/html', 'text/css', 'text/javascript', 'text/json', 'application/json'];
-
 export function FileViewerModal({ filename, mimeType, blob, onClose, protected: isProtected = false }: Props) {
   const modalRef = useRef<HTMLDivElement>(null);
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [textContent, setTextContent] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [videoLoading, setVideoLoading] = useState(true);
+  const [videoError, setVideoError] = useState(false);
+  const [videoProgress, setVideoProgress] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
-    if (IMAGE_TYPES.includes(mimeType)) {
+    const isVideo = VIDEO_MIME_TYPES.some((type) => mimeType.includes(type));
+
+    if (isVideo && blob) {
+      const url = URL.createObjectURL(blob);
+      setObjectUrl(url);
+      return () => {
+        URL.revokeObjectURL(url);
+      };
+    }
+
+    if (IMAGE_MIME_TYPES.includes(mimeType)) {
       if (isProtected && canvasRef.current) {
         const img = new Image();
         const url = URL.createObjectURL(blob);
@@ -81,15 +97,15 @@ export function FileViewerModal({ filename, mimeType, blob, onClose, protected: 
         setObjectUrl(url);
         return () => URL.revokeObjectURL(url);
       }
-    } else if (mimeType === PDF_TYPE) {
+    } else if (mimeType === PDF_MIME_TYPE) {
       const url = URL.createObjectURL(blob);
       setObjectUrl(url);
       return () => URL.revokeObjectURL(url);
-    } else if (TEXT_TYPES.includes(mimeType)) {
+    } else if (TEXT_MIME_TYPES.includes(mimeType)) {
       blob
         .text()
-        .then((text) => setTextContent(text))
-        .catch((err) => {
+        .then((text: string) => setTextContent(text))
+        .catch((err: unknown) => {
           setError('Не удалось прочитать файл');
           console.error('Error reading text file:', err);
         });
@@ -202,7 +218,7 @@ export function FileViewerModal({ filename, mimeType, blob, onClose, protected: 
       );
     }
 
-    if (IMAGE_TYPES.includes(mimeType)) {
+    if (IMAGE_MIME_TYPES.includes(mimeType)) {
       if (isProtected && canvasRef.current) {
         return (
           <div className="flex items-center justify-center h-full w-full bg-black/40 overflow-auto p-4" style={{ userSelect: 'none' }}>
@@ -227,7 +243,7 @@ export function FileViewerModal({ filename, mimeType, blob, onClose, protected: 
       }
     }
 
-    if (mimeType === PDF_TYPE && objectUrl) {
+    if (mimeType === PDF_MIME_TYPE && objectUrl) {
       return (
         <div className="w-full h-full">
           <iframe src={objectUrl} className="w-full h-full border-0" title={filename} />
@@ -235,10 +251,106 @@ export function FileViewerModal({ filename, mimeType, blob, onClose, protected: 
       );
     }
 
-    if (TEXT_TYPES.includes(mimeType) && textContent !== null) {
+    if (TEXT_MIME_TYPES.includes(mimeType) && textContent !== null) {
       return (
         <div className="h-full overflow-auto bg-black/40 p-4">
           <pre className="text-sm text-emerald-100 whitespace-pre-wrap font-mono">{textContent}</pre>
+        </div>
+      );
+    }
+
+    if (VIDEO_MIME_TYPES.some((type) => mimeType.includes(type)) && objectUrl) {
+      return (
+        <div className="w-full h-full flex items-center justify-center bg-black/40 relative">
+          {videoLoading && !videoError && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-10">
+              <div className="flex flex-col items-center gap-3 w-full max-w-md px-4">
+                <div className="w-10 h-10 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+                <p className="text-sm text-emerald-400/80">Подготовка видео...</p>
+                {videoProgress > 0 && (
+                  <div className="w-full bg-emerald-900/30 rounded-full h-1.5 overflow-hidden">
+                    <div
+                      className="bg-emerald-500 h-full transition-all duration-200 ease-out"
+                      style={{
+                        width: `${videoProgress}%`,
+                        transform: 'translateZ(0)',
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          {videoError && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-10">
+              <div className="text-center">
+                <p className="text-sm text-red-400 mb-2">Ошибка загрузки видео</p>
+                <button
+                  onClick={() => {
+                    setVideoError(false);
+                    setVideoLoading(true);
+                    setVideoProgress(0);
+                    if (videoRef.current) {
+                      videoRef.current.load();
+                    }
+                  }}
+                  className="px-3 py-1.5 text-xs bg-emerald-500 hover:bg-emerald-400 text-black rounded transition-colors"
+                >
+                  Попробовать снова
+                </button>
+              </div>
+            </div>
+          )}
+          <video
+            ref={videoRef}
+            src={objectUrl}
+            controls
+            preload="metadata"
+            playsInline
+            className="max-w-full max-h-full"
+            style={{
+              display: 'block',
+              transform: 'translateZ(0)',
+            }}
+            onLoadedMetadata={() => {
+              setVideoLoading(false);
+              setVideoError(false);
+            }}
+            onCanPlay={() => {
+              setVideoLoading(false);
+            }}
+            onCanPlayThrough={() => {
+              setVideoLoading(false);
+            }}
+            onProgress={(e) => {
+              const video = e.currentTarget;
+              if (video.buffered.length > 0 && video.duration > 0) {
+                const bufferedEnd = video.buffered.end(video.buffered.length - 1);
+                const progress = (bufferedEnd / video.duration) * 100;
+                setVideoProgress(Math.min(progress, 100));
+                if (progress >= 100) {
+                  setVideoLoading(false);
+                }
+              }
+            }}
+            onError={() => {
+              setVideoLoading(false);
+              setVideoError(true);
+            }}
+            onLoadStart={() => {
+              setVideoLoading(true);
+              setVideoError(false);
+              setVideoProgress(0);
+            }}
+            onWaiting={() => {
+              setVideoLoading(true);
+            }}
+            onPlaying={() => {
+              setVideoLoading(false);
+            }}
+          >
+            Ваш браузер не поддерживает воспроизведение видео.
+          </video>
         </div>
       );
     }
@@ -254,14 +366,16 @@ export function FileViewerModal({ filename, mimeType, blob, onClose, protected: 
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90"
       onClick={onClose}
-      style={{ willChange: 'opacity' }}
     >
       <div
-        className="w-[95vw] h-[95vh] max-w-[95vw] max-h-[95vh] flex flex-col bg-black border border-emerald-700 rounded-xl overflow-hidden animate-[scaleIn_0.2s_ease-out] shadow-2xl shadow-emerald-900/30"
+        className="w-[95vw] h-[95vh] max-w-[95vw] max-h-[95vh] flex flex-col bg-black border border-emerald-700 rounded-xl overflow-hidden shadow-lg shadow-emerald-900/20"
         onClick={(e) => e.stopPropagation()}
-        style={{ willChange: 'transform, opacity' }}
+        style={{
+          animation: 'modalEnter 0.2s ease-out',
+          transform: 'translateZ(0)',
+        }}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-emerald-700/60 bg-gradient-to-r from-black via-emerald-950/20 to-black">
           <div className="flex-1 min-w-0">
