@@ -93,12 +93,47 @@ make prod-rebuild      # Полная пересборка без кеша
 ### Утилиты
 
 ```bash
-make help          # Список всех доступных команд
-make clean         # Удаление всех Docker контейнеров, образов и volumes
-make backend       # Запуск backend локально без Docker
-make frontend      # Запуск frontend локально без Docker
-make format        # Форматирование Go кода (go-vet, go-fmt, go-lint)
+make help                      # Список всех доступных команд
+make clean                     # Удаление всех Docker контейнеров, образов, volumes и файлов покрытия
+make backend                   # Запуск backend локально без Docker
+make frontend                  # Запуск frontend локально без Docker
+make format                    # Форматирование Go кода (go-vet, go-fmt, go-lint)
+make go-test                   # Запуск всех тестов backend
+make go-test-auth              # Запуск тестов auth-service
+make go-test-auth-coverage     # Запуск тестов auth-service с HTML отчётом покрытия
 ```
+
+### Тестирование
+
+Проект включает комплексные unit-тесты для auth-service с покрытием 97.8% кода сервиса.
+
+**Структура тестов:**
+
+- Тесты находятся в `backend/test/auth/`
+- Тесты разбиты по компонентам:
+  - `auth_service_register_test.go` - тесты регистрации
+  - `auth_service_login_test.go` - тесты входа
+  - `auth_service_refresh_test.go` - тесты обновления токенов
+  - `auth_service_revoke_test.go` - тесты отзыва токенов
+  - `auth_service_error_test.go` - тесты обработки ошибок
+  - `token_issuer_test.go` - тесты выдачи JWT токенов
+  - `refresh_token_rotator_test.go` - тесты ротации refresh токенов
+  - `validation_test.go` - тесты валидации учётных данных
+  - `cleanup_test.go` - тесты очистки истёкших токенов
+  - `mocks.go` - общие моки для тестов
+
+**Запуск тестов:**
+
+```bash
+make go-test-auth              # Запуск всех тестов auth-service
+make go-test-auth-coverage     # Запуск с HTML отчётом покрытия (coverage.html)
+```
+
+**Покрытие кода:**
+
+- Все тесты обеспечивают 97.8% покрытие кода auth-service
+- Отчёты покрытия генерируются в формате HTML и текстовом формате
+- HTML отчёт сохраняется в `backend/coverage.html`
 
 ---
 

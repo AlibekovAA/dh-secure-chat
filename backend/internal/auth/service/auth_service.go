@@ -51,12 +51,16 @@ type AuthServiceDeps struct {
 	RevokedTokenRepo authrepo.RevokedTokenRepository
 	Hasher           commoncrypto.PasswordHasher
 	IDGenerator      commoncrypto.IDGenerator
+	Clock            clock.Clock
 	Log              *logger.Logger
 }
 
 func NewAuthService(deps AuthServiceDeps, config AuthServiceConfig) *AuthService {
 	dbCB := db.NewDBCircuitBreaker(config.CircuitBreakerThreshold, config.CircuitBreakerTimeout, config.CircuitBreakerReset, deps.Log)
-	clk := clock.NewRealClock()
+	clk := deps.Clock
+	if clk == nil {
+		clk = clock.NewRealClock()
+	}
 	tokenIssuer := NewTokenIssuer(config.JWTSecret, deps.IDGenerator, config.AccessTokenTTL, clk)
 	refreshTokenRotator := NewRefreshTokenRotator(deps.RefreshTokenRepo, dbCB, deps.IDGenerator, config.RefreshTokenTTL, config.MaxRefreshTokens, clk, deps.Log)
 	credentialValidator := NewCredentialValidator()
@@ -283,7 +287,10 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken strin
 				}).Warn("refresh token expired")
 				incrementRefreshTokensExpired()
 				if delErr := tx.DeleteByTokenHash(txCtx, hash); delErr != nil {
-					return delErr
+					s.log.WithFields(ctx, logger.Fields{
+						"user_id": stored.UserID,
+						"action":  "refresh_token_expired_delete_failed",
+					}).Warnf("failed to delete expired refresh token: %v", delErr)
 				}
 				return ErrRefreshTokenExpired
 			}

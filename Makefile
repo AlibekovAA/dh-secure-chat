@@ -24,7 +24,7 @@ COMPOSE_FILES_PROD = -f docker-compose.yml \
 	-f yaml/prometheus.yml \
 	-f yaml/grafana.yml
 
-.PHONY: clean help backend frontend go-fmt go-vet go-test format develop-up develop-up-build develop-down develop-down-volumes develop-restart develop-reup develop-rebuild prod-up prod-up-build prod-down prod-down-volumes prod-restart prod-reup prod-rebuild
+.PHONY: clean help backend frontend go-fmt go-vet go-test go-test-auth go-test-auth-coverage go-lint format develop-up develop-up-build develop-down develop-down-volumes develop-restart develop-reup develop-rebuild prod-up prod-up-build prod-down prod-down-volumes prod-restart prod-reup prod-rebuild
 
 develop-up:
 	@echo "Starting containers (DEVELOP mode - minimal)..."
@@ -117,6 +117,13 @@ else
 endif
 	@echo "Pruning Docker system..."
 	docker system prune -a --volumes -f
+	@echo "Removing coverage files..."
+ifeq ($(OS),Windows_NT)
+	@powershell -Command "if (Test-Path backend\coverage.html) { Remove-Item backend\coverage.html -Force }" 2>nul
+	@powershell -Command "if (Test-Path backend\coverage.out) { Remove-Item backend\coverage.out -Force }" 2>nul
+else
+	@rm -f backend/coverage.html backend/coverage.out 2>/dev/null || true
+endif
 	@echo "Docker cleanup complete!"
 
 help:
@@ -144,10 +151,12 @@ help:
 	@echo "  clean        - Remove ALL Docker containers, images, and volumes"
 	@echo "  backend      - Run backend services locally without Docker"
 	@echo "  frontend     - Run frontend locally without Docker"
-	@echo "  go-fmt       - Run go fmt for all backend packages"
-	@echo "  go-vet       - Run go vet for all backend packages"
-	@echo "  go-test      - Run go test for all backend packages"
-	@echo "  format       - Run go-vet, go-fmt, and go-lint"
+	@echo "  go-fmt                - Run go fmt for all backend packages"
+	@echo "  go-vet                - Run go vet for all backend packages"
+	@echo "  go-test               - Run go test for all backend packages"
+	@echo "  go-test-auth          - Run auth service tests"
+	@echo "  go-test-auth-coverage - Run auth service tests with HTML coverage report"
+	@echo "  format                - Run go-vet, go-fmt, and go-lint"
 
 backend:
 	cd backend && go run ./cmd/auth &
@@ -163,6 +172,20 @@ go-fmt:
 go-vet:
 	@echo "Running go vet..."
 	cd backend && go vet ./...
+
+go-test:
+	@echo "Running go test..."
+	cd backend && go test ./...
+
+go-test-auth:
+	@echo "Running auth service tests..."
+	cd backend && go test -v ./test/auth/...
+
+go-test-auth-coverage:
+	@echo "Running auth service tests with coverage..."
+	cd backend && go test -v -coverprofile=coverage.out -coverpkg=./internal/auth/service ./test/auth/...
+	cd backend && go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report generated: backend/coverage.html"
 
 go-lint:
 	@echo "Running go lint..."

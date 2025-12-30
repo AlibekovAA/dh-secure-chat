@@ -9,6 +9,10 @@ import (
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 )
 
+type RefreshTokenTxManagerInterface interface {
+	WithTx(ctx context.Context, fn func(context.Context, RefreshTokenTx) error) error
+}
+
 type RefreshTokenTxManager struct {
 	pool *pgxpool.Pool
 }

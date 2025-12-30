@@ -19,7 +19,7 @@ type RefreshTokenRepository interface {
 	CountByUserID(ctx context.Context, userID string) (int, error)
 	DeleteOldestByUserID(ctx context.Context, userID string) error
 	DeleteExpired(ctx context.Context) (int64, error)
-	TxManager() *RefreshTokenTxManager
+	TxManager() RefreshTokenTxManagerInterface
 }
 
 type RefreshTokenTx interface {
@@ -41,7 +41,7 @@ func NewPgRefreshTokenRepository(pool *pgxpool.Pool) *PgRefreshTokenRepository {
 	}
 }
 
-func (r *PgRefreshTokenRepository) TxManager() *RefreshTokenTxManager {
+func (r *PgRefreshTokenRepository) TxManager() RefreshTokenTxManagerInterface {
 	return r.txMgr
 }
 
