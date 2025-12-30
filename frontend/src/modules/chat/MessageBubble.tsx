@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, memo } from 'react';
 import type { ChatMessage } from './useChatSession';
 import { FileMessage } from './FileMessage';
 import { VoiceMessage } from './VoiceMessage';
+import { VideoCircle } from './VideoCircle';
 import { MessageContextMenu } from './MessageContextMenu';
 import { EmojiPicker } from './EmojiPicker';
 
@@ -199,9 +200,11 @@ function MessageBubbleComponent({
                       ? message.replyTo.text
                       : message.replyTo.hasVoice
                         ? 'Голосовое сообщение'
-                        : message.replyTo.hasFile
-                          ? 'Файл'
-                          : 'Сообщение'}
+                        : message.replyTo.hasVideo
+                          ? 'Видео сообщение'
+                          : message.replyTo.hasFile
+                            ? 'Файл'
+                            : 'Сообщение'}
                 </p>
               </div>
             </button>
@@ -266,7 +269,15 @@ function MessageBubbleComponent({
                 } : undefined}
               />
             )}
-            {message.file && !message.voice && (
+            {message.video && (
+              <VideoCircle
+                blob={message.video.blob!}
+                filename={message.video.filename}
+                fileId={message.id}
+                isOwn={message.isOwn}
+              />
+            )}
+            {message.file && !message.voice && !message.video && (
               <FileMessage
                 filename={message.file.filename}
                 mimeType={message.file.mimeType}

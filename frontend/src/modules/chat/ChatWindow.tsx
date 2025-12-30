@@ -3,6 +3,7 @@ import { useChatSession, type ChatMessage } from './useChatSession';
 import type { UserSummary } from './api';
 import { FingerprintVerificationModal } from './FingerprintVerificationModal';
 import { VoiceRecorder } from './VoiceRecorder';
+import { VideoRecorder } from './VideoRecorder';
 import { MessageBubble } from './MessageBubble';
 import { TypingIndicator } from './TypingIndicator';
 import { FileAccessDialog, type FileAccessMode } from './FileAccessDialog';
@@ -589,6 +590,19 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
                   showToast('Голосовое сообщение отправлено', 'success');
                 } catch {
                   showToast('Не удалось отправить голосовое сообщение. Проверьте микрофон и попробуйте снова.', 'error');
+                }
+              }}
+              onError={(error) => showToast(error, 'error')}
+              disabled={!isSessionActive || isChatBlocked}
+            />
+            <VideoRecorder
+              onRecorded={async (file, duration) => {
+                if (!isSessionActive || isChatBlocked) return;
+                try {
+                  await sendFile(file, 'both', undefined, duration);
+                  showToast('Видео сообщение отправлено', 'success');
+                } catch {
+                  showToast('Не удалось отправить видео сообщение. Проверьте камеру и попробуйте снова.', 'error');
                 }
               }}
               onError={(error) => showToast(error, 'error')}

@@ -1,7 +1,9 @@
 import { VOICE_MIME_TYPES, VIDEO_MIME_TYPES } from './constants';
 
 export function extractDurationFromFilename(filename: string): number {
-  const match = filename.match(/voice-(\d+)s/);
+  const voiceMatch = filename.match(/voice-(\d+)s/);
+  const videoMatch = filename.match(/video-(\d+)s/);
+  const match = voiceMatch || videoMatch;
   const extracted = match ? parseInt(match[1], 10) : 0;
   return extracted > 0 ? extracted : 0;
 }

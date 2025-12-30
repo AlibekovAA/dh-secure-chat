@@ -32,7 +32,7 @@ import { useAckManager } from './hooks/useAckManager';
 import { useFileTransfer } from './hooks/useFileTransfer';
 import { useMessageHandler } from './hooks/useMessageHandlers';
 import { useIncomingMessageHandlers } from './hooks/useIncomingMessageHandlers';
-import { isVoiceFile, extractDurationFromFilename } from './utils';
+import { isVoiceFile, isVideoFile, extractDurationFromFilename } from './utils';
 
 export type ChatSessionState =
   | 'idle'
@@ -61,6 +61,13 @@ export type ChatMessage = {
     duration: number;
     blob?: Blob;
   };
+  video?: {
+    filename: string;
+    mimeType: string;
+    size: number;
+    duration: number;
+    blob?: Blob;
+  };
   timestamp: number;
   isOwn: boolean;
   isEdited?: boolean;
@@ -72,6 +79,7 @@ export type ChatMessage = {
     text?: string;
     hasFile?: boolean;
     hasVoice?: boolean;
+    hasVideo?: boolean;
     isOwn?: boolean;
     isDeleted?: boolean;
   };
@@ -503,6 +511,7 @@ export function useChatSession({
       file: File,
       accessMode: 'download_only' | 'view_only' | 'both' = 'both',
       voiceDuration?: number,
+      videoDuration?: number,
     ) => {
       if (
         !sessionKeyRef.current ||
@@ -553,10 +562,16 @@ export function useChatSession({
         }
 
         const isVoice = isVoiceFile(file.type || '');
+        const isVideo = !isVoice && isVideoFile(file.type || '');
         let mimeType =
-          file.type || (isVoice ? 'audio/webm' : 'application/octet-stream');
+          file.type ||
+          (isVoice
+            ? 'audio/webm'
+            : isVideo
+            ? 'video/webm'
+            : 'application/octet-stream');
 
-        if (isVoice && mimeType.includes(';')) {
+        if ((isVoice || isVideo) && mimeType.includes(';')) {
           mimeType = mimeType.split(';')[0].trim();
         }
 
@@ -605,13 +620,27 @@ export function useChatSession({
         const blobClone = new Blob([file], { type: mimeType });
         const extractedDuration = extractDurationFromFilename(file.name);
         const finalDuration =
-          voiceDuration !== undefined ? voiceDuration : extractedDuration;
+          voiceDuration !== undefined
+            ? voiceDuration
+            : videoDuration !== undefined
+            ? videoDuration
+            : extractedDuration;
 
         const newMessage: ChatMessage = {
           id: fileId,
           ...(isVoice
             ? {
                 voice: {
+                  filename: file.name,
+                  mimeType,
+                  size: file.size,
+                  duration: finalDuration,
+                  blob: blobClone,
+                },
+              }
+            : isVideo
+            ? {
+                video: {
                   filename: file.name,
                   mimeType,
                   size: file.size,

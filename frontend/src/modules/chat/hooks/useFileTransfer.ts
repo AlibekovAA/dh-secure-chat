@@ -3,7 +3,7 @@ import type { FileStartPayload } from '../../../shared/websocket/types';
 import { decryptFile } from '../../../shared/crypto/file-encryption';
 import type { SessionKey } from '../../../shared/crypto/session';
 import type { ChatMessage } from '../useChatSession';
-import { extractDurationFromFilename } from '../utils';
+import { extractDurationFromFilename, isVideoFile } from '../utils';
 import type { WSMessage } from '../../../shared/websocket/types';
 
 type FileBuffer = {
@@ -88,6 +88,7 @@ export function useFileTransfer({
 
         const isVoice =
           metadata.mime_type && metadata.mime_type.startsWith('audio/');
+        const isVideo = !isVoice && isVideoFile(metadata.mime_type || '');
         const extractedDuration = extractDurationFromFilename(
           metadata.filename,
         );
@@ -97,6 +98,16 @@ export function useFileTransfer({
           ...(isVoice
             ? {
                 voice: {
+                  filename: metadata.filename,
+                  mimeType,
+                  size: metadata.total_size,
+                  duration: extractedDuration > 0 ? extractedDuration : 0,
+                  blob,
+                },
+              }
+            : isVideo
+            ? {
+                video: {
                   filename: metadata.filename,
                   mimeType,
                   size: metadata.total_size,

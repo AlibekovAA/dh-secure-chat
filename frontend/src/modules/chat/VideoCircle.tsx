@@ -5,7 +5,7 @@ type Props = {
   blob: Blob;
   filename: string;
   fileId: string;
-  onClick: () => void;
+  onClick?: () => void;
   isOwn: boolean;
 };
 
@@ -19,24 +19,53 @@ export function VideoCircle({
   const [thumbnail, setThumbnail] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   const loadThumbnail = useCallback(async () => {
     if (!blob || thumbnail) return;
 
-    try {
-      setIsLoading(true);
-      setError(false);
-      const dataUrl = await generateVideoThumbnail(blob, fileId);
-      setThumbnail(dataUrl);
-    } catch (err) {
-      console.warn('Failed to generate video thumbnail:', err);
-      setError(true);
-    } finally {
-      setIsLoading(false);
+    const generateThumbnail = async () => {
+      try {
+        setIsLoading(true);
+        setError(false);
+        const dataUrl = await generateVideoThumbnail(blob, fileId);
+        setThumbnail(dataUrl);
+      } catch (err) {
+        console.warn('Failed to generate video thumbnail:', err);
+        setError(true);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if ('requestIdleCallback' in window) {
+      requestIdleCallback(generateThumbnail, { timeout: 500 });
+    } else {
+      setTimeout(generateThumbnail, 0);
     }
   }, [blob, fileId, thumbnail]);
+
+  useEffect(() => {
+    if (!blob || blob.size === 0) return;
+
+    let url: string | null = null;
+    try {
+      url = URL.createObjectURL(blob);
+      setVideoUrl(url);
+    } catch (err) {
+      console.error('Failed to create video URL:', err);
+    }
+
+    return () => {
+      if (url) {
+        URL.revokeObjectURL(url);
+      }
+    };
+  }, [blob]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -64,6 +93,49 @@ export function VideoCircle({
     };
   }, [loadThumbnail, thumbnail, error]);
 
+  const handlePlayClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (videoRef.current && videoUrl) {
+      if (videoRef.current.paused) {
+        videoRef.current.play().then(() => {
+          setIsPlaying(true);
+        }).catch((err) => {
+          console.error('Failed to play video:', err);
+          if (onClick) {
+            onClick();
+          }
+        });
+      } else {
+        videoRef.current.pause();
+        setIsPlaying(false);
+      }
+    } else if (onClick) {
+      onClick();
+    }
+  }, [onClick, videoUrl]);
+
+  const handleVideoEnded = useCallback(() => {
+    setIsPlaying(false);
+    if (videoRef.current) {
+      videoRef.current.currentTime = 0;
+    }
+  }, []);
+
+  const renderPlayButton = () => (
+    <div className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/20 transition-colors">
+      <div className="w-12 h-12 rounded-full bg-emerald-500/90 hover:bg-emerald-400 flex items-center justify-center shadow-lg shadow-emerald-900/50 transition-colors">
+        <svg
+          className="w-6 h-6 text-black ml-1"
+          fill="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path d="M8 5v14l11-7z" />
+        </svg>
+      </div>
+    </div>
+  );
+
   return (
     <div
       ref={containerRef}
@@ -72,7 +144,7 @@ export function VideoCircle({
     >
       <button
         type="button"
-        onClick={onClick}
+        onClick={handlePlayClick}
         className={`relative w-32 h-32 rounded-full overflow-hidden border-2 transition-all duration-200 ease-out ${
           isOwn
             ? 'border-emerald-500/60 hover:border-emerald-400/80'
@@ -81,25 +153,46 @@ export function VideoCircle({
         style={{ transform: 'translateZ(0)' }}
         aria-label={`Воспроизвести видео: ${filename}`}
       >
-        {thumbnail && !error ? (
+        {videoUrl ? (
+          <>
+            <video
+              ref={videoRef}
+              src={videoUrl}
+              className={`w-full h-full object-cover rounded-full ${isPlaying ? 'block' : 'hidden'}`}
+              playsInline
+              loop={false}
+              onEnded={handleVideoEnded}
+              onPause={() => setIsPlaying(false)}
+              onPlay={() => setIsPlaying(true)}
+              style={{ objectPosition: 'center' }}
+            />
+            {!isPlaying && (
+              <>
+                {thumbnail && !error ? (
+                  <img
+                    src={thumbnail}
+                    alt=""
+                    className="w-full h-full object-cover rounded-full"
+                    draggable={false}
+                    style={{ objectPosition: 'center' }}
+                  />
+                ) : (
+                  <div className="w-full h-full bg-emerald-900/20" />
+                )}
+                {renderPlayButton()}
+              </>
+            )}
+          </>
+        ) : thumbnail && !error ? (
           <>
             <img
               src={thumbnail}
               alt=""
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover rounded-full"
               draggable={false}
+              style={{ objectPosition: 'center' }}
             />
-            <div className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/20 transition-colors">
-              <div className="w-12 h-12 rounded-full bg-emerald-500/90 hover:bg-emerald-400 flex items-center justify-center shadow-lg shadow-emerald-900/50 transition-colors">
-                <svg
-                  className="w-6 h-6 text-black ml-1"
-                  fill="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path d="M8 5v14l11-7z" />
-                </svg>
-              </div>
-            </div>
+            {renderPlayButton()}
           </>
         ) : isLoading ? (
           <div className="w-full h-full flex items-center justify-center bg-emerald-900/20">
