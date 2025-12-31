@@ -24,7 +24,7 @@ COMPOSE_FILES_PROD = -f docker-compose.yml \
 	-f yaml/prometheus.yml \
 	-f yaml/grafana.yml
 
-.PHONY: clean help backend frontend go-fmt go-vet go-test go-test-auth go-test-auth-coverage go-lint format develop-up develop-up-build develop-down develop-down-volumes develop-restart develop-reup develop-rebuild prod-up prod-up-build prod-down prod-down-volumes prod-restart prod-reup prod-rebuild
+.PHONY: clean help backend frontend format go-test-auth go-test-auth-coverage develop-up develop-up-build develop-down develop-down-volumes develop-reup develop-rebuild prod-up prod-up-build prod-down prod-down-volumes prod-reup prod-rebuild
 
 develop-up:
 	@echo "Starting containers (DEVELOP mode - minimal)..."
@@ -42,11 +42,6 @@ develop-down:
 develop-down-volumes:
 	@echo "Stopping containers and removing volumes (DEVELOP mode)..."
 	$(DOCKER_COMPOSE) $(COMPOSE_FILES_DEVELOP) down -v
-	@echo "Done!"
-
-develop-restart:
-	@echo "Restarting containers (DEVELOP mode - keeps volumes and cache)..."
-	$(DOCKER_COMPOSE) $(COMPOSE_FILES_DEVELOP) restart
 	@echo "Done!"
 
 develop-reup:
@@ -77,11 +72,6 @@ prod-down:
 prod-down-volumes:
 	@echo "Stopping containers and removing volumes (PROD mode)..."
 	$(DOCKER_COMPOSE) $(COMPOSE_FILES_PROD) down -v
-	@echo "Done!"
-
-prod-restart:
-	@echo "Restarting containers (PROD mode - keeps volumes and cache)..."
-	$(DOCKER_COMPOSE) $(COMPOSE_FILES_PROD) restart
 	@echo "Done!"
 
 prod-reup:
@@ -134,7 +124,6 @@ help:
 	@echo "  develop-up-build     - Start containers with build"
 	@echo "  develop-down         - Stop containers (keeps volumes)"
 	@echo "  develop-down-volumes - Stop containers and remove volumes"
-	@echo "  develop-restart      - Restart containers (fastest, keeps everything)"
 	@echo "  develop-reup         - Stop + rebuild + start"
 	@echo "  develop-rebuild      - Full rebuild without cache"
 	@echo ""
@@ -143,7 +132,6 @@ help:
 	@echo "  prod-up-build     - Start containers with build"
 	@echo "  prod-down         - Stop containers (keeps volumes)"
 	@echo "  prod-down-volumes - Stop containers and remove volumes"
-	@echo "  prod-restart      - Restart containers (fastest, keeps everything)"
 	@echo "  prod-reup         - Stop + rebuild + start"
 	@echo "  prod-rebuild      - Full rebuild without cache"
 	@echo ""
@@ -151,12 +139,9 @@ help:
 	@echo "  clean        - Remove ALL Docker containers, images, and volumes"
 	@echo "  backend      - Run backend services locally without Docker"
 	@echo "  frontend     - Run frontend locally without Docker"
-	@echo "  go-fmt                - Run go fmt for all backend packages"
-	@echo "  go-vet                - Run go vet for all backend packages"
-	@echo "  go-test               - Run go test for all backend packages"
+	@echo "  format                - Run go fmt, go vet, and go lint"
 	@echo "  go-test-auth          - Run auth service tests"
 	@echo "  go-test-auth-coverage - Run auth service tests with HTML coverage report"
-	@echo "  format                - Run go-vet, go-fmt, and go-lint"
 
 backend:
 	cd backend && go run ./cmd/auth &
@@ -165,17 +150,13 @@ backend:
 frontend:
 	cd frontend && npm run dev
 
-go-fmt:
+format:
 	@echo "Running go fmt..."
 	cd backend && goimports -w .
-
-go-vet:
 	@echo "Running go vet..."
 	cd backend && go vet ./...
-
-go-test:
-	@echo "Running go test..."
-	cd backend && go test ./...
+	@echo "Running go lint..."
+	cd backend && golangci-lint run ./...
 
 go-test-auth:
 	@echo "Running auth service tests..."
@@ -186,9 +167,3 @@ go-test-auth-coverage:
 	cd backend && go test -v -coverprofile=coverage.out -coverpkg=./internal/auth/service ./test/auth/...
 	cd backend && go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report generated: backend/coverage.html"
-
-go-lint:
-	@echo "Running go lint..."
-	cd backend && golangci-lint run ./...
-
-format:  go-vet go-fmt go-lint

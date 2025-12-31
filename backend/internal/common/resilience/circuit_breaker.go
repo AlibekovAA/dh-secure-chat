@@ -2,8 +2,11 @@ package resilience
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"time"
+
+	pgx "github.com/jackc/pgx/v4"
 
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
@@ -108,7 +111,9 @@ func (cb *CircuitBreaker) CallWithFallback(ctx context.Context, fn func(context.
 
 	err := fn(callCtx)
 	if err != nil {
-		cb.recordFailure()
+		if !errors.Is(err, pgx.ErrNoRows) {
+			cb.recordFailure()
+		}
 		if fallback != nil {
 			if cb.log != nil {
 				cb.log.Infof("circuit breaker [%s]: operation failed, using fallback", cb.name)

@@ -45,10 +45,6 @@ const ERROR_MAPPINGS: ErrorMapping[] = [
     message: 'Поисковый запрос слишком длинный.',
   },
   {
-    pattern: /rate limit exceeded/i,
-    message: 'Превышен лимит запросов. Попробуйте позже.',
-  },
-  {
     pattern: /unauthorized|invalid token|token expired/i,
     message: 'Сессия истекла. Войдите снова.',
   },

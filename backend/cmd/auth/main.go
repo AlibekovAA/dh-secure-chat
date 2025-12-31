@@ -63,21 +63,8 @@ func main() {
 	mux.Handle("/", handler)
 	mux.Handle("/metrics", promhttp.Handler())
 
-	rateLimiter := commonhttp.NewStrictRateLimiter()
 	baseHandler := commonhttp.BuildBaseHandler("auth", app.Log, mux)
-
-	rateLimitMiddleware := func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			path := r.URL.Path
-			if path == "/health" || path == "/metrics" {
-				next.ServeHTTP(w, r)
-				return
-			}
-			rateLimiter.MiddlewareForPath(path)(next).ServeHTTP(w, r)
-		})
-	}
-
-	finalHandler := rateLimitMiddleware(baseHandler)
+	finalHandler := baseHandler
 
 	serverConfig := srv.DefaultServerConfig(app.Config.HTTPPort)
 	server := srv.NewServer(serverConfig, finalHandler)
@@ -86,6 +73,11 @@ func main() {
 		func(ctx context.Context) error {
 			app.Log.Infof("auth service: stopping cleanup goroutines")
 			cancel()
+			return nil
+		},
+		func(ctx context.Context) error {
+			app.Log.Infof("auth service: closing refresh token cache")
+			authService.CloseRefreshTokenCache()
 			return nil
 		},
 	}

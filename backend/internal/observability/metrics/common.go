@@ -31,14 +31,6 @@ var (
 		[]string{"service", "method", "path", "status"},
 	)
 
-	RateLimitBlocked = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "rate_limit_blocked_total",
-			Help: "Total number of requests blocked by rate limiter",
-		},
-		[]string{"path", "limiter_type"},
-	)
-
 	CircuitBreakerState = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "circuit_breaker_state",

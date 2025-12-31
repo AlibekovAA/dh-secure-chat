@@ -385,23 +385,6 @@
       }
     },
     {
-      "id": 17,
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 56},
-      "type": "timeseries",
-      "title": "Rate Limit Blocked Requests",
-      "targets": [{
-        "expr": "sum(rate(rate_limit_blocked_total[5m])) by (limiter_type)",
-        "legendFormat": "{{limiter_type}}",
-        "refId": "A"
-      }],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "reqps",
-          "min": 0
-        }
-      }
-    },
-    {
       "id": 18,
       "gridPos": {"h": 8, "w": 12, "x": 0, "y": 64},
       "type": "timeseries",

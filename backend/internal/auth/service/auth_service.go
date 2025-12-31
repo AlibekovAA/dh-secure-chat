@@ -32,6 +32,7 @@ type AuthService struct {
 	tokenIssuer         *TokenIssuer
 	refreshTokenRotator *RefreshTokenRotator
 	credentialValidator *CredentialValidator
+	refreshTokenCache   *RefreshTokenCache
 }
 
 type AuthServiceConfig struct {
@@ -65,6 +66,9 @@ func NewAuthService(deps AuthServiceDeps, config AuthServiceConfig) *AuthService
 	refreshTokenRotator := NewRefreshTokenRotator(deps.RefreshTokenRepo, dbCB, deps.IDGenerator, config.RefreshTokenTTL, config.MaxRefreshTokens, clk, deps.Log)
 	credentialValidator := NewCredentialValidator()
 
+	ctx := context.Background()
+	refreshTokenCache := NewRefreshTokenCache(ctx, clk, deps.Log)
+
 	return &AuthService{
 		repo:                deps.Repo,
 		identityService:     deps.IdentityService,
@@ -79,6 +83,7 @@ func NewAuthService(deps AuthServiceDeps, config AuthServiceConfig) *AuthService
 		tokenIssuer:         tokenIssuer,
 		refreshTokenRotator: refreshTokenRotator,
 		credentialValidator: credentialValidator,
+		refreshTokenCache:   refreshTokenCache,
 	}
 }
 
@@ -268,46 +273,84 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken strin
 
 	hash := HashRefreshToken(refreshToken)
 
-	txMgr := s.refreshTokenRepo.TxManager()
 	var stored authdomain.RefreshToken
 	var user userdomain.User
+	var cachedUserID string
+	var cacheHit bool
 
-	err := s.dbCircuitBreaker.Call(ctx, func(ctx context.Context) error {
-		return txMgr.WithTx(ctx, func(txCtx context.Context, tx authrepo.RefreshTokenTx) error {
-			var fetchErr error
-			stored, fetchErr = tx.FindByTokenHashForUpdate(txCtx, hash)
-			if fetchErr != nil {
-				return fetchErr
-			}
+	if cachedToken, cachedUID, found := s.refreshTokenCache.Get(hash); found {
+		if s.clock.Now().Before(cachedToken.ExpiresAt) {
+			stored = cachedToken
+			cachedUserID = cachedUID
+			cacheHit = true
+		} else {
 
-			if s.clock.Now().After(stored.ExpiresAt) {
-				s.log.WithFields(ctx, logger.Fields{
-					"user_id": stored.UserID,
-					"action":  "refresh_token_expired",
-				}).Warn("refresh token expired")
-				incrementRefreshTokensExpired()
-				if delErr := tx.DeleteByTokenHash(txCtx, hash); delErr != nil {
+			s.refreshTokenCache.Invalidate(hash)
+		}
+	}
+
+	txMgr := s.refreshTokenRepo.TxManager()
+	var err error
+
+	if !cacheHit {
+		err = s.dbCircuitBreaker.Call(ctx, func(ctx context.Context) error {
+			return txMgr.WithTx(ctx, func(txCtx context.Context, tx authrepo.RefreshTokenTx) error {
+				var fetchErr error
+				stored, fetchErr = tx.FindByTokenHashForUpdate(txCtx, hash)
+				if fetchErr != nil {
+					return fetchErr
+				}
+
+				if s.clock.Now().After(stored.ExpiresAt) {
 					s.log.WithFields(ctx, logger.Fields{
 						"user_id": stored.UserID,
-						"action":  "refresh_token_expired_delete_failed",
-					}).Warnf("failed to delete expired refresh token: %v", delErr)
+						"action":  "refresh_token_expired",
+					}).Warn("refresh token expired")
+					incrementRefreshTokensExpired()
+					if delErr := tx.DeleteByTokenHash(txCtx, hash); delErr != nil {
+						s.log.WithFields(ctx, logger.Fields{
+							"user_id": stored.UserID,
+							"action":  "refresh_token_expired_delete_failed",
+						}).Warnf("failed to delete expired refresh token: %v", delErr)
+					}
+					s.refreshTokenCache.Invalidate(hash)
+					return ErrRefreshTokenExpired
 				}
-				return ErrRefreshTokenExpired
-			}
+				s.refreshTokenCache.Set(hash, stored, stored.UserID)
+				cachedUserID = stored.UserID
 
-			var userFetchErr error
-			user, userFetchErr = s.repo.FindByID(txCtx, userdomain.ID(stored.UserID))
-			if userFetchErr != nil {
-				return userFetchErr
-			}
+				var userFetchErr error
+				user, userFetchErr = s.repo.FindByID(txCtx, userdomain.ID(stored.UserID))
+				if userFetchErr != nil {
+					return userFetchErr
+				}
 
-			if delErr := tx.DeleteByTokenHash(txCtx, hash); delErr != nil {
-				return delErr
-			}
+				if delErr := tx.DeleteByTokenHash(txCtx, hash); delErr != nil {
+					return delErr
+				}
 
-			return nil
+				return nil
+			})
 		})
-	})
+	} else {
+		err = s.dbCircuitBreaker.Call(ctx, func(ctx context.Context) error {
+			return txMgr.WithTx(ctx, func(txCtx context.Context, tx authrepo.RefreshTokenTx) error {
+				var userFetchErr error
+				user, userFetchErr = s.repo.FindByID(txCtx, userdomain.ID(cachedUserID))
+				if userFetchErr != nil {
+					return userFetchErr
+				}
+
+				if delErr := tx.DeleteByTokenHash(txCtx, hash); delErr != nil {
+					return delErr
+				}
+
+				return nil
+			})
+		})
+	}
+
+	s.refreshTokenCache.Invalidate(hash)
 	if err != nil {
 		if errors.Is(err, commonerrors.ErrCircuitOpen) {
 			s.log.WithFields(ctx, logger.Fields{
@@ -386,7 +429,11 @@ func (s *AuthService) RevokeRefreshToken(ctx context.Context, refreshToken strin
 	}
 
 	err = s.dbCircuitBreaker.Call(ctx, func(ctx context.Context) error {
-		return s.refreshTokenRepo.DeleteByTokenHash(ctx, hash)
+		err := s.refreshTokenRepo.DeleteByTokenHash(ctx, hash)
+		if err == nil {
+			s.refreshTokenCache.Invalidate(hash)
+		}
+		return err
 	})
 	if err != nil {
 		if errors.Is(err, authrepo.ErrRefreshTokenNotFound) {
@@ -514,4 +561,10 @@ func (s *AuthService) issueTokens(ctx context.Context, user userdomain.User) (st
 	}
 
 	return accessToken, refresh, nil
+}
+
+func (s *AuthService) CloseRefreshTokenCache() {
+	if s.refreshTokenCache != nil {
+		s.refreshTokenCache.Close()
+	}
 }

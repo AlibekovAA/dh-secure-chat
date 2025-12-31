@@ -20,6 +20,9 @@ const (
 	UserExistenceCacheTTL             = 5 * time.Minute
 	UserExistenceCacheCleanupInterval = 1 * time.Minute
 
+	RefreshTokenCacheTTL             = 1 * time.Minute
+	RefreshTokenCacheCleanupInterval = 30 * time.Second
+
 	FileTransferTimeout = 10 * time.Minute
 	IdempotencyTTL      = 5 * time.Minute
 
@@ -36,22 +39,20 @@ const (
 	LastSeenFlushEvery    = 500 * time.Millisecond
 	LastSeenUpdateTimeout = 3 * time.Second
 
-	RateLimitCleanupInterval = 5 * time.Minute
-
-	DBPoolMaxOpenConns    = 25
-	DBPoolMinOpenConns    = 5
+	DBPoolMaxOpenConns    = 300
+	DBPoolMinOpenConns    = 50
 	DBPoolConnMaxLifetime = 5 * time.Minute
 	DBPoolConnMaxIdleTime = 10 * time.Minute
 	DBPoolHealthCheck     = 1 * time.Minute
-	DBPoolConnectTimeout  = 5 * time.Second
+	DBPoolConnectTimeout  = 15 * time.Second
 	DBPoolMaxAttempts     = 10
 	DBPoolRetryDelay      = 1 * time.Second
 	DBPoolMetricsInterval = 30 * time.Second
-	DBQueryTimeout        = 5 * time.Second
+	DBQueryTimeout        = 30 * time.Second
 
-	ServerReadHeaderTimeout = 5 * time.Second
-	ServerReadTimeout       = 10 * time.Second
-	ServerWriteTimeout      = 10 * time.Second
+	ServerReadHeaderTimeout = 10 * time.Second
+	ServerReadTimeout       = 30 * time.Second
+	ServerWriteTimeout      = 30 * time.Second
 	ServerIdleTimeout       = 120 * time.Second
 
 	ShutdownTimeout = 30 * time.Second
@@ -62,12 +63,12 @@ const (
 	DefaultAuthHTTPPort = "8081"
 	DefaultChatHTTPPort = "8082"
 
-	DefaultCircuitBreakerThreshold = 5
-	DefaultCircuitBreakerTimeout   = 5 * time.Second
-	DefaultCircuitBreakerReset     = 30 * time.Second
+	DefaultCircuitBreakerThreshold = 500
+	DefaultCircuitBreakerTimeout   = 15 * time.Second
+	DefaultCircuitBreakerReset     = 10 * time.Second
 
-	DefaultAuthRequestTimeout      = 5 * time.Second
-	DefaultAccessTokenTTL          = 15 * time.Minute
+	DefaultAuthRequestTimeout      = 30 * time.Second
+	DefaultAccessTokenTTL          = 30 * time.Minute
 	DefaultRefreshTokenTTL         = 7 * 24 * time.Hour
 	DefaultMaxRefreshTokensPerUser = 5
 
@@ -82,19 +83,6 @@ const (
 	DefaultChatRequestTimeout      = 5 * time.Second
 	DefaultSearchTimeout           = 10 * time.Second
 	DefaultWebSocketMaxConnections = 10000
-
-	RateLimitLoginRequestsPerSecond    = 3.0
-	RateLimitLoginBurst                = 3
-	RateLimitRegisterRequestsPerSecond = 2.0
-	RateLimitRegisterBurst             = 1
-	RateLimitRefreshRequestsPerSecond  = 1.0
-	RateLimitRefreshBurst              = 3
-	RateLimitLogoutRequestsPerSecond   = 1.0
-	RateLimitLogoutBurst               = 2
-	RateLimitRevokeRequestsPerSecond   = 1.0
-	RateLimitRevokeBurst               = 2
-	RateLimitGeneralRequestsPerSecond  = 100.0
-	RateLimitGeneralBurst              = 100
 
 	DefaultSearchUsersLimit = 20
 
