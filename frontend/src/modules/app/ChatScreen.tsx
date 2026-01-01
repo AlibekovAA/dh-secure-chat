@@ -160,8 +160,8 @@ export function ChatScreen({
                   <div className="h-full" />
                 ) : (
                   <>
-                    <div className="flex-1 space-y-1 text-sm text-emerald-100 min-h-0">
-                      {paginatedResults.map(user => (
+                    <div className="flex-1 space-y-2 text-sm text-emerald-100 min-h-0 overflow-y-auto scrollbar-custom">
+                      {paginatedResults.map((user, index) => (
                         <button
                           key={user.id}
                           type="button"
@@ -169,10 +169,39 @@ export function ChatScreen({
                             setSelectedPeer(user);
                             onUserSelect(user);
                           }}
-                          className="w-full text-left rounded-md border border-emerald-700 px-3 py-2 bg-black/60 hover:bg-emerald-900/40 smooth-transition button-press hover:border-emerald-600 hover:glow-emerald-hover"
+                          className="w-full text-left rounded-lg border border-emerald-700/60 px-4 py-3 bg-black/60 hover:bg-emerald-900/50 smooth-transition button-press hover:border-emerald-500/80 hover:shadow-lg hover:shadow-emerald-500/10 hover:-translate-y-0.5 active:translate-y-0 group"
+                          style={{
+                            animation: `slideUp 0.3s ease-out ${index * 50}ms both`,
+                          }}
                         >
-                          <p className="font-medium text-emerald-300">{user.username}</p>
-                          <p className="text-[11px] text-emerald-500/80 break-all font-mono">{user.id}</p>
+                          <div className="flex items-center gap-3">
+                            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-emerald-900/40 border border-emerald-700/60 flex items-center justify-center text-emerald-400 font-semibold text-sm group-hover:bg-emerald-800/50 group-hover:border-emerald-500/60 smooth-transition">
+                              {user.username.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-emerald-300 group-hover:text-emerald-200 smooth-transition truncate">
+                                {user.username}
+                              </p>
+                              <p className="text-[11px] text-emerald-500/70 break-all font-mono mt-0.5 truncate">
+                                {user.id}
+                              </p>
+                            </div>
+                            <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 smooth-transition">
+                              <svg
+                                className="w-5 h-5 text-emerald-400"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M9 5l7 7-7 7"
+                                />
+                              </svg>
+                            </div>
+                          </div>
                         </button>
                       ))}
                     </div>

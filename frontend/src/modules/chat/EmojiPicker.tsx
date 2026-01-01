@@ -19,9 +19,12 @@ const EMOJI_LIST = [
   '💪',
 ];
 
-const PICKER_ESTIMATED_WIDTH = 220;
-const PICKER_ESTIMATED_HEIGHT = 120;
-const PAGE_SIZE = 4;
+import {
+  EMOJI_PICKER_ESTIMATED_HEIGHT,
+  EMOJI_PICKER_ESTIMATED_WIDTH,
+  EMOJI_PICKER_PADDING,
+  EMOJI_PICKER_PAGE_SIZE,
+} from './constants';
 
 type Props = {
   x: number;
@@ -35,7 +38,7 @@ export function EmojiPicker({ x, y, onSelect, onClose }: Props) {
 
   const initialPosition = useMemo(() => {
     const chatContainer = document.querySelector('.chat-scroll-area') as HTMLElement | null;
-    const padding = 10;
+    const padding = EMOJI_PICKER_PADDING;
 
     let adjustedX = x;
     let adjustedY = y;
@@ -43,15 +46,15 @@ export function EmojiPicker({ x, y, onSelect, onClose }: Props) {
     if (chatContainer) {
       const { width, height } = chatContainer.getBoundingClientRect();
 
-      if (adjustedX + PICKER_ESTIMATED_WIDTH > width - padding) {
-        adjustedX = width - PICKER_ESTIMATED_WIDTH - padding;
+      if (adjustedX + EMOJI_PICKER_ESTIMATED_WIDTH > width - padding) {
+        adjustedX = width - EMOJI_PICKER_ESTIMATED_WIDTH - padding;
       }
       if (adjustedX < padding) {
         adjustedX = padding;
       }
 
-      if (adjustedY + PICKER_ESTIMATED_HEIGHT > height - padding) {
-        adjustedY = height - PICKER_ESTIMATED_HEIGHT - padding;
+      if (adjustedY + EMOJI_PICKER_ESTIMATED_HEIGHT > height - padding) {
+        adjustedY = height - EMOJI_PICKER_ESTIMATED_HEIGHT - padding;
       }
       if (adjustedY < padding) {
         adjustedY = padding;
@@ -65,20 +68,20 @@ export function EmojiPicker({ x, y, onSelect, onClose }: Props) {
   const [startIndex, setStartIndex] = useState(0);
 
   const visibleEmojis = useMemo(
-    () => EMOJI_LIST.slice(startIndex, startIndex + PAGE_SIZE),
+    () => EMOJI_LIST.slice(startIndex, startIndex + EMOJI_PICKER_PAGE_SIZE),
     [startIndex],
   );
 
   const canPrev = startIndex > 0;
-  const canNext = startIndex + PAGE_SIZE < EMOJI_LIST.length;
+  const canNext = startIndex + EMOJI_PICKER_PAGE_SIZE < EMOJI_LIST.length;
 
   const handlePrev = useCallback(() => {
-    setStartIndex((prev) => Math.max(0, prev - PAGE_SIZE));
+    setStartIndex((prev) => Math.max(0, prev - EMOJI_PICKER_PAGE_SIZE));
   }, []);
 
   const handleNext = useCallback(() => {
     setStartIndex((prev) => {
-      const next = prev + PAGE_SIZE;
+      const next = prev + EMOJI_PICKER_PAGE_SIZE;
       if (next >= EMOJI_LIST.length) {
         return prev;
       }
@@ -91,7 +94,7 @@ export function EmojiPicker({ x, y, onSelect, onClose }: Props) {
 
     const pickerRect = pickerRef.current.getBoundingClientRect();
     const chatContainer = document.querySelector('.chat-scroll-area') as HTMLElement | null;
-    const padding = 10;
+    const padding = EMOJI_PICKER_PADDING;
 
     let adjustedX = x;
     let adjustedY = y;

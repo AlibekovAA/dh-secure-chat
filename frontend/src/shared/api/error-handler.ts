@@ -1,9 +1,35 @@
 export type ApiErrorResponse = {
   error: string;
+  code?: string;
+  details?: Record<string, unknown>;
+};
+
+export type AppError = {
+  message: string;
+  code?: string;
+  originalError?: unknown;
+  statusCode?: number;
+  isRetryable?: boolean;
 };
 
 export const UNAUTHORIZED_MESSAGE = 'unauthorized';
 export const SESSION_EXPIRED_ERROR = 'session_expired';
+
+export enum ErrorCode {
+  UNAUTHORIZED = 'UNAUTHORIZED',
+  SESSION_EXPIRED = 'SESSION_EXPIRED',
+  INVALID_CREDENTIALS = 'INVALID_CREDENTIALS',
+  USERNAME_TAKEN = 'USERNAME_TAKEN',
+  VALIDATION_ERROR = 'VALIDATION_ERROR',
+  NETWORK_ERROR = 'NETWORK_ERROR',
+  SERVICE_UNAVAILABLE = 'SERVICE_UNAVAILABLE',
+  FILE_TOO_LARGE = 'FILE_TOO_LARGE',
+  USER_NOT_FOUND = 'USER_NOT_FOUND',
+  IDENTITY_KEY_NOT_FOUND = 'IDENTITY_KEY_NOT_FOUND',
+  UNKNOWN_ERROR = 'UNKNOWN_ERROR',
+}
+
+const HTTP_SERVER_ERROR_THRESHOLD = 500;
 
 export type ErrorMapping = {
   pattern: RegExp | string;
@@ -82,96 +108,141 @@ const ERROR_MAPPINGS: ErrorMapping[] = [
   },
 ];
 
+export function parseError(error: unknown): AppError {
+  if (!error) {
+    return {
+      message: 'Произошла ошибка. Попробуйте ещё раз.',
+      code: ErrorCode.UNKNOWN_ERROR,
+    };
+  }
+
+  if (error instanceof Error) {
+    const appError: AppError = {
+      message: error.message,
+      originalError: error,
+      code: ErrorCode.UNKNOWN_ERROR,
+    };
+
+    if ('statusCode' in error) {
+      appError.statusCode = error.statusCode as number;
+    }
+
+    return appError;
+  }
+
+  if (typeof error === 'string') {
+    return {
+      message: error,
+      code: ErrorCode.UNKNOWN_ERROR,
+    };
+  }
+
+  if (typeof error === 'object' && error !== null && 'error' in error) {
+    const apiError = error as ApiErrorResponse;
+    const appError: AppError = {
+      message: apiError.error || 'Произошла ошибка. Попробуйте ещё раз.',
+      code: apiError.code || ErrorCode.UNKNOWN_ERROR,
+      originalError: error,
+    };
+
+    if ('statusCode' in error) {
+      appError.statusCode = error.statusCode as number;
+    }
+
+    if (apiError.code) {
+      appError.code = apiError.code as ErrorCode;
+    }
+
+    const HTTP_SERVER_ERROR_THRESHOLD = 500;
+    if (
+      appError.statusCode &&
+      appError.statusCode >= HTTP_SERVER_ERROR_THRESHOLD
+    ) {
+      appError.isRetryable = true;
+    }
+
+    return appError;
+  }
+
+  return {
+    message: 'Произошла ошибка. Попробуйте ещё раз.',
+    code: ErrorCode.UNKNOWN_ERROR,
+    originalError: error,
+  };
+}
+
 export function getFriendlyErrorMessage(
   error: unknown,
   defaultMessage = 'Произошла ошибка. Попробуйте ещё раз.',
 ): string {
-  if (!error) {
-    return defaultMessage;
-  }
-
-  let errorMessage = '';
-  if (error instanceof Error) {
-    errorMessage = error.message;
-  } else if (typeof error === 'string') {
-    errorMessage = error;
-  } else if (
-    typeof error === 'object' &&
-    error !== null &&
-    'error' in error &&
-    typeof error.error === 'string'
-  ) {
-    errorMessage = error.error;
-  } else {
-    return defaultMessage;
-  }
-
-  const normalizedMessage = errorMessage.toLowerCase().trim();
+  const appError = parseError(error);
+  const errorMessage = appError.message.toLowerCase().trim();
 
   for (const mapping of ERROR_MAPPINGS) {
     if (typeof mapping.pattern === 'string') {
-      if (normalizedMessage.includes(mapping.pattern.toLowerCase())) {
+      if (errorMessage.includes(mapping.pattern.toLowerCase())) {
         return mapping.message;
       }
     } else {
-      if (mapping.pattern.test(errorMessage)) {
+      if (mapping.pattern.test(appError.message)) {
         return mapping.message;
       }
     }
   }
 
-  return errorMessage || defaultMessage;
+  return appError.message || defaultMessage;
 }
 
 export function isUnauthorizedError(error: unknown): boolean {
-  if (!error) {
-    return false;
-  }
-
-  let errorMessage = '';
-  if (error instanceof Error) {
-    errorMessage = error.message;
-  } else if (typeof error === 'string') {
-    errorMessage = error;
-  } else {
-    return false;
-  }
-
-  const normalizedMessage = errorMessage.toLowerCase().trim();
+  const appError = parseError(error);
   return (
-    normalizedMessage.includes(UNAUTHORIZED_MESSAGE) ||
-    normalizedMessage === SESSION_EXPIRED_ERROR ||
-    normalizedMessage.includes('invalid token') ||
-    normalizedMessage.includes('token expired')
+    appError.code === ErrorCode.UNAUTHORIZED ||
+    appError.code === ErrorCode.SESSION_EXPIRED ||
+    appError.statusCode === 401 ||
+    appError.message.toLowerCase().includes(UNAUTHORIZED_MESSAGE) ||
+    appError.message.toLowerCase().includes('invalid token') ||
+    appError.message.toLowerCase().includes('token expired')
   );
 }
 
 export function isSessionExpiredError(error: unknown): boolean {
-  if (!error) {
-    return false;
-  }
-
-  let errorMessage = '';
-  if (error instanceof Error) {
-    errorMessage = error.message;
-  } else if (typeof error === 'string') {
-    errorMessage = error;
-  } else {
-    return false;
-  }
-
-  const normalizedMessage = errorMessage.toLowerCase().trim();
-  return normalizedMessage === SESSION_EXPIRED_ERROR;
+  const appError = parseError(error);
+  return (
+    appError.code === ErrorCode.SESSION_EXPIRED ||
+    appError.message.toLowerCase() === SESSION_EXPIRED_ERROR
+  );
 }
 
-export async function parseApiError(response: Response): Promise<string> {
+export async function parseApiError(response: Response): Promise<AppError> {
+  const appError: AppError = {
+    message: `Ошибка ${response.status}: ${response.statusText}`,
+    statusCode: response.status,
+    code: ErrorCode.UNKNOWN_ERROR,
+    isRetryable: response.status >= HTTP_SERVER_ERROR_THRESHOLD,
+  };
+
   try {
     const contentType = response.headers.get('content-type');
     if (contentType && contentType.includes('application/json')) {
       const data = (await response.json()) as ApiErrorResponse;
-      return data.error || `Ошибка ${response.status}: ${response.statusText}`;
+      appError.message = data.error || appError.message;
+      if (data.code) {
+        appError.code = data.code as ErrorCode;
+      }
+      if (data.details) {
+        appError.originalError = data.details;
+      }
     }
-  } catch {}
+  } catch {
+    // Ignore parsing errors
+  }
 
-  return `Ошибка ${response.status}: ${response.statusText}`;
+  if (response.status === 401) {
+    appError.code = ErrorCode.UNAUTHORIZED;
+  } else if (response.status === 503 || response.status === 502) {
+    appError.code = ErrorCode.SERVICE_UNAVAILABLE;
+    appError.isRetryable = true;
+  }
+
+  return appError;
 }

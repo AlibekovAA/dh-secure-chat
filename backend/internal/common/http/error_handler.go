@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/observability/metrics"
@@ -100,10 +101,16 @@ func HandleError(w http.ResponseWriter, r *http.Request, err error, log *logger.
 }
 
 func getTraceIDFromContext(ctx context.Context) string {
-	type contextKey string
-	const traceIDKey contextKey = "trace_id"
-	if traceID, ok := ctx.Value(traceIDKey).(string); ok && traceID != "" {
-		return traceID
+	if ctx == nil {
+		return ""
 	}
-	return ""
+	val := ctx.Value(constants.TraceIDKey)
+	if val == nil {
+		return ""
+	}
+	traceID, ok := val.(string)
+	if !ok || traceID == "" {
+		return ""
+	}
+	return traceID
 }

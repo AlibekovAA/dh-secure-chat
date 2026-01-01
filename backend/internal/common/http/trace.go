@@ -5,11 +5,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"net/http"
+
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 )
-
-type contextKey string
-
-const traceIDKey contextKey = "trace_id"
 
 const traceIDHeader = "X-Trace-ID"
 
@@ -22,7 +20,7 @@ func TraceIDMiddleware(next http.Handler) http.Handler {
 
 		w.Header().Set(traceIDHeader, traceID)
 
-		ctx := context.WithValue(r.Context(), traceIDKey, traceID)
+		ctx := context.WithValue(r.Context(), constants.TraceIDKey, traceID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

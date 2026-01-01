@@ -72,13 +72,11 @@ func NewPoolWithConfig(ctx context.Context, log *logger.Logger, databaseURL stri
 
 		if attempt == cfg.MaxAttempts {
 			log.Fatalf("failed to connect to database after %d attempts: %v", cfg.MaxAttempts, err)
-			return nil
 		}
 
 		select {
 		case <-ctx.Done():
 			log.Fatalf("database connection interrupted: %v", ctx.Err())
-			return nil
 		case <-time.After(cfg.RetryDelay):
 		}
 	}

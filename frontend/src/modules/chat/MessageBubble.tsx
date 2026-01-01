@@ -5,6 +5,7 @@ import { VoiceMessage } from './VoiceMessage';
 import { VideoCircle } from './VideoCircle';
 import { MessageContextMenu } from './MessageContextMenu';
 import { EmojiPicker } from './EmojiPicker';
+import { MESSAGE_READ_INTERSECTION_THRESHOLD } from './constants';
 
 type Props = {
   message: ChatMessage;
@@ -119,7 +120,7 @@ function MessageBubbleComponent({
           }
         });
       },
-      { threshold: 0.5 },
+      { threshold: MESSAGE_READ_INTERSECTION_THRESHOLD },
     );
 
     observer.observe(messageRef.current);

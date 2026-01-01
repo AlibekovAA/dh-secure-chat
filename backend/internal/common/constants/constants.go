@@ -39,8 +39,8 @@ const (
 	LastSeenFlushEvery    = 500 * time.Millisecond
 	LastSeenUpdateTimeout = 3 * time.Second
 
-	DBPoolMaxOpenConns    = 300
-	DBPoolMinOpenConns    = 50
+	DBPoolMaxOpenConns    = 50
+	DBPoolMinOpenConns    = 10
 	DBPoolConnMaxLifetime = 5 * time.Minute
 	DBPoolConnMaxIdleTime = 10 * time.Minute
 	DBPoolHealthCheck     = 1 * time.Minute
@@ -93,3 +93,7 @@ const (
 	LoggerMaxBackups = 3
 	LoggerMaxAge     = 28
 )
+
+type TraceIDKeyType string
+
+const TraceIDKey TraceIDKeyType = "trace_id"

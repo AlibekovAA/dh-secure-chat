@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useState, useMemo, useRef, useEffect } from "react";
 import { login, register } from "./api";
 import { useToast } from "../../shared/ui/ToastProvider";
 import { getFriendlyErrorMessage } from "../../shared/api/error-handler";
@@ -10,9 +10,44 @@ import {
 
 type Mode = "login" | "register";
 
+type PasswordStrength = "weak" | "medium" | "strong" | "very-strong";
+
 type Props = {
   onAuthenticated(token: string): void;
 };
+
+function calculatePasswordStrength(password: string): { strength: PasswordStrength; score: number; feedback: string[] } {
+  if (!password) {
+    return { strength: "weak", score: 0, feedback: [] };
+  }
+
+  let score = 0;
+  const feedback: string[] = [];
+
+  if (password.length >= 8) score += 1;
+  else feedback.push("Минимум 8 символов");
+
+  if (password.length >= 12) score += 1;
+
+  if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score += 1;
+  else if (/[a-zA-Z]/.test(password)) feedback.push("Добавьте заглавные буквы");
+
+  if (/\d/.test(password)) score += 1;
+  else feedback.push("Добавьте цифры");
+
+  if (/[^a-zA-Z0-9]/.test(password)) score += 1;
+  else feedback.push("Добавьте спецсимволы (!@#$%...)");
+
+  if (password.length >= 16) score += 1;
+
+  let strength: PasswordStrength;
+  if (score <= 2) strength = "weak";
+  else if (score === 3) strength = "medium";
+  else if (score === 4) strength = "strong";
+  else strength = "very-strong";
+
+  return { strength, score, feedback };
+}
 
 export function AuthForm({ onAuthenticated }: Props) {
   const { showToast } = useToast();
@@ -23,6 +58,13 @@ export function AuthForm({ onAuthenticated }: Props) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const usernameInputRef = useRef<HTMLInputElement>(null);
+
+  const passwordStrength = useMemo(() => calculatePasswordStrength(password), [password]);
+
+  useEffect(() => {
+    usernameInputRef.current?.focus();
+  }, [mode]);
 
   const switchMode = (next: Mode, resetFields: boolean) => {
     setMode(next);
@@ -117,6 +159,7 @@ export function AuthForm({ onAuthenticated }: Props) {
         <div className="space-y-1">
           <label className="block text-sm text-emerald-300">Имя пользователя</label>
           <input
+            ref={usernameInputRef}
             type="text"
             value={username}
             onChange={event => setUsername(event.target.value)}
@@ -124,6 +167,17 @@ export function AuthForm({ onAuthenticated }: Props) {
             autoComplete="username"
             disabled={submitting}
           />
+          {mode === "register" && username && (
+            <p className="text-xs text-emerald-500/70">
+              {username.length < 3
+                ? "Минимум 3 символа"
+                : username.length > 32
+                  ? "Максимум 32 символа"
+                  : /^[a-zA-Z0-9_-]+$/.test(username)
+                    ? "✓ Корректное имя"
+                    : "Только буквы, цифры, _ и -"}
+            </p>
+          )}
         </div>
 
         <div className="space-y-1">
@@ -145,9 +199,62 @@ export function AuthForm({ onAuthenticated }: Props) {
               {showPassword ? "Скрыть" : "Показать"}
             </button>
           </div>
+          {mode === "register" && password && (
+            <div className="space-y-1.5">
+              <div className="flex gap-1 h-1.5">
+                {[1, 2, 3, 4].map((level) => {
+                  const isActive =
+                    (passwordStrength.strength === "weak" && level <= 1) ||
+                    (passwordStrength.strength === "medium" && level <= 2) ||
+                    (passwordStrength.strength === "strong" && level <= 3) ||
+                    (passwordStrength.strength === "very-strong" && level <= 4);
+                  const colorClass =
+                    passwordStrength.strength === "weak"
+                      ? "bg-red-500"
+                      : passwordStrength.strength === "medium"
+                        ? "bg-yellow-500"
+                        : passwordStrength.strength === "strong"
+                          ? "bg-emerald-400"
+                          : "bg-emerald-500";
+                  return (
+                    <div
+                      key={level}
+                      className={`flex-1 rounded-full transition-all duration-300 ${
+                        isActive ? colorClass : "bg-emerald-900/30"
+                      }`}
+                    />
+                  );
+                })}
+              </div>
+              <div className="flex items-center justify-between">
+                <p className={`text-xs font-medium ${
+                  passwordStrength.strength === "weak"
+                    ? "text-red-400"
+                    : passwordStrength.strength === "medium"
+                      ? "text-yellow-400"
+                      : passwordStrength.strength === "strong"
+                        ? "text-emerald-400"
+                        : "text-emerald-300"
+                }`}>
+                  {passwordStrength.strength === "weak"
+                    ? "Слабый"
+                    : passwordStrength.strength === "medium"
+                      ? "Средний"
+                      : passwordStrength.strength === "strong"
+                        ? "Сильный"
+                        : "Очень сильный"}
+                </p>
+                {passwordStrength.feedback.length > 0 && (
+                  <p className="text-xs text-emerald-500/70">
+                    {passwordStrength.feedback[0]}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
           {mode === "register" && (
-            <p className="text-xs text-emerald-500/80">
-              Восстановление пароля не предусмотрено. Сохраните пароль в надежном месте.
+            <p className="text-xs text-emerald-500/70">
+              Восстановление пароля невозможно. Сохраните пароль в надёжном месте.
             </p>
           )}
         </div>
@@ -160,7 +267,13 @@ export function AuthForm({ onAuthenticated }: Props) {
                 type={showConfirmPassword ? "text" : "password"}
                 value={confirmPassword}
                 onChange={event => setConfirmPassword(event.target.value)}
-                className="w-full rounded-md bg-black border border-emerald-700 pr-16 px-3 py-2 text-sm text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500"
+                className={`w-full rounded-md bg-black border pr-16 px-3 py-2 text-sm text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500 ${
+                  confirmPassword && password !== confirmPassword
+                    ? "border-red-500/60 focus:ring-red-500"
+                    : confirmPassword && password === confirmPassword
+                      ? "border-emerald-500/60"
+                      : "border-emerald-700"
+                }`}
                 autoComplete="new-password"
                 disabled={submitting}
               />
@@ -172,6 +285,15 @@ export function AuthForm({ onAuthenticated }: Props) {
                 {showConfirmPassword ? "Скрыть" : "Показать"}
               </button>
             </div>
+            {confirmPassword && (
+              <p className={`text-xs ${
+                password === confirmPassword
+                  ? "text-emerald-400"
+                  : "text-red-400"
+              }`}>
+                {password === confirmPassword ? "✓ Пароли совпадают" : "✗ Пароли не совпадают"}
+              </p>
+            )}
           </div>
         )}
 

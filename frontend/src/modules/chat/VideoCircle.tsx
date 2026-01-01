@@ -1,5 +1,10 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { generateVideoThumbnail } from './video-thumbnail';
+import {
+  VIDEO_THUMBNAIL_INTERSECTION_THRESHOLD,
+  VIDEO_THUMBNAIL_REQUEST_IDLE_TIMEOUT_MS,
+  VIDEO_THUMBNAIL_ROOT_MARGIN,
+} from './constants';
 
 type Props = {
   blob: Blob;
@@ -43,7 +48,7 @@ export function VideoCircle({
     };
 
     if ('requestIdleCallback' in window) {
-      requestIdleCallback(generateThumbnail, { timeout: 500 });
+      requestIdleCallback(generateThumbnail, { timeout: VIDEO_THUMBNAIL_REQUEST_IDLE_TIMEOUT_MS });
     } else {
       setTimeout(generateThumbnail, 0);
     }
@@ -79,8 +84,8 @@ export function VideoCircle({
         });
       },
       {
-        rootMargin: '50px',
-        threshold: 0.1,
+        rootMargin: VIDEO_THUMBNAIL_ROOT_MARGIN,
+        threshold: VIDEO_THUMBNAIL_INTERSECTION_THRESHOLD,
       },
     );
 

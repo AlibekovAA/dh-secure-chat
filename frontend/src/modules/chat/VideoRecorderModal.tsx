@@ -1,6 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { checkMediaRecorderSupport } from '../../shared/browser-support';
-import { MAX_FILE_SIZE } from './constants';
+import {
+  MAX_FILE_SIZE,
+  VIDEO_RECORDER_CHECK_INTERVAL_MS,
+  VIDEO_RECORDER_DURATION_UPDATE_DELAY_MS,
+  VIDEO_RECORDER_DURATION_UPDATE_INTERVAL_MS,
+  VIDEO_RECORDER_TIMESLICE_MS,
+} from './constants';
 
 type Props = {
   onRecorded: (file: File, duration: number) => void;
@@ -77,7 +83,7 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
                 } catch {
                 }
               }
-            }, 100);
+            }, VIDEO_RECORDER_DURATION_UPDATE_DELAY_MS);
           }
         }
 
@@ -114,7 +120,7 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
       }
     };
 
-    const interval = setInterval(checkVideo, 500);
+    const interval = setInterval(checkVideo, VIDEO_RECORDER_CHECK_INTERVAL_MS);
 
     return () => {
       clearInterval(interval);
@@ -206,7 +212,7 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
         onRecorded(file, finalDuration);
       };
 
-      mediaRecorder.start(1000);
+      mediaRecorder.start(VIDEO_RECORDER_TIMESLICE_MS);
       setIsRecording(true);
       setDuration(0);
       startTimeRef.current = Date.now();
@@ -224,7 +230,7 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
       durationTimerRef.current = window.setInterval(() => {
         const currentDuration = Math.floor((Date.now() - startTimeRef.current) / 1000);
         setDuration(currentDuration);
-      }, 100);
+      }, VIDEO_RECORDER_DURATION_UPDATE_INTERVAL_MS);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Не удалось начать запись видео';

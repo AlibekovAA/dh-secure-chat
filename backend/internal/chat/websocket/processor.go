@@ -44,6 +44,11 @@ func NewMessageProcessor(workers int, router MessageRouter, log *logger.Logger, 
 }
 
 func (p *MessageProcessor) worker() {
+	defer func() {
+		if r := recover(); r != nil {
+			p.log.Errorf("websocket message processor worker panic: %v", r)
+		}
+	}()
 	for task := range p.queue {
 		metrics.ChatWebSocketMessageProcessorQueueSize.Set(float64(len(p.queue)))
 		p.process(task.ctx, task.client, task.msg)

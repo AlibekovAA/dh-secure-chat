@@ -95,6 +95,12 @@ func (c *Client) Close() {
 
 func (c *Client) readPump() {
 	defer func() {
+		if r := recover(); r != nil {
+			c.log.WithFields(c.ctx, logger.Fields{
+				"user_id": c.userID,
+				"action":  "ws_read_pump_panic",
+			}).Errorf("websocket readPump panic: %v", r)
+		}
 		if c.authenticated {
 			c.hub.Unregister(c)
 		}
@@ -120,7 +126,27 @@ func (c *Client) readPump() {
 		default:
 		}
 
-		_, messageBytes, err := c.conn.ReadMessage()
+		type readResult struct {
+			messageType int
+			message     []byte
+			err         error
+		}
+
+		readChan := make(chan readResult, 1)
+		go func() {
+			msgType, msgBytes, err := c.conn.ReadMessage()
+			readChan <- readResult{messageType: msgType, message: msgBytes, err: err}
+		}()
+
+		var result readResult
+		select {
+		case <-c.ctx.Done():
+			return
+		case result = <-readChan:
+		}
+
+		messageBytes := result.message
+		err := result.err
 		if err != nil {
 			if gorillaWS.IsUnexpectedCloseError(err, gorillaWS.CloseGoingAway, gorillaWS.CloseAbnormalClosure) {
 				if c.authenticated {
@@ -245,6 +271,12 @@ func (c *Client) readPump() {
 func (c *Client) writePump() {
 	ticker := time.NewTicker(c.pingPeriod)
 	defer func() {
+		if r := recover(); r != nil {
+			c.log.WithFields(c.ctx, logger.Fields{
+				"user_id": c.userID,
+				"action":  "ws_write_pump_panic",
+			}).Errorf("websocket writePump panic: %v", r)
+		}
 		ticker.Stop()
 		c.conn.Close()
 	}()

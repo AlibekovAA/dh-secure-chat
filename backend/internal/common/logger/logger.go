@@ -2,6 +2,7 @@ package logger
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -9,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -69,7 +69,7 @@ type Logger struct {
 func New(logDir, serviceName, level string) (*Logger, error) {
 	l := &Logger{
 		level:       INFO,
-		out:         log.New(os.Stderr, "", log.LstdFlags|log.Lshortfile),
+		out:         log.New(os.Stderr, "", 0),
 		serviceName: "",
 		sampler:     rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
@@ -105,7 +105,7 @@ func (l *Logger) initialize(logDir, serviceName, level string) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	l.out = log.New(multiWriter, "", log.LstdFlags)
+	l.out = log.New(multiWriter, "", 0)
 	l.level = parseLevel(level)
 	l.serviceName = serviceName
 	l.sampler = rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -131,41 +131,66 @@ func (l *Logger) logWithFields(level LogLevel, ctx context.Context, msg string, 
 		return
 	}
 
-	prefix := levelNames[level]
+	l.logJSON(level, ctx, msg, fields, service)
+}
+
+func (l *Logger) logJSON(level LogLevel, ctx context.Context, msg string, fields Fields, service string) {
+	logEntry := map[string]interface{}{
+		"timestamp": time.Now().UTC().Format(time.RFC3339Nano),
+		"level":     levelNames[level],
+		"message":   msg,
+	}
+
 	if service != "" {
-		prefix = fmt.Sprintf("[%s] [%s]", prefix, service)
-	} else {
-		prefix = fmt.Sprintf("[%s]", prefix)
+		logEntry["service"] = service
 	}
 
-	var fieldParts []string
-
-	if ctx != nil {
-		type contextKey string
-		const traceIDKey contextKey = "trace_id"
-		if traceID, ok := ctx.Value(traceIDKey).(string); ok && traceID != "" {
-			fieldParts = append(fieldParts, fmt.Sprintf("trace_id=%s", traceID))
-		}
-	}
-
-	if len(fields) > 0 {
-		keys := make([]string, 0, len(fields))
-		for k := range fields {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-
-		for _, k := range keys {
-			fieldParts = append(fieldParts, fmt.Sprintf("%s=%v", k, fields[k]))
-		}
-	}
-
-	if len(fieldParts) > 0 {
-		prefix = fmt.Sprintf("%s [%s]", prefix, strings.Join(fieldParts, " "))
+	traceID := getTraceIDFromContext(ctx)
+	if traceID != "" {
+		logEntry["trace_id"] = traceID
 	}
 
 	file, line := l.getCallerInfo()
-	_ = l.out.Output(0, fmt.Sprintf("%s %s:%d %s", prefix, file, line, msg))
+	logEntry["file"] = file
+	logEntry["line"] = line
+
+	if len(fields) > 0 {
+		for k, v := range fields {
+			logEntry[k] = v
+		}
+	}
+
+	jsonBytes, err := json.Marshal(logEntry)
+	if err != nil {
+		fallbackEntry := map[string]interface{}{
+			"timestamp": time.Now().UTC().Format(time.RFC3339Nano),
+			"level":     "ERROR",
+			"message":   fmt.Sprintf("failed to marshal log entry: %v", err),
+		}
+		fallbackBytes, _ := json.Marshal(fallbackEntry)
+		_ = l.out.Output(0, string(fallbackBytes))
+		return
+	}
+
+	_ = l.out.Output(0, string(jsonBytes))
+}
+
+func getTraceIDFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+
+	val := ctx.Value(constants.TraceIDKey)
+	if val == nil {
+		return ""
+	}
+
+	traceID, ok := val.(string)
+	if !ok || traceID == "" {
+		return ""
+	}
+
+	return traceID
 }
 
 func (l *Logger) Debug(msg string) { l.log(DEBUG, msg) }
