@@ -27,7 +27,12 @@ import {
 } from '../../shared/crypto/file-encryption';
 import { getIdentityKey } from './api';
 import type { SessionKey } from '../../shared/crypto/session';
-import { MAX_FILE_SIZE, MAX_MESSAGE_LENGTH, MAX_VOICE_SIZE } from './constants';
+import {
+  MAX_FILE_SIZE,
+  MAX_MESSAGE_LENGTH,
+  MAX_VOICE_SIZE,
+  EDIT_TIMEOUT_MS,
+} from '../../shared/constants';
 import { useAckManager } from './hooks/useAckManager';
 import { useFileTransfer } from './hooks/useFileTransfer';
 import { useMessageHandler } from './hooks/useMessageHandlers';
@@ -861,7 +866,7 @@ export function useChatSession({
       if (!message || !message.isOwn || !message.text) return;
 
       const timeSinceSent = Date.now() - message.timestamp;
-      const EDIT_TIMEOUT = 15 * 60 * 1000;
+      const EDIT_TIMEOUT = EDIT_TIMEOUT_MS;
       if (timeSinceSent > EDIT_TIMEOUT) {
         setError(
           'Редактирование доступно только в течение 15 минут после отправки.',

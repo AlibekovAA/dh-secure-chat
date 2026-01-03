@@ -3,6 +3,7 @@ package websocket
 import (
 	"strings"
 
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 )
 
@@ -69,7 +70,7 @@ func (v *DefaultValidator) ValidateFileStart(p FileStartPayload) error {
 		return commonerrors.ErrInvalidFileSize
 	}
 
-	if p.TotalChunks <= 0 || p.TotalChunks > 1000 {
+	if p.TotalChunks <= 0 || p.TotalChunks > constants.MaxFileChunks {
 		return commonerrors.ErrInvalidTotalChunks
 	}
 

@@ -4,9 +4,7 @@ import {
   encryptFileWithWorker,
   decryptFileWithWorker,
 } from './file-encryption-worker';
-import { FILE_CHUNK_SIZE } from './constants';
-
-const WORKER_THRESHOLD = 5 * 1024 * 1024;
+import { FILE_CHUNK_SIZE, WORKER_THRESHOLD } from '../constants';
 
 export interface EncryptedChunk {
   ciphertext: string;

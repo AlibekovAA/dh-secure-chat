@@ -1,3 +1,8 @@
+import {
+  VERIFIED_PEERS_STORAGE,
+  FINGERPRINT_HISTORY_STORAGE,
+} from '../constants';
+
 export function normalizeFingerprint(fingerprint: string): string {
   return fingerprint.replace(/[^0-9a-fA-F]/g, '').toLowerCase();
 }
@@ -39,9 +44,6 @@ export function fingerprintToEmojis(fingerprint: string): string {
 
   return result.join(' ');
 }
-
-const VERIFIED_PEERS_STORAGE = 'verified_peers';
-const FINGERPRINT_HISTORY_STORAGE = 'fingerprint_history';
 
 interface FingerprintHistory {
   fingerprint: string;

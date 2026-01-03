@@ -4,7 +4,7 @@ import {
   VIDEO_THUMBNAIL_INTERSECTION_THRESHOLD,
   VIDEO_THUMBNAIL_REQUEST_IDLE_TIMEOUT_MS,
   VIDEO_THUMBNAIL_ROOT_MARGIN,
-} from './constants';
+} from '../../shared/constants';
 
 type Props = {
   blob: Blob;

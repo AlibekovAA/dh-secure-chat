@@ -1,6 +1,7 @@
 import { useEffect, useState, type KeyboardEvent } from "react";
 import type { UserSummary } from "../chat/api";
 import { ChatWindow } from "../chat/ChatWindow";
+import { RESULTS_PER_PAGE } from '../../shared/constants';
 
 type Profile = {
   id: string;
@@ -20,8 +21,6 @@ type Props = {
   hasSearched?: boolean;
   onTokenExpired?: () => Promise<string | null>;
 };
-
-const RESULTS_PER_PAGE = 4;
 
 export function ChatScreen({
   token,

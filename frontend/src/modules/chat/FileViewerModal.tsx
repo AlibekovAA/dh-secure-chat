@@ -4,7 +4,7 @@ import {
   IMAGE_MIME_TYPES,
   PDF_MIME_TYPE,
   TEXT_MIME_TYPES,
-} from './constants';
+} from '../../shared/constants';
 
 type Props = {
   filename: string;

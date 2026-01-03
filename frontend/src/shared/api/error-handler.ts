@@ -1,3 +1,5 @@
+import { UNAUTHORIZED_MESSAGE, SESSION_EXPIRED_ERROR } from '../constants';
+
 export type ApiErrorResponse = {
   error: string;
   code?: string;
@@ -11,9 +13,6 @@ export type AppError = {
   statusCode?: number;
   isRetryable?: boolean;
 };
-
-export const UNAUTHORIZED_MESSAGE = 'unauthorized';
-export const SESSION_EXPIRED_ERROR = 'session_expired';
 
 export enum ErrorCode {
   UNAUTHORIZED = 'UNAUTHORIZED',
@@ -29,7 +28,7 @@ export enum ErrorCode {
   UNKNOWN_ERROR = 'UNKNOWN_ERROR',
 }
 
-const HTTP_SERVER_ERROR_THRESHOLD = 500;
+import { HTTP_SERVER_ERROR_THRESHOLD } from '../constants';
 
 export type ErrorMapping = {
   pattern: RegExp | string;
@@ -157,7 +156,6 @@ export function parseError(error: unknown): AppError {
       appError.code = apiError.code as ErrorCode;
     }
 
-    const HTTP_SERVER_ERROR_THRESHOLD = 500;
     if (
       appError.statusCode &&
       appError.statusCode >= HTTP_SERVER_ERROR_THRESHOLD

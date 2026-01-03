@@ -1,4 +1,4 @@
-import { VOICE_MIME_TYPES, VIDEO_MIME_TYPES } from './constants';
+import { VOICE_MIME_TYPES, VIDEO_MIME_TYPES } from '../../shared/constants';
 
 export function extractDurationFromFilename(filename: string): number {
   const voiceMatch = filename.match(/voice-(\d+)s/);

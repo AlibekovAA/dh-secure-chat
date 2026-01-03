@@ -1,8 +1,5 @@
-import {
-  parseApiError,
-  SESSION_EXPIRED_ERROR,
-  UNAUTHORIZED_MESSAGE,
-} from './error-handler';
+import { parseApiError } from './error-handler';
+import { SESSION_EXPIRED_ERROR, UNAUTHORIZED_MESSAGE } from '../constants';
 
 type RefreshTokenCallback = () => Promise<string | null>;
 type OnTokenExpiredCallback = () => void;

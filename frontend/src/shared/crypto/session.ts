@@ -1,3 +1,5 @@
+import { AES_KEY_SIZE } from '../constants';
+
 export type SessionKey = CryptoKey;
 
 export async function deriveSessionKey(
@@ -10,7 +12,7 @@ export async function deriveSessionKey(
       public: peerPublicKey,
     },
     privateKey,
-    256,
+    AES_KEY_SIZE,
   );
 
   const baseKey = await crypto.subtle.importKey(
@@ -33,7 +35,7 @@ export async function deriveSessionKey(
     baseKey,
     {
       name: 'AES-GCM',
-      length: 256,
+      length: AES_KEY_SIZE,
     },
     true,
     ['encrypt', 'decrypt'],

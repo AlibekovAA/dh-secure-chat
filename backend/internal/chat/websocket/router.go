@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/metrics"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	commonhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/http"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
+	observabilitymetrics "github.com/AlibekovAA/dh-secure-chat/backend/internal/observability/metrics"
 )
 
 type MessageRouter interface {
@@ -38,7 +38,7 @@ func (r *messageRouter) handleUnmarshalError(ctx context.Context, client *Client
 		"type":    msgType,
 		"action":  "ws_invalid_payload",
 	}).Warnf("websocket invalid payload: %v", err)
-	metrics.IncrementWebSocketError("invalid_" + msgType + "_payload")
+	observabilitymetrics.ChatWebSocketErrors.WithLabelValues("invalid_" + msgType + "_payload").Inc()
 	r.hub.sendErrorToUser(client.userID, wsErr)
 	return wsErr
 }
@@ -52,7 +52,7 @@ func (r *messageRouter) handleValidateUserIDError(ctx context.Context, client *C
 			"type":    msgType,
 			"action":  "ws_invalid_user_id",
 		}).Warnf("websocket invalid user ID: %v", err)
-		metrics.IncrementWebSocketError("invalid_user_id")
+		observabilitymetrics.ChatWebSocketErrors.WithLabelValues("invalid_user_id").Inc()
 		r.hub.sendErrorToUser(client.userID, wsErr)
 		return wsErr
 	}
@@ -69,7 +69,7 @@ func (r *messageRouter) handleMarshalError(ctx context.Context, client *Client, 
 		"type":    msgType,
 		"action":  "ws_marshal_failed",
 	}).Warnf("websocket failed to marshal payload: %v", err)
-	metrics.IncrementWebSocketError("marshal_failed")
+	observabilitymetrics.ChatWebSocketErrors.WithLabelValues("marshal_failed").Inc()
 	return wsErr
 }
 
@@ -132,7 +132,7 @@ func (r *messageRouter) Route(ctx context.Context, client *Client, msg *WSMessag
 			"type":    string(msg.Type),
 			"action":  "ws_unknown_message_type",
 		}).Warn("websocket unknown message type")
-		metrics.IncrementWebSocketError("unknown_message_type")
+		observabilitymetrics.ChatWebSocketErrors.WithLabelValues("unknown_message_type").Inc()
 		r.hub.sendErrorToUser(client.userID, commonerrors.ErrUnknownMessageType)
 		return commonerrors.ErrUnknownMessageType
 	}
@@ -169,7 +169,7 @@ func (r *messageRouter) routePayload(ctx context.Context, client *Client, msg *W
 	}
 
 	if r.hub.forwardMessage(ctx, msg, payload, requireOnline, fromUserID) {
-		metrics.IncrementWebSocketMessage(msgType)
+		observabilitymetrics.ChatWebSocketMessagesTotal.WithLabelValues(msgType).Inc()
 	}
 	return nil
 }
@@ -185,7 +185,7 @@ func (r *messageRouter) routeFileChunk(ctx context.Context, client *Client, msg 
 		return err
 	}
 
-	metrics.IncrementWebSocketFileChunk()
+	observabilitymetrics.ChatWebSocketFilesChunksTotal.Inc()
 	r.hub.updateFileTransferProgress(payload.FileID, payload.ChunkIndex)
 	return nil
 }
@@ -220,7 +220,7 @@ func (r *messageRouter) marshalAndForward(ctx context.Context, client *Client, m
 
 	msg.Payload = payloadBytes
 	if r.hub.forwardMessage(ctx, msg, payload, requireOnline, client.userID) {
-		metrics.IncrementWebSocketMessage(msgType)
+		observabilitymetrics.ChatWebSocketMessagesTotal.WithLabelValues(msgType).Inc()
 	}
 	return nil
 }
@@ -241,7 +241,7 @@ func (r *messageRouter) routeFileStart(ctx context.Context, client *Client, msg 
 			"file_id": payload.FileID,
 			"action":  "ws_file_validation_failed",
 		}).Warnf("websocket file_start validation failed: %v", err)
-		metrics.IncrementWebSocketError("file_validation_failed")
+		observabilitymetrics.ChatWebSocketErrors.WithLabelValues("file_validation_failed").Inc()
 		r.hub.sendErrorToUser(client.userID, wsErr)
 		return wsErr
 	}
@@ -262,8 +262,8 @@ func (r *messageRouter) routeFileStart(ctx context.Context, client *Client, msg 
 	}).Debug("websocket file_start")
 
 	if r.hub.forwardMessage(ctx, forwardMsg, &payload, true, client.userID) {
-		metrics.IncrementWebSocketFile()
-		metrics.IncrementWebSocketMessage("file_start")
+		observabilitymetrics.ChatWebSocketFilesTotal.Inc()
+		observabilitymetrics.ChatWebSocketMessagesTotal.WithLabelValues("file_start").Inc()
 		r.hub.trackFileTransfer(payload)
 	}
 	return nil

@@ -1,5 +1,5 @@
 import type { SessionKey } from './session';
-import { BASE64_CHUNK_SIZE } from './constants';
+import { BASE64_CHUNK_SIZE } from '../constants';
 
 async function encryptBinaryInternal(
   sessionKey: CryptoKey,

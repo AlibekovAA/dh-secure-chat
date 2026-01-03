@@ -24,19 +24,20 @@ func extractTableFromOperation(operation string) string {
 	if strings.Contains(operation, "identity") || strings.Contains(operation, "key") {
 		return "identity_keys"
 	}
-	if strings.Contains(operation, "token") {
-		return "refresh_tokens"
-	}
 	if strings.Contains(operation, "user") {
 		return "users"
 	}
 	return "unknown"
 }
 
-func handleError(err error, notFoundErr error, operation string, startTime time.Time) error {
-	table := extractTableFromOperation(operation)
+func measureQueryDuration(operation, table string, startTime time.Time) {
 	duration := time.Since(startTime).Seconds()
 	metrics.DBQueryDurationSeconds.WithLabelValues(operation, table).Observe(duration)
+}
+
+func handleError(err error, notFoundErr error, operation string, startTime time.Time) error {
+	table := extractTableFromOperation(operation)
+	measureQueryDuration(operation, table, startTime)
 
 	if err == nil {
 		return nil
@@ -59,6 +60,5 @@ func HandleExecError(err error, operation string, startTime time.Time) error {
 
 func MeasureQueryDuration(operation string, startTime time.Time) {
 	table := extractTableFromOperation(operation)
-	duration := time.Since(startTime).Seconds()
-	metrics.DBQueryDurationSeconds.WithLabelValues(operation, table).Observe(duration)
+	measureQueryDuration(operation, table, startTime)
 }

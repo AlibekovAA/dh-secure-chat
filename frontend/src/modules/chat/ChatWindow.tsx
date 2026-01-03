@@ -15,7 +15,7 @@ import {
   normalizeFingerprint,
 } from '../../shared/crypto/fingerprint';
 import { useToast } from '../../shared/ui/ToastProvider';
-import { MAX_FILE_SIZE, MAX_MESSAGE_LENGTH } from './constants';
+import { MAX_FILE_SIZE, MAX_MESSAGE_LENGTH } from '../../shared/constants';
 
 type Props = {
   token: string;

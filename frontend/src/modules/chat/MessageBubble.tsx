@@ -5,7 +5,10 @@ import { VoiceMessage } from './VoiceMessage';
 import { VideoCircle } from './VideoCircle';
 import { MessageContextMenu } from './MessageContextMenu';
 import { EmojiPicker } from './EmojiPicker';
-import { MESSAGE_READ_INTERSECTION_THRESHOLD } from './constants';
+import {
+  MESSAGE_READ_INTERSECTION_THRESHOLD,
+  EDIT_TIMEOUT_MS,
+} from '../../shared/constants';
 
 type Props = {
   message: ChatMessage;
@@ -367,7 +370,7 @@ function MessageBubbleComponent({
             x={contextMenu.x}
             y={contextMenu.y}
             isOwn={message.isOwn}
-            canEdit={message.isOwn && !!message.text && !message.isDeleted && (Date.now() - message.timestamp) <= 15 * 60 * 1000}
+            canEdit={message.isOwn && !!message.text && !message.isDeleted && (Date.now() - message.timestamp) <= EDIT_TIMEOUT_MS}
             onCopy={handleCopy}
             onReact={handleReact}
             onReply={onReply ? () => onReply(message) : undefined}

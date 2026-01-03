@@ -1,9 +1,10 @@
+import { checkWebCryptoSupport as checkBrowserSupport } from '../browser-support';
+import { IDENTITY_KEY_STORAGE, MASTER_KEY_STORAGE } from '../constants';
+
 export type IdentityKeyPair = {
   publicKey: CryptoKey;
   privateKey: CryptoKey;
 };
-
-import { checkWebCryptoSupport as checkBrowserSupport } from '../browser-support';
 
 function checkWebCryptoSupport(): void {
   checkBrowserSupport();
@@ -61,9 +62,6 @@ export async function importPublicKey(base64: string): Promise<CryptoKey> {
     [],
   );
 }
-
-const IDENTITY_KEY_STORAGE = 'identity_private_key';
-const MASTER_KEY_STORAGE = 'identity_master_key';
 
 async function getOrCreateMasterKey(): Promise<CryptoKey> {
   const stored = sessionStorage.getItem(MASTER_KEY_STORAGE);

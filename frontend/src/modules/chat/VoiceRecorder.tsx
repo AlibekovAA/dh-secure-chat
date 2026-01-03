@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { AudioRecorder } from '../../shared/audio/audio-recorder';
 import { checkMediaRecorderSupport } from '../../shared/browser-support';
-import { MAX_VOICE_DURATION_SECONDS } from './constants';
+import { MAX_VOICE_DURATION_SECONDS } from '../../shared/constants';
 
 type Props = {
   onRecorded: (file: File, duration: number) => void;

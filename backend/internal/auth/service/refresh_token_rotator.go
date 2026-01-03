@@ -11,16 +11,18 @@ import (
 	authdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/domain"
 	authrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/repository"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/clock"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	commoncrypto "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/crypto"
-	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/db"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/resilience"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/observability/metrics"
 	userdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
 )
 
 type RefreshTokenRotator struct {
 	refreshTokenRepo authrepo.RefreshTokenRepository
-	dbCircuitBreaker *db.DBCircuitBreaker
+	dbCircuitBreaker *resilience.CircuitBreaker
 	idGenerator      commoncrypto.IDGenerator
 	clock            clock.Clock
 	maxRefreshTokens int
@@ -30,7 +32,7 @@ type RefreshTokenRotator struct {
 
 func NewRefreshTokenRotator(
 	refreshTokenRepo authrepo.RefreshTokenRepository,
-	dbCircuitBreaker *db.DBCircuitBreaker,
+	dbCircuitBreaker *resilience.CircuitBreaker,
 	idGenerator commoncrypto.IDGenerator,
 	refreshTokenTTL time.Duration,
 	maxRefreshTokens int,
@@ -125,7 +127,7 @@ func (rtr *RefreshTokenRotator) IssueRefreshToken(ctx context.Context, user user
 		return authdomain.RefreshToken{}, err
 	}
 
-	incrementRefreshTokensIssued()
+	metrics.RefreshTokensIssued.Inc()
 
 	return authdomain.RefreshToken{
 		ID:        stored.ID,
@@ -138,9 +140,7 @@ func (rtr *RefreshTokenRotator) IssueRefreshToken(ctx context.Context, user user
 }
 
 func GenerateRefreshToken() (string, error) {
-	const size = 32
-
-	b := make([]byte, size)
+	b := make([]byte, constants.RefreshTokenSize)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}

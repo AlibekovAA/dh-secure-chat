@@ -3,17 +3,19 @@ package service
 import (
 	"context"
 	"errors"
+	"net/http"
 	"time"
 
 	authdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/domain"
 	authrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/repository"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/clock"
 	commoncrypto "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/crypto"
-	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/db"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/jwtverify"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/resilience"
 	identityservice "github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/service"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/observability/metrics"
 	userdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
 	userrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/repository"
 )
@@ -27,7 +29,7 @@ type AuthService struct {
 	idGenerator         commoncrypto.IDGenerator
 	clock               clock.Clock
 	log                 *logger.Logger
-	dbCircuitBreaker    *db.DBCircuitBreaker
+	dbCircuitBreaker    *resilience.CircuitBreaker
 	accessTokenTTL      time.Duration
 	tokenIssuer         *TokenIssuer
 	refreshTokenRotator *RefreshTokenRotator
@@ -57,7 +59,13 @@ type AuthServiceDeps struct {
 }
 
 func NewAuthService(deps AuthServiceDeps, config AuthServiceConfig) *AuthService {
-	dbCB := db.NewDBCircuitBreaker(config.CircuitBreakerThreshold, config.CircuitBreakerTimeout, config.CircuitBreakerReset, deps.Log)
+	dbCB := resilience.NewCircuitBreaker(resilience.CircuitBreakerConfig{
+		Threshold:  config.CircuitBreakerThreshold,
+		Timeout:    config.CircuitBreakerTimeout,
+		ResetAfter: config.CircuitBreakerReset,
+		Name:       "database",
+		Logger:     deps.Log,
+	})
 	clk := deps.Clock
 	if clk == nil {
 		clk = clock.NewRealClock()
@@ -119,7 +127,7 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (AuthRe
 			return AuthResult{}, commonerrors.NewDomainError(
 				"VALIDATION_FAILED",
 				commonerrors.CategoryValidation,
-				400,
+				http.StatusBadRequest,
 				validationErr.Error(),
 			)
 		}
@@ -214,7 +222,7 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (AuthResult, 
 			return AuthResult{}, commonerrors.NewDomainError(
 				"VALIDATION_FAILED",
 				commonerrors.CategoryValidation,
-				400,
+				http.StatusBadRequest,
 				validationErr.Error(),
 			)
 		}
@@ -306,7 +314,7 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken strin
 						"user_id": stored.UserID,
 						"action":  "refresh_token_expired",
 					}).Warn("refresh token expired")
-					incrementRefreshTokensExpired()
+					metrics.RefreshTokensExpired.Inc()
 					if delErr := tx.DeleteByTokenHash(txCtx, hash); delErr != nil {
 						s.log.WithFields(ctx, logger.Fields{
 							"user_id": stored.UserID,
@@ -386,7 +394,7 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken strin
 		return AuthResult{}, err
 	}
 
-	incrementRefreshTokensUsed()
+	metrics.RefreshTokensUsed.Inc()
 	s.log.WithFields(ctx, logger.Fields{
 		"user_id": stored.UserID,
 		"action":  "refresh_token_success",
@@ -451,7 +459,7 @@ func (s *AuthService) RevokeRefreshToken(ctx context.Context, refreshToken strin
 		"action":  "refresh_token_revoked",
 	}).Info("refresh token revoked")
 
-	incrementRefreshTokensRevoked()
+	metrics.RefreshTokensRevoked.Inc()
 
 	return nil
 }
@@ -482,7 +490,7 @@ func (s *AuthService) RevokeAccessToken(ctx context.Context, jti string, userID 
 		return err
 	}
 
-	incrementAccessTokensRevoked()
+	metrics.AccessTokensRevoked.Inc()
 	s.log.WithFields(ctx, logger.Fields{
 		"jti":     jti,
 		"user_id": userID,
@@ -517,7 +525,7 @@ func (s *AuthService) handleDBCreateError(ctx context.Context, err error, userna
 	return AuthResult{}, commonerrors.NewDomainError(
 		"DB_ERROR",
 		commonerrors.CategoryInternal,
-		500,
+		http.StatusInternalServerError,
 		"failed to create user",
 	).WithCause(err)
 }
@@ -544,7 +552,7 @@ func (s *AuthService) handleDBFetchError(ctx context.Context, err error, usernam
 	return AuthResult{}, commonerrors.NewDomainError(
 		"DB_ERROR",
 		commonerrors.CategoryInternal,
-		500,
+		http.StatusInternalServerError,
 		"failed to fetch user",
 	).WithCause(err)
 }

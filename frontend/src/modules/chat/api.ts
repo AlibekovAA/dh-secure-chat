@@ -18,7 +18,7 @@ export type ChatErrorResponse = ApiErrorResponse;
 export {
   UNAUTHORIZED_MESSAGE,
   SESSION_EXPIRED_ERROR,
-} from '../../shared/api/error-handler';
+} from '../../shared/constants';
 
 export async function fetchMe(): Promise<MeResponse> {
   return apiClient.get<MeResponse>(`${API_BASE}/me`);

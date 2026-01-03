@@ -1,5 +1,10 @@
 import type { WSMessage, ConnectionState } from './types';
 import { SequenceManager } from './sequence-manager';
+import {
+  MAX_RECONNECT_DELAY_MS,
+  WEBSOCKET_MAX_RECONNECT_ATTEMPTS,
+  WEBSOCKET_BASE_DELAY_MS,
+} from '../constants';
 
 type MessageHandler = (message: WSMessage) => void;
 
@@ -16,8 +21,8 @@ export class WebSocketClient {
   private url: string;
   private handlers: EventHandlers;
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
-  private baseDelay = 1000;
+  private maxReconnectAttempts = WEBSOCKET_MAX_RECONNECT_ATTEMPTS;
+  private baseDelay = WEBSOCKET_BASE_DELAY_MS;
   private reconnectTimer: number | null = null;
   private state: ConnectionState = 'disconnected';
   private sequenceManager: SequenceManager;
@@ -249,7 +254,7 @@ export class WebSocketClient {
     this.reconnectAttempts++;
     const delay = Math.min(
       this.baseDelay * Math.pow(2, this.reconnectAttempts - 1),
-      30000,
+      MAX_RECONNECT_DELAY_MS,
     );
 
     this.reconnectTimer = setTimeout(() => {

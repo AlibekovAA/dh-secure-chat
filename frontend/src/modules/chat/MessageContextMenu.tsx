@@ -1,4 +1,9 @@
 import { useRef, useLayoutEffect, useState, useMemo } from 'react';
+import {
+  MENU_ESTIMATED_WIDTH,
+  MENU_ESTIMATED_HEIGHT,
+  MENU_PADDING,
+} from '../../shared/constants';
 
 type Props = {
   x: number;
@@ -13,9 +18,6 @@ type Props = {
   onDeleteForAll?: () => void;
   onClose: () => void;
 };
-
-const MENU_ESTIMATED_WIDTH = 260;
-const MENU_ESTIMATED_HEIGHT = 140;
 
 export function MessageContextMenu({
   x,
@@ -34,7 +36,7 @@ export function MessageContextMenu({
 
   const initialPosition = useMemo(() => {
     const chatContainer = document.querySelector('.chat-scroll-area') as HTMLElement | null;
-    const padding = 10;
+    const padding = MENU_PADDING;
 
     let adjustedX = x;
     let adjustedY = y;
@@ -69,7 +71,7 @@ export function MessageContextMenu({
 
     const menuRect = menuRef.current.getBoundingClientRect();
     const chatContainer = document.querySelector('.chat-scroll-area') as HTMLElement | null;
-    const padding = 10;
+    const padding = MENU_PADDING;
 
     let adjustedX = x;
     let adjustedY = y;

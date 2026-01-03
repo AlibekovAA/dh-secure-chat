@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"net/http"
 	"strings"
 
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
@@ -55,7 +56,7 @@ func (s *ChatService) SearchUsers(ctx context.Context, query string, limit int) 
 		return nil, commonerrors.NewDomainError(
 			"QUERY_TOO_LONG",
 			commonerrors.CategoryValidation,
-			400,
+			http.StatusBadRequest,
 			"query is too long",
 		)
 	}

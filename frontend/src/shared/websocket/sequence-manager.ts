@@ -1,3 +1,5 @@
+import { MAX_SEQUENCES_TO_KEEP } from '../constants';
+
 type MessageWithSequence = {
   sequence: number;
   message: unknown;
@@ -130,7 +132,7 @@ export class SequenceManager {
   }
 
   private cleanupOldSequences(): void {
-    const maxToKeep = 10000;
+    const maxToKeep = MAX_SEQUENCES_TO_KEEP;
     if (this.receivedSequences.size <= maxToKeep) {
       return;
     }

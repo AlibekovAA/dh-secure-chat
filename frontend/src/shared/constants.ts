@@ -1,3 +1,13 @@
+export const FILE_CHUNK_SIZE = 1024 * 1024;
+export const BASE64_CHUNK_SIZE = 8192;
+export const AES_KEY_SIZE = 256;
+export const WORKER_THRESHOLD = 5 * 1024 * 1024;
+
+export const MAX_RECONNECT_DELAY_MS = 30000;
+export const MAX_SEQUENCES_TO_KEEP = 10000;
+
+export const HTTP_SERVER_ERROR_THRESHOLD = 500;
+
 export const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
 export const MAX_VOICE_DURATION_SECONDS = 5 * 60;
@@ -60,3 +70,51 @@ export const MAX_MESSAGE_LENGTH = 4000;
 export const VIDEO_THUMBNAIL_SIZE = 200;
 export const VIDEO_THUMBNAIL_CACHE_PREFIX = 'video_thumbnail_';
 export const VIDEO_THUMBNAIL_CACHE_DURATION_MS = 1 * 24 * 60 * 60 * 1000;
+export const EDIT_TIMEOUT_MS = 15 * 60 * 1000;
+
+export const EMOJI_LIST = [
+  '👍',
+  '❤️',
+  '😂',
+  '😮',
+  '😢',
+  '🙏',
+  '🔥',
+  '👏',
+  '🎉',
+  '💯',
+  '😍',
+  '🤔',
+  '👎',
+  '😡',
+  '🤝',
+  '💪',
+];
+
+export const RESULTS_PER_PAGE = 4;
+
+export const MENU_ESTIMATED_WIDTH = 260;
+export const MENU_ESTIMATED_HEIGHT = 140;
+export const MENU_PADDING = 10;
+
+export const ACK_TIMEOUT_MS = 5000;
+export const ACK_MAX_RETRIES = 3;
+export const ACK_RETRY_DELAY_MS = 1000;
+
+export const DB_NAME = 'secure-chat-db';
+export const DB_VERSION = 1;
+export const DB_STORE_NAME = 'keys';
+
+export const IDENTITY_KEY_STORAGE = 'identity_private_key';
+export const MASTER_KEY_STORAGE = 'identity_master_key';
+
+export const VERIFIED_PEERS_STORAGE = 'verified_peers';
+export const FINGERPRINT_HISTORY_STORAGE = 'fingerprint_history';
+
+export const TOKEN_STORAGE_KEY = 'auth_token';
+
+export const WEBSOCKET_MAX_RECONNECT_ATTEMPTS = 5;
+export const WEBSOCKET_BASE_DELAY_MS = 1000;
+
+export const UNAUTHORIZED_MESSAGE = 'unauthorized';
+export const SESSION_EXPIRED_ERROR = 'session_expired';

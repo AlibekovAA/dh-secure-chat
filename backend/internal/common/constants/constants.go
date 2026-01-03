@@ -8,6 +8,7 @@ const (
 	PasswordMinLength  = 8
 	PasswordMaxLength  = 72
 	JWTSecretMinLength = 32
+	RefreshTokenSize   = 32
 
 	MaxFileSizeBytes      = 50 * 1024 * 1024
 	MaxVoiceSizeBytes     = 10 * 1024 * 1024
@@ -16,6 +17,7 @@ const (
 	MaxSearchResultsLimit = 100
 	DefaultSearchLimit    = 20
 	DefaultMaxRequestSize = 1 << 20
+	MaxFileChunks         = 1000
 
 	UserExistenceCacheTTL             = 5 * time.Minute
 	UserExistenceCacheCleanupInterval = 1 * time.Minute

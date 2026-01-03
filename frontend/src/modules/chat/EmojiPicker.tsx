@@ -1,30 +1,11 @@
 import { useRef, useLayoutEffect, useState, useMemo, useCallback } from 'react';
-
-const EMOJI_LIST = [
-  '👍',
-  '❤️',
-  '😂',
-  '😮',
-  '😢',
-  '🙏',
-  '🔥',
-  '👏',
-  '🎉',
-  '💯',
-  '😍',
-  '🤔',
-  '👎',
-  '😡',
-  '🤝',
-  '💪',
-];
-
 import {
+  EMOJI_LIST,
   EMOJI_PICKER_ESTIMATED_HEIGHT,
   EMOJI_PICKER_ESTIMATED_WIDTH,
   EMOJI_PICKER_PADDING,
   EMOJI_PICKER_PAGE_SIZE,
-} from './constants';
+} from '../../shared/constants';
 
 type Props = {
   x: number;

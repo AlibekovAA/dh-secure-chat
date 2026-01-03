@@ -1,6 +1,4 @@
-const DB_NAME = 'secure-chat-db';
-const DB_VERSION = 1;
-const STORE_NAME = 'keys';
+import { DB_NAME, DB_VERSION, DB_STORE_NAME } from '../constants';
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -22,8 +20,8 @@ function openDB(): Promise<IDBDatabase> {
 
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        const objectStore = db.createObjectStore(STORE_NAME, {
+      if (!db.objectStoreNames.contains(DB_STORE_NAME)) {
+        const objectStore = db.createObjectStore(DB_STORE_NAME, {
           keyPath: 'id',
         });
         objectStore.createIndex('type', 'type', { unique: false });
@@ -41,8 +39,8 @@ export async function saveKey(
 ): Promise<void> {
   try {
     const db = await openDB();
-    const transaction = db.transaction([STORE_NAME], 'readwrite');
-    const store = transaction.objectStore(STORE_NAME);
+    const transaction = db.transaction([DB_STORE_NAME], 'readwrite');
+    const store = transaction.objectStore(DB_STORE_NAME);
 
     await new Promise<void>((resolve, reject) => {
       const request = store.put({ id, keyData, type });
@@ -61,8 +59,8 @@ export async function saveKey(
 export async function loadKey(id: string): Promise<string | null> {
   try {
     const db = await openDB();
-    const transaction = db.transaction([STORE_NAME], 'readonly');
-    const store = transaction.objectStore(STORE_NAME);
+    const transaction = db.transaction([DB_STORE_NAME], 'readonly');
+    const store = transaction.objectStore(DB_STORE_NAME);
 
     return new Promise<string | null>((resolve, reject) => {
       const request = store.get(id);
@@ -80,8 +78,8 @@ export async function loadKey(id: string): Promise<string | null> {
 export async function clearAllKeys(): Promise<void> {
   try {
     const db = await openDB();
-    const transaction = db.transaction([STORE_NAME], 'readwrite');
-    const store = transaction.objectStore(STORE_NAME);
+    const transaction = db.transaction([DB_STORE_NAME], 'readwrite');
+    const store = transaction.objectStore(DB_STORE_NAME);
 
     await new Promise<void>((resolve, reject) => {
       const request = store.clear();

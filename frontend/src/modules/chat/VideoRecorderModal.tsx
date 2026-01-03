@@ -6,7 +6,7 @@ import {
   VIDEO_RECORDER_DURATION_UPDATE_DELAY_MS,
   VIDEO_RECORDER_DURATION_UPDATE_INTERVAL_MS,
   VIDEO_RECORDER_TIMESLICE_MS,
-} from './constants';
+} from '../../shared/constants';
 
 type Props = {
   onRecorded: (file: File, duration: number) => void;

@@ -9,9 +9,9 @@ import (
 	authdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/domain"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/service"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/clock"
-	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/db"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/resilience"
 	userdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
 )
 
@@ -22,7 +22,13 @@ func setupRefreshTokenRotator(t *testing.T) (*service.RefreshTokenRotator, *mock
 	mockClock := clock.NewMockClock(time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC))
 	log, _ := logger.New("", "test", "info")
 
-	dbCB := db.NewDBCircuitBreaker(5, 5*time.Second, 30*time.Second, log)
+	dbCB := resilience.NewCircuitBreaker(resilience.CircuitBreakerConfig{
+		Threshold:  5,
+		Timeout:    5 * time.Second,
+		ResetAfter: 30 * time.Second,
+		Name:       "database",
+		Logger:     log,
+	})
 
 	rotator := service.NewRefreshTokenRotator(
 		mockRefreshTokenRepo,

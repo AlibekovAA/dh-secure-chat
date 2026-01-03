@@ -8,6 +8,7 @@ import (
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/clock"
 	commoncrypto "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/crypto"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/jwtverify"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/observability/metrics"
 	userdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
 )
 
@@ -54,7 +55,7 @@ func (ti *TokenIssuer) IssueAccessToken(user userdomain.User) (string, string, e
 		return "", "", err
 	}
 
-	incrementAccessTokensIssued()
+	metrics.AccessTokensIssued.Inc()
 	return tokenString, jti, nil
 }
 

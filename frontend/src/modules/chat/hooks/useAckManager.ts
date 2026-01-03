@@ -3,10 +3,11 @@ import type {
   WSMessage,
   EphemeralKeyPayload,
 } from '../../../shared/websocket/types';
-
-const ACK_TIMEOUT = 5000;
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 1000;
+import {
+  ACK_TIMEOUT_MS,
+  ACK_MAX_RETRIES,
+  ACK_RETRY_DELAY_MS,
+} from '../../../shared/constants';
 
 type PendingAck = {
   message: WSMessage;
@@ -40,7 +41,7 @@ export function useAckManager({
       if (!pending) return;
 
       pending.retries++;
-      if (pending.retries >= MAX_RETRIES) {
+      if (pending.retries >= ACK_MAX_RETRIES) {
         pendingAcksRef.current.delete(messageId);
         onMaxRetries();
         return;
@@ -50,9 +51,9 @@ export function useAckManager({
         sendRef.current?.(pending.message);
         const ackTimeout = setTimeout(() => {
           scheduleRetry(messageId);
-        }, ACK_TIMEOUT) as unknown as number;
+        }, ACK_TIMEOUT_MS) as unknown as number;
         pending.timeout = ackTimeout;
-      }, RETRY_DELAY) as unknown as number;
+      }, ACK_RETRY_DELAY_MS) as unknown as number;
 
       pending.timeout = retryTimeout;
     },
@@ -71,7 +72,7 @@ export function useAckManager({
 
       const timeout = setTimeout(() => {
         scheduleRetry(messageId);
-      }, ACK_TIMEOUT) as unknown as number;
+      }, ACK_TIMEOUT_MS) as unknown as number;
 
       pendingAcksRef.current.set(messageId, {
         message,

@@ -11,7 +11,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/metrics"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/transfer"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/websocket/middleware"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/clock"
@@ -162,7 +161,7 @@ func (h *Hub) Run(ctx context.Context) {
 				existingClient.Stop()
 				existingClient.Close()
 				h.clients.Delete(client.userID)
-				metrics.DecrementActiveWebSocketConnections()
+				observabilitymetrics.ChatWebSocketConnectionsActive.Dec()
 				h.clientCount.Add(-1)
 			}
 
@@ -182,7 +181,8 @@ func (h *Hub) Run(ctx context.Context) {
 
 			h.clients.Store(client.userID, client)
 			totalClients := h.clientCount.Add(1)
-			metrics.IncrementActiveWebSocketConnections()
+			observabilitymetrics.ChatWebSocketConnectionsActive.Inc()
+			observabilitymetrics.ChatWebSocketConnectionsTotal.Inc()
 			h.log.WithFields(client.ctx, logger.Fields{
 				"user_id":  client.userID,
 				"username": client.username,
@@ -340,7 +340,7 @@ func (h *Hub) sendWithTimeout(sendChan chan []byte, messageBytes []byte, userID,
 		case sendChan <- messageBytes:
 			return nil
 		default:
-			metrics.IncrementDroppedMessages(messageType)
+			observabilitymetrics.ChatWebSocketDroppedMessages.WithLabelValues(messageType).Inc()
 			h.log.WithFields(ctx, logger.Fields{
 				"user_id": userID,
 				"action":  "ws_message_dropped",
@@ -524,7 +524,7 @@ func (h *Hub) handleUnregister(client *Client) {
 
 	client.Stop()
 	client.Close()
-	metrics.DecrementActiveWebSocketConnections()
+	observabilitymetrics.ChatWebSocketConnectionsActive.Dec()
 	observabilitymetrics.ChatWebSocketDisconnections.WithLabelValues("unregister").Inc()
 	h.log.WithFields(client.ctx, logger.Fields{
 		"user_id":  client.userID,

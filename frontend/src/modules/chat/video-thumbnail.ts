@@ -2,7 +2,7 @@ import {
   VIDEO_THUMBNAIL_SIZE,
   VIDEO_THUMBNAIL_CACHE_PREFIX,
   VIDEO_THUMBNAIL_CACHE_DURATION_MS,
-} from './constants';
+} from '../../shared/constants';
 
 interface CachedThumbnail {
   dataUrl: string;
