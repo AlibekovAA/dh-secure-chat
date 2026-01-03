@@ -113,7 +113,7 @@ export function AuthForm({ onAuthenticated }: Props) {
       }
 
       await register(username, password, identityPubKey);
-      showToast("Регистрация прошла успешно. Теперь войдите.", "success");
+      showToast("Регистрация прошла успешно.", "success");
       switchMode("login", false);
       setConfirmPassword("");
       setSubmitting(false);
@@ -167,16 +167,24 @@ export function AuthForm({ onAuthenticated }: Props) {
             autoComplete="username"
             disabled={submitting}
           />
-          {mode === "register" && username && (
-            <p className="text-xs text-emerald-500/70">
-              {username.length < 3
-                ? "Минимум 3 символа"
-                : username.length > 32
-                  ? "Максимум 32 символа"
-                  : /^[a-zA-Z0-9_-]+$/.test(username)
-                    ? "✓ Корректное имя"
-                    : "Только буквы, цифры, _ и -"}
-            </p>
+          {mode === "register" && (
+            <div
+              className="overflow-hidden transition-all duration-300 ease-out"
+              style={{
+                maxHeight: username ? '1.5rem' : '0',
+                opacity: username ? 1 : 0
+              }}
+            >
+              <p className="text-xs text-emerald-500/70 mt-1">
+                {username.length < 3
+                  ? "Минимум 3 символа"
+                  : username.length > 32
+                    ? "Максимум 32 символа"
+                    : /^[a-zA-Z0-9_-]+$/.test(username)
+                      ? "✓ Корректное имя"
+                      : "Только буквы, цифры, _ и -"}
+              </p>
+            </div>
           )}
         </div>
 
@@ -199,56 +207,64 @@ export function AuthForm({ onAuthenticated }: Props) {
               {showPassword ? "Скрыть" : "Показать"}
             </button>
           </div>
-          {mode === "register" && password && (
-            <div className="space-y-1.5">
-              <div className="flex gap-1 h-1.5">
-                {[1, 2, 3, 4].map((level) => {
-                  const isActive =
-                    (passwordStrength.strength === "weak" && level <= 1) ||
-                    (passwordStrength.strength === "medium" && level <= 2) ||
-                    (passwordStrength.strength === "strong" && level <= 3) ||
-                    (passwordStrength.strength === "very-strong" && level <= 4);
-                  const colorClass =
+          {mode === "register" && (
+            <div
+              className="overflow-hidden transition-all duration-300 ease-out"
+              style={{
+                maxHeight: password ? '5rem' : '0',
+                opacity: password ? 1 : 0
+              }}
+            >
+              <div className="space-y-1.5 mt-1">
+                <div className="flex gap-1 h-1.5">
+                  {[1, 2, 3, 4].map((level) => {
+                    const isActive =
+                      (passwordStrength.strength === "weak" && level <= 1) ||
+                      (passwordStrength.strength === "medium" && level <= 2) ||
+                      (passwordStrength.strength === "strong" && level <= 3) ||
+                      (passwordStrength.strength === "very-strong" && level <= 4);
+                    const colorClass =
+                      passwordStrength.strength === "weak"
+                        ? "bg-red-500"
+                        : passwordStrength.strength === "medium"
+                          ? "bg-yellow-500"
+                          : passwordStrength.strength === "strong"
+                            ? "bg-emerald-400"
+                            : "bg-emerald-500";
+                    return (
+                      <div
+                        key={level}
+                        className={`flex-1 rounded-full transition-all duration-300 ${
+                          isActive ? colorClass : "bg-emerald-900/30"
+                        }`}
+                      />
+                    );
+                  })}
+                </div>
+                <div className="flex items-center justify-between">
+                  <p className={`text-xs font-medium ${
                     passwordStrength.strength === "weak"
-                      ? "bg-red-500"
+                      ? "text-red-400"
                       : passwordStrength.strength === "medium"
-                        ? "bg-yellow-500"
+                        ? "text-yellow-400"
                         : passwordStrength.strength === "strong"
-                          ? "bg-emerald-400"
-                          : "bg-emerald-500";
-                  return (
-                    <div
-                      key={level}
-                      className={`flex-1 rounded-full transition-all duration-300 ${
-                        isActive ? colorClass : "bg-emerald-900/30"
-                      }`}
-                    />
-                  );
-                })}
-              </div>
-              <div className="flex items-center justify-between">
-                <p className={`text-xs font-medium ${
-                  passwordStrength.strength === "weak"
-                    ? "text-red-400"
-                    : passwordStrength.strength === "medium"
-                      ? "text-yellow-400"
-                      : passwordStrength.strength === "strong"
-                        ? "text-emerald-400"
-                        : "text-emerald-300"
-                }`}>
-                  {passwordStrength.strength === "weak"
-                    ? "Слабый"
-                    : passwordStrength.strength === "medium"
-                      ? "Средний"
-                      : passwordStrength.strength === "strong"
-                        ? "Сильный"
-                        : "Очень сильный"}
-                </p>
-                {passwordStrength.feedback.length > 0 && (
-                  <p className="text-xs text-emerald-500/70">
-                    {passwordStrength.feedback[0]}
+                          ? "text-emerald-400"
+                          : "text-emerald-300"
+                  }`}>
+                    {passwordStrength.strength === "weak"
+                      ? "Слабый"
+                      : passwordStrength.strength === "medium"
+                        ? "Средний"
+                        : passwordStrength.strength === "strong"
+                          ? "Сильный"
+                          : "Очень сильный"}
                   </p>
-                )}
+                  {passwordStrength.feedback.length > 0 && (
+                    <p className="text-xs text-emerald-500/70">
+                      {passwordStrength.feedback[0]}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -285,15 +301,21 @@ export function AuthForm({ onAuthenticated }: Props) {
                 {showConfirmPassword ? "Скрыть" : "Показать"}
               </button>
             </div>
-            {confirmPassword && (
-              <p className={`text-xs ${
+            <div
+              className="overflow-hidden transition-all duration-300 ease-out"
+              style={{
+                maxHeight: confirmPassword ? '1.5rem' : '0',
+                opacity: confirmPassword ? 1 : 0
+              }}
+            >
+              <p className={`text-xs mt-1 ${
                 password === confirmPassword
                   ? "text-emerald-400"
                   : "text-red-400"
               }`}>
-                {password === confirmPassword ? "✓ Пароли совпадают" : "✗ Пароли не совпадают"}
+                {password === confirmPassword ? "Пароли совпадают" : "Пароли не совпадают"}
               </p>
-            )}
+            </div>
           </div>
         )}
 

@@ -267,8 +267,8 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-      <div className="relative w-full max-w-2xl mx-4 bg-emerald-950/95 border border-emerald-700/50 rounded-lg shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]" style={{ willChange: 'opacity' }}>
+      <div className="relative w-full max-w-2xl mx-4 bg-emerald-950/95 border border-emerald-700/50 rounded-lg shadow-2xl overflow-hidden animate-[scaleIn_0.2s_ease-out]" style={{ willChange: 'transform, opacity' }}>
         <div className="relative aspect-video bg-black">
           {isInitializing ? (
             <div className="absolute inset-0 flex items-center justify-center">

@@ -126,14 +126,3 @@ export async function decryptFileWithWorker(
     );
   });
 }
-
-export function terminateWorker(): void {
-  if (worker) {
-    worker.terminate();
-    worker = null;
-    for (const [requestId, pending] of pendingRequests.entries()) {
-      pending.reject(new Error('Worker terminated'));
-      pendingRequests.delete(requestId);
-    }
-  }
-}

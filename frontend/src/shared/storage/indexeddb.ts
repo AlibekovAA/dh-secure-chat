@@ -77,26 +77,6 @@ export async function loadKey(id: string): Promise<string | null> {
   }
 }
 
-export async function deleteKey(id: string): Promise<void> {
-  try {
-    const db = await openDB();
-    const transaction = db.transaction([STORE_NAME], 'readwrite');
-    const store = transaction.objectStore(STORE_NAME);
-
-    await new Promise<void>((resolve, reject) => {
-      const request = store.delete(id);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(new Error('Failed to delete key'));
-    });
-  } catch (err) {
-    throw new Error(
-      `Failed to delete key from IndexedDB: ${
-        err instanceof Error ? err.message : String(err)
-      }`,
-    );
-  }
-}
-
 export async function clearAllKeys(): Promise<void> {
   try {
     const db = await openDB();

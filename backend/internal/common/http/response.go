@@ -23,6 +23,7 @@ func WriteError(w http.ResponseWriter, status int, message string) {
 }
 
 func DecodeJSON(r *http.Request, v any) error {
+	defer r.Body.Close()
 	return json.NewDecoder(r.Body).Decode(v)
 }
 

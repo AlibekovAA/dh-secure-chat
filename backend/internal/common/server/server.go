@@ -13,14 +13,6 @@ import (
 
 type ShutdownHook func(ctx context.Context) error
 
-func StartWithGracefulShutdown(
-	server *http.Server,
-	log *logger.Logger,
-	serviceName string,
-) {
-	StartWithGracefulShutdownAndHooks(server, log, serviceName, nil)
-}
-
 func StartWithGracefulShutdownAndHooks(
 	server *http.Server,
 	log *logger.Logger,

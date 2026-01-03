@@ -14,17 +14,21 @@ import (
 
 func extractTableFromOperation(operation string) string {
 	operation = strings.ToLower(operation)
-	if strings.Contains(operation, "user") {
-		return "users"
+
+	if strings.Contains(operation, "revoked") {
+		return "revoked_tokens"
+	}
+	if strings.Contains(operation, "refresh") {
+		return "refresh_tokens"
 	}
 	if strings.Contains(operation, "identity") || strings.Contains(operation, "key") {
 		return "identity_keys"
 	}
-	if strings.Contains(operation, "refresh") || strings.Contains(operation, "token") {
+	if strings.Contains(operation, "token") {
 		return "refresh_tokens"
 	}
-	if strings.Contains(operation, "revoked") {
-		return "revoked_tokens"
+	if strings.Contains(operation, "user") {
+		return "users"
 	}
 	return "unknown"
 }

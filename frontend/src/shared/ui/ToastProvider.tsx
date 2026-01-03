@@ -49,13 +49,10 @@ export function ToastProvider({ children }: Props) {
     <ToastContext.Provider value={value}>
       {children}
       <div className="pointer-events-none fixed right-4 top-4 z-50 flex flex-col gap-2 max-w-sm">
-        {toasts.map((toast, index) => (
+        {toasts.map((toast) => (
           <div
             key={toast.id}
             className="pointer-events-auto animate-toast-enter"
-            style={{
-              animationDelay: `${index * 50}ms`,
-            }}
           >
             <div
               className={`w-full rounded-lg border px-4 py-3 text-sm shadow-xl backdrop-blur-md smooth-transition ${
@@ -68,23 +65,6 @@ export function ToastProvider({ children }: Props) {
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-2 flex-1 min-w-0">
-                  {toast.kind !== "error" && (
-                    <div className={`flex-shrink-0 mt-0.5 ${
-                      toast.kind === "success"
-                        ? "text-emerald-400"
-                        : "text-yellow-400"
-                    }`}>
-                      {toast.kind === "success" ? (
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                      ) : (
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.785-1.25 2.785-2.8V8.8c0-1.55-1.245-2.8-2.785-2.8H5.062C3.522 6 2.277 7.25 2.277 8.8v8.4c0 1.55 1.245 2.8 2.785 2.8z" />
-                        </svg>
-                      )}
-                    </div>
-                  )}
                   <span className="flex-1 break-words leading-relaxed">{toast.message}</span>
                 </div>
                 <button

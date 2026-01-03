@@ -473,9 +473,25 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
           )}
 
           {!isLoading && messages.length === 0 && isSessionActive && (
-            <div className="flex items-center justify-center py-8">
-              <p className="text-xs text-emerald-500/60">
-                Начните переписку. Все сообщения зашифрованы.
+            <div className="flex flex-col items-center justify-center py-12 px-4 animate-[fadeIn_0.4s_ease-out]">
+              <div className="w-16 h-16 rounded-full bg-emerald-900/30 border-2 border-emerald-700/40 flex items-center justify-center mb-4 animate-[scaleIn_0.3s_ease-out]">
+                <svg
+                  className="w-8 h-8 text-emerald-400/70"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                  />
+                </svg>
+              </div>
+              <p className="text-sm font-medium text-emerald-300 mb-1">Начните переписку</p>
+              <p className="text-xs text-emerald-500/70 text-center max-w-xs">
+                Все сообщения защищены сквозным шифрованием
               </p>
             </div>
           )}
@@ -535,10 +551,28 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
           )}
 
           {error && state === 'error' && (
-            <div className="flex items-center justify-center py-4">
-              <p className="text-xs text-red-400 bg-red-900/20 border border-red-700/40 rounded px-3 py-2">
-                {error}
-              </p>
+            <div className="flex items-center justify-center py-4 animate-[fadeIn_0.3s_ease-out]">
+              <div className="bg-red-900/30 border-2 border-red-600/60 rounded-lg px-4 py-3 max-w-md shadow-lg shadow-red-900/20">
+                <div className="flex items-start gap-3">
+                  <svg
+                    className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-red-300 mb-1">Ошибка соединения</p>
+                    <p className="text-xs text-red-400/90 leading-relaxed">{error}</p>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 

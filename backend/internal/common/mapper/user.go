@@ -14,15 +14,6 @@ func UserToDTO(user userdomain.User) dto.User {
 	}
 }
 
-func UserFromDTO(dto dto.User) userdomain.User {
-	return userdomain.User{
-		ID:         userdomain.ID(dto.ID),
-		Username:   dto.Username,
-		CreatedAt:  dto.CreatedAt,
-		LastSeenAt: dto.LastSeenAt,
-	}
-}
-
 func UserSummaryToDTO(summary userdomain.Summary) dto.UserSummary {
 	return dto.UserSummary{
 		ID:        string(summary.ID),

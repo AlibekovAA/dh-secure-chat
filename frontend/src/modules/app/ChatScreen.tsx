@@ -153,11 +153,48 @@ export function ChatScreen({
                     <div className="w-5 h-5 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
                   </div>
                 ) : hasSearched && searchResults.length === 0 && searchQuery.trim() ? (
-                  <div className="flex items-center justify-center h-full">
-                    <p className="text-emerald-500/80 text-sm">Нет результатов</p>
+                  <div className="flex flex-col items-center justify-center h-full px-4 animate-[fadeIn_0.4s_ease-out]">
+                    <div className="w-12 h-12 rounded-full bg-emerald-900/20 border border-emerald-700/30 flex items-center justify-center mb-3 animate-[scaleIn_0.3s_ease-out]">
+                      <svg
+                        className="w-6 h-6 text-emerald-500/60"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={1.5}
+                          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                        />
+                      </svg>
+                    </div>
+                    <p className="text-sm font-medium text-emerald-400/80 mb-1">Пользователь не найден</p>
+                    <p className="text-xs text-emerald-500/60 text-center max-w-xs">
+                      Попробуйте изменить запрос или проверьте правильность написания
+                    </p>
                   </div>
                 ) : searchResults.length === 0 ? (
-                  <div className="h-full" />
+                  <div className="flex flex-col items-center justify-center h-full px-4 animate-[fadeIn_0.3s_ease-out]">
+                    <div className="w-10 h-10 rounded-full bg-emerald-900/20 border border-emerald-700/30 flex items-center justify-center mb-2">
+                      <svg
+                        className="w-5 h-5 text-emerald-500/50"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={1.5}
+                          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                        />
+                      </svg>
+                    </div>
+                    <p className="text-xs text-emerald-500/50 text-center">
+                      Введите имя пользователя для поиска
+                    </p>
+                  </div>
                 ) : (
                   <>
                     <div className="flex-1 space-y-2 text-sm text-emerald-100 min-h-0 overflow-y-auto scrollbar-custom">

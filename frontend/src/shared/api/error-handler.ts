@@ -71,6 +71,10 @@ const ERROR_MAPPINGS: ErrorMapping[] = [
     message: 'Поисковый запрос слишком длинный.',
   },
   {
+    pattern: /session_expired|invalid refresh token|refresh token/i,
+    message: 'Сессия истекла. Войдите снова.',
+  },
+  {
     pattern: /unauthorized|invalid token|token expired/i,
     message: 'Сессия истекла. Войдите снова.',
   },

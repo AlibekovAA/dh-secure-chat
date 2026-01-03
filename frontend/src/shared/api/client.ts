@@ -81,7 +81,7 @@ class ApiClient {
               throw new Error(UNAUTHORIZED_MESSAGE);
             }
             const errorMessage = await parseApiError(retryResponse);
-            throw new Error(errorMessage);
+            throw new Error(errorMessage.message);
           }
 
           const json = (await retryResponse.json()) as T;
@@ -104,7 +104,7 @@ class ApiClient {
       }
 
       const errorMessage = await parseApiError(response);
-      throw new Error(errorMessage);
+      throw new Error(errorMessage.message);
     }
 
     const json = (await response.json()) as T;

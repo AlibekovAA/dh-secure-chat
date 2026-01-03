@@ -89,15 +89,14 @@ export function FingerprintVerificationModal({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]"
       onClick={onClose}
+      style={{ willChange: 'opacity' }}
     >
       <div
-        className="w-full max-w-lg mx-4 bg-black border border-emerald-700 rounded-xl overflow-hidden shadow-lg shadow-emerald-900/20"
+        className="w-full max-w-lg mx-4 bg-black border border-emerald-700 rounded-xl overflow-hidden shadow-lg shadow-emerald-900/20 animate-[scaleIn_0.2s_ease-out]"
         onClick={(e) => e.stopPropagation()}
-        style={{
-          animation: 'modalEnter 0.2s ease-out',
-        }}
+        style={{ willChange: 'transform, opacity' }}
       >
         <div className="px-6 py-4 border-b border-emerald-700/60 bg-black/80">
           <div className="flex items-center justify-between">
