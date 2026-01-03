@@ -10,6 +10,7 @@ import (
 	authrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/repository"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/service"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/clock"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/resilience"
@@ -38,13 +39,13 @@ func TestAuthService_NewAuthService_ClockNil(t *testing.T) {
 			Log:              log,
 		},
 		service.AuthServiceConfig{
-			JWTSecret:               "test-secret-key-must-be-at-least-32-bytes-long",
-			AccessTokenTTL:          15 * time.Minute,
-			RefreshTokenTTL:         7 * 24 * time.Hour,
-			MaxRefreshTokens:        5,
-			CircuitBreakerThreshold: 5,
-			CircuitBreakerTimeout:   5 * time.Second,
-			CircuitBreakerReset:     30 * time.Second,
+			JWTSecret:               constants.TestJWTSecret,
+			AccessTokenTTL:          constants.TestAccessTokenTTL,
+			RefreshTokenTTL:         constants.DefaultRefreshTokenTTL,
+			MaxRefreshTokens:        constants.DefaultMaxRefreshTokensPerUser,
+			CircuitBreakerThreshold: constants.TestCircuitBreakerThreshold,
+			CircuitBreakerTimeout:   constants.TestCircuitBreakerTimeout,
+			CircuitBreakerReset:     constants.TestCircuitBreakerReset,
 		},
 	)
 
@@ -161,7 +162,7 @@ func TestAuthService_RefreshAccessToken_DeleteError(t *testing.T) {
 		ID:        "token-id",
 		TokenHash: hash,
 		UserID:    userID,
-		ExpiresAt: mockClock.Now().Add(24 * time.Hour),
+		ExpiresAt: mockClock.Now().Add(constants.TestTokenExpiryOffset),
 		CreatedAt: mockClock.Now(),
 	}
 
@@ -208,7 +209,7 @@ func TestAuthService_RefreshAccessToken_IssueTokensError(t *testing.T) {
 		ID:        "token-id",
 		TokenHash: hash,
 		UserID:    userID,
-		ExpiresAt: mockClock.Now().Add(24 * time.Hour),
+		ExpiresAt: mockClock.Now().Add(constants.TestTokenExpiryOffset),
 		CreatedAt: mockClock.Now(),
 	}
 
@@ -274,7 +275,7 @@ func TestAuthService_RevokeRefreshToken_DeleteNotFound(t *testing.T) {
 		ID:        "token-id",
 		TokenHash: hash,
 		UserID:    userID,
-		ExpiresAt: mockClock.Now().Add(24 * time.Hour),
+		ExpiresAt: mockClock.Now().Add(constants.TestTokenExpiryOffset),
 		CreatedAt: mockClock.Now(),
 	}
 
@@ -340,10 +341,10 @@ func setupRefreshTokenRotatorForCoverage(t *testing.T) (*service.RefreshTokenRot
 	log, _ := logger.New("", "test", "info")
 
 	dbCB := resilience.NewCircuitBreaker(resilience.CircuitBreakerConfig{
-		Threshold:  5,
-		Timeout:    5 * time.Second,
-		ResetAfter: 30 * time.Second,
-		Name:       "database",
+		Threshold:  constants.TestCircuitBreakerThreshold,
+		Timeout:    constants.TestCircuitBreakerTimeout,
+		ResetAfter: constants.TestCircuitBreakerReset,
+		Name:       constants.CircuitBreakerDatabaseName,
 		Logger:     log,
 	})
 
@@ -351,8 +352,8 @@ func setupRefreshTokenRotatorForCoverage(t *testing.T) (*service.RefreshTokenRot
 		mockRefreshTokenRepo,
 		dbCB,
 		mockIDGenerator,
-		7*24*time.Hour,
-		5,
+		constants.DefaultRefreshTokenTTL,
+		constants.DefaultMaxRefreshTokensPerUser,
 		mockClock,
 		log,
 	)
@@ -378,7 +379,7 @@ func TestRefreshTokenRotator_RotateIfNeeded_DeleteOldestError(t *testing.T) {
 	rotator, mockRefreshTokenRepo, _, _ := setupRefreshTokenRotatorForCoverage(t)
 
 	mockRefreshTokenRepo.countByUserIDFunc = func(ctx context.Context, uid string) (int, error) {
-		return 5, nil
+		return constants.DefaultMaxRefreshTokensPerUser, nil
 	}
 
 	mockRefreshTokenRepo.deleteOldestByUserIDFunc = func(ctx context.Context, uid string) error {

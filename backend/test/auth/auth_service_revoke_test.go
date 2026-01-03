@@ -9,6 +9,7 @@ import (
 	authdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/domain"
 	authrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/repository"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/service"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 )
 
@@ -23,7 +24,7 @@ func TestAuthService_RevokeRefreshToken_Success(t *testing.T) {
 		ID:        "token-id",
 		TokenHash: hash,
 		UserID:    userID,
-		ExpiresAt: mockClock.Now().Add(24 * time.Hour),
+		ExpiresAt: mockClock.Now().Add(constants.TestTokenExpiryOffset),
 		CreatedAt: mockClock.Now(),
 	}
 
@@ -104,7 +105,7 @@ func TestAuthService_RevokeRefreshToken_DeleteError(t *testing.T) {
 		ID:        "token-id",
 		TokenHash: hash,
 		UserID:    userID,
-		ExpiresAt: mockClock.Now().Add(24 * time.Hour),
+		ExpiresAt: mockClock.Now().Add(constants.TestTokenExpiryOffset),
 		CreatedAt: mockClock.Now(),
 	}
 

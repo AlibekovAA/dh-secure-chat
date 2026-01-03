@@ -7,6 +7,7 @@ import (
 
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/service"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/clock"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	userdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
 )
 
@@ -20,9 +21,9 @@ func TestTokenIssuer_IssueAccessToken_Success(t *testing.T) {
 	}
 
 	issuer := service.NewTokenIssuer(
-		"test-secret-key-must-be-at-least-32-bytes-long",
+		constants.TestJWTSecret,
 		mockIDGenerator,
-		15*time.Minute,
+		constants.TestAccessTokenTTL,
 		mockClock,
 	)
 
@@ -55,9 +56,9 @@ func TestTokenIssuer_IssueAccessToken_IDGenerationError(t *testing.T) {
 	}
 
 	issuer := service.NewTokenIssuer(
-		"test-secret-key-must-be-at-least-32-bytes-long",
+		constants.TestJWTSecret,
 		mockIDGenerator,
-		15*time.Minute,
+		constants.TestAccessTokenTTL,
 		mockClock,
 	)
 
@@ -78,9 +79,9 @@ func TestTokenIssuer_ParseToken_InvalidToken(t *testing.T) {
 	mockClock := clock.NewMockClock(time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC))
 
 	issuer := service.NewTokenIssuer(
-		"test-secret-key-must-be-at-least-32-bytes-long",
+		constants.TestJWTSecret,
 		mockIDGenerator,
-		15*time.Minute,
+		constants.TestAccessTokenTTL,
 		mockClock,
 	)
 
@@ -100,16 +101,16 @@ func TestTokenIssuer_ParseToken_WrongSecret(t *testing.T) {
 	}
 
 	issuer1 := service.NewTokenIssuer(
-		"test-secret-key-must-be-at-least-32-bytes-long",
+		constants.TestJWTSecret,
 		mockIDGenerator,
-		15*time.Minute,
+		constants.TestAccessTokenTTL,
 		mockClock,
 	)
 
 	issuer2 := service.NewTokenIssuer(
 		"different-secret-key-must-be-at-least-32-bytes",
 		mockIDGenerator,
-		15*time.Minute,
+		constants.TestAccessTokenTTL,
 		mockClock,
 	)
 

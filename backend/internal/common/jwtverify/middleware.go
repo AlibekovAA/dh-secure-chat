@@ -14,18 +14,6 @@ import (
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/observability/metrics"
 )
 
-func incrementJWTValidationsTotal() {
-	metrics.JWTValidationsTotal.Inc()
-}
-
-func incrementJWTValidationsFailed() {
-	metrics.JWTValidationsFailed.Inc()
-}
-
-func incrementJWTRevokedChecksTotal() {
-	metrics.JWTRevokedChecksTotal.Inc()
-}
-
 type RevokedTokenChecker interface {
 	IsRevoked(ctx context.Context, jti string) (bool, error)
 }
@@ -47,33 +35,32 @@ func Middleware(secret string, log *logger.Logger, checker RevokedTokenChecker) 
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tokenString, ok := ExtractTokenFromHeader(r)
 			if !ok {
-				incrementJWTValidationsTotal()
-				incrementJWTValidationsFailed()
+				metrics.JWTValidationsTotal.Inc()
+				metrics.JWTValidationsFailed.Inc()
 				log.Warnf("jwt auth failed path=%s: missing or invalid authorization header", r.URL.Path)
 				commonhttp.WriteError(w, http.StatusUnauthorized, "missing or invalid authorization")
 				return
 			}
 
-			incrementJWTValidationsTotal()
+			metrics.JWTValidationsTotal.Inc()
 			claims, err := parseToken(tokenString, secretBytes)
 			if err != nil {
-				incrementJWTValidationsFailed()
+				metrics.JWTValidationsFailed.Inc()
 				log.Warnf("jwt auth failed path=%s: %v", r.URL.Path, err)
 				commonhttp.WriteError(w, http.StatusUnauthorized, "invalid token")
 				return
 			}
 
 			if checker != nil && claims.JTI != "" {
-				incrementJWTRevokedChecksTotal()
 				revoked, err := checker.IsRevoked(r.Context(), claims.JTI)
 				if err != nil {
-					incrementJWTValidationsFailed()
+					metrics.JWTValidationsFailed.Inc()
 					log.Errorf("jwt auth failed path=%s: failed to check revoked token jti=%s: %v", r.URL.Path, claims.JTI, err)
 					commonhttp.WriteError(w, http.StatusInternalServerError, "internal error")
 					return
 				}
 				if revoked {
-					incrementJWTValidationsFailed()
+					metrics.JWTValidationsFailed.Inc()
 					log.Warnf("jwt auth failed path=%s: token revoked jti=%s", r.URL.Path, claims.JTI)
 					commonhttp.WriteError(w, http.StatusUnauthorized, "token revoked")
 					return

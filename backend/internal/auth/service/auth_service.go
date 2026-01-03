@@ -9,6 +9,7 @@ import (
 	authdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/domain"
 	authrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/repository"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/clock"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	commoncrypto "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/crypto"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/jwtverify"
@@ -63,7 +64,7 @@ func NewAuthService(deps AuthServiceDeps, config AuthServiceConfig) *AuthService
 		Threshold:  config.CircuitBreakerThreshold,
 		Timeout:    config.CircuitBreakerTimeout,
 		ResetAfter: config.CircuitBreakerReset,
-		Name:       "database",
+		Name:       constants.CircuitBreakerDatabaseName,
 		Logger:     deps.Log,
 	})
 	clk := deps.Clock
@@ -314,7 +315,6 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken strin
 						"user_id": stored.UserID,
 						"action":  "refresh_token_expired",
 					}).Warn("refresh token expired")
-					metrics.RefreshTokensExpired.Inc()
 					if delErr := tx.DeleteByTokenHash(txCtx, hash); delErr != nil {
 						s.log.WithFields(ctx, logger.Fields{
 							"user_id": stored.UserID,
@@ -394,7 +394,6 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken strin
 		return AuthResult{}, err
 	}
 
-	metrics.RefreshTokensUsed.Inc()
 	s.log.WithFields(ctx, logger.Fields{
 		"user_id": stored.UserID,
 		"action":  "refresh_token_success",

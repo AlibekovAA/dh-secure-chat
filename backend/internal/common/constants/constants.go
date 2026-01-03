@@ -68,6 +68,7 @@ const (
 	DefaultCircuitBreakerThreshold = 500
 	DefaultCircuitBreakerTimeout   = 15 * time.Second
 	DefaultCircuitBreakerReset     = 10 * time.Second
+	CircuitBreakerDatabaseName     = "database"
 
 	DefaultAuthRequestTimeout      = 30 * time.Second
 	DefaultAccessTokenTTL          = 30 * time.Minute
@@ -94,6 +95,19 @@ const (
 	LoggerMaxSize    = 100
 	LoggerMaxBackups = 3
 	LoggerMaxAge     = 28
+
+	TestJWTSecret               = "test-secret-key-must-be-at-least-32-bytes-long"
+	TestAccessTokenTTL          = 15 * time.Minute
+	TestCircuitBreakerThreshold = 5
+	TestCircuitBreakerTimeout   = 5 * time.Second
+	TestCircuitBreakerReset     = 30 * time.Second
+	TestTokenExpiryOffset       = 24 * time.Hour
+	RefreshTokenHexLength       = 64
+
+	TestCleanupDeletedCount1 = int64(5)
+	TestCleanupDeletedCount2 = int64(3)
+	TestCleanupInitialDelay  = 100 * time.Millisecond
+	TestCleanupWaitDelay     = 50 * time.Millisecond
 )
 
 type TraceIDKeyType string

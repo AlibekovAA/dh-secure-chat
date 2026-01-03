@@ -14,14 +14,6 @@ var (
 		[]string{"service", "method", "path"},
 	)
 
-	HTTPRequestsInFlight = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "http_requests_in_flight",
-			Help: "Number of HTTP requests currently being processed",
-		},
-		[]string{"service"},
-	)
-
 	HTTPRequestDurationSeconds = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "http_request_duration_seconds",
@@ -35,14 +27,6 @@ var (
 		prometheus.GaugeOpts{
 			Name: "circuit_breaker_state",
 			Help: "Circuit breaker state (0=closed, 1=open, 2=half-open)",
-		},
-		[]string{"name"},
-	)
-
-	CircuitBreakerFailures = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "circuit_breaker_failures_total",
-			Help: "Total number of circuit breaker failures",
 		},
 		[]string{"name"},
 	)

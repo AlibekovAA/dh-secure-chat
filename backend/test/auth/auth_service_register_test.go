@@ -9,6 +9,7 @@ import (
 	authdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/domain"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/service"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/clock"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 	userdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
@@ -38,13 +39,13 @@ func setupAuthService(t *testing.T) (*service.AuthService, *mockUserRepo, *mockI
 			Log:              log,
 		},
 		service.AuthServiceConfig{
-			JWTSecret:               "test-secret-key-must-be-at-least-32-bytes-long",
-			AccessTokenTTL:          15 * time.Minute,
-			RefreshTokenTTL:         7 * 24 * time.Hour,
-			MaxRefreshTokens:        5,
-			CircuitBreakerThreshold: 5,
-			CircuitBreakerTimeout:   5 * time.Second,
-			CircuitBreakerReset:     30 * time.Second,
+			JWTSecret:               constants.TestJWTSecret,
+			AccessTokenTTL:          constants.TestAccessTokenTTL,
+			RefreshTokenTTL:         constants.DefaultRefreshTokenTTL,
+			MaxRefreshTokens:        constants.DefaultMaxRefreshTokensPerUser,
+			CircuitBreakerThreshold: constants.TestCircuitBreakerThreshold,
+			CircuitBreakerTimeout:   constants.TestCircuitBreakerTimeout,
+			CircuitBreakerReset:     constants.TestCircuitBreakerReset,
 		},
 	)
 

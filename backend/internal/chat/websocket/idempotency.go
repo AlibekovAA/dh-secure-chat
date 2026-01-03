@@ -88,9 +88,6 @@ func (t *IdempotencyTracker) cleanup() {
 				}
 				return true
 			})
-			if removed > 0 {
-				metrics.ChatWebSocketIdempotencyCleanupDeleted.Add(float64(removed))
-			}
 		}
 	}
 }

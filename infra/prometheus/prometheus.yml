@@ -6,6 +6,7 @@ global:
 
 scrape_configs:
   - job_name: 'auth'
+    metrics_path: '/metrics'
     static_configs:
       - targets: ['auth:8081']
         labels:
@@ -13,6 +14,7 @@ scrape_configs:
           environment: 'development'
 
   - job_name: 'chat'
+    metrics_path: '/metrics'
     static_configs:
       - targets: ['chat:8082']
         labels:

@@ -7,12 +7,13 @@ import (
 	"time"
 
 	authcleanup "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/cleanup"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 )
 
 func TestStartCleanup_RefreshToken(t *testing.T) {
 	mockRefreshTokenRepo := &mockRefreshTokenRepo{}
-	deletedCount := int64(5)
+	deletedCount := constants.TestCleanupDeletedCount1
 
 	mockRefreshTokenRepo.deleteExpiredFunc = func(ctx context.Context) (int64, error) {
 		return deletedCount, nil
@@ -24,14 +25,14 @@ func TestStartCleanup_RefreshToken(t *testing.T) {
 
 	go authcleanup.StartRefreshTokenCleanup(ctx, mockRefreshTokenRepo, log)
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(constants.TestCleanupInitialDelay)
 	cancel()
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(constants.TestCleanupWaitDelay)
 }
 
 func TestStartCleanup_RevokedToken(t *testing.T) {
 	mockRevokedTokenRepo := &mockRevokedTokenRepo{}
-	deletedCount := int64(3)
+	deletedCount := constants.TestCleanupDeletedCount2
 
 	mockRevokedTokenRepo.deleteExpiredFunc = func(ctx context.Context) (int64, error) {
 		return deletedCount, nil
@@ -43,9 +44,9 @@ func TestStartCleanup_RevokedToken(t *testing.T) {
 
 	go authcleanup.StartRevokedTokenCleanup(ctx, mockRevokedTokenRepo, log)
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(constants.TestCleanupInitialDelay)
 	cancel()
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(constants.TestCleanupWaitDelay)
 }
 
 func TestStartCleanup_ErrorHandling(t *testing.T) {
@@ -61,9 +62,9 @@ func TestStartCleanup_ErrorHandling(t *testing.T) {
 
 	go authcleanup.StartRefreshTokenCleanup(ctx, mockRefreshTokenRepo, log)
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(constants.TestCleanupInitialDelay)
 	cancel()
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(constants.TestCleanupWaitDelay)
 }
 
 func TestStartCleanup_NoExpiredTokens(t *testing.T) {
@@ -79,7 +80,7 @@ func TestStartCleanup_NoExpiredTokens(t *testing.T) {
 
 	go authcleanup.StartRefreshTokenCleanup(ctx, mockRefreshTokenRepo, log)
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(constants.TestCleanupInitialDelay)
 	cancel()
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(constants.TestCleanupWaitDelay)
 }

@@ -442,30 +442,50 @@ make go-test-auth-coverage     # Тесты с покрытием
 
 ### Auth Service (`:8081/metrics`)
 
-- HTTP метрики (запросы, длительность, ошибки)
-- Token метрики (выдача, использование, отзыв)
-- JWT метрики (валидации, ошибки)
+- **HTTP метрики**: `http_requests_total`, `http_request_duration_seconds`, `http_errors_total`
+- **Token метрики**: `access_tokens_issued_total`, `access_tokens_revoked_total`, `refresh_tokens_issued_total`, `refresh_tokens_revoked_total`
+- **JWT метрики**: `jwt_validations_total`, `jwt_validations_failed_total`
+- **Domain ошибки**: `domain_errors_total`
 
 ### Chat Service (`:8082/metrics`)
 
-- HTTP метрики
-- WebSocket метрики (соединения, сообщения, отключения)
-- Database метрики (пул соединений, запросы)
-- Circuit Breaker метрики
-- File Transfer метрики
-- Idempotency метрики
+- **HTTP метрики**: `http_requests_total`, `http_request_duration_seconds`, `http_errors_total`
+- **WebSocket метрики**:
+  - `chat_websocket_connections_active` — активные соединения
+  - `chat_websocket_connections_rejected_total` — отклонённые соединения
+  - `chat_websocket_messages_total` — сообщения по типам
+  - `chat_websocket_errors_total` — ошибки по типам
+  - `chat_websocket_disconnections_total` — отключения по причинам
+  - `chat_websocket_dropped_messages_total` — потерянные сообщения
+  - `chat_websocket_message_send_duration_seconds` — длительность отправки (p95, p99)
+  - `chat_websocket_message_processing_duration_seconds` — длительность обработки
+  - `chat_websocket_message_processor_queue_size` — размер очереди обработки
+- **Database метрики**:
+  - `db_pool_acquired_connections`, `db_pool_idle_connections`, `db_pool_max_connections`, `db_pool_total_connections`
+  - `db_query_duration_seconds` — длительность запросов (p95, p99)
+  - `db_query_errors_total` — ошибки запросов
+- **Circuit Breaker**: `circuit_breaker_state` — состояние (0=closed, 1=open, 2=half-open)
+- **File Transfer**:
+  - `chat_websocket_files_total` — количество файлов
+  - `chat_websocket_files_chunks_total` — количество чанков
+  - `chat_websocket_file_transfer_failures_total` — ошибки передачи
+- **Idempotency**: `chat_websocket_idempotency_duplicates_total` — дубликаты сообщений
+- **Cache метрики**:
+  - `chat_websocket_user_existence_cache_hits_total`, `chat_websocket_user_existence_cache_misses_total`
+  - `chat_websocket_user_existence_cache_size` — размер кэша
 
 ### Grafana Dashboard
 
-Автоматически загружается дашборд **"DH Secure Chat - Overview"** с 23 панелями:
+Автоматически загружается дашборд **"DH Secure Chat - Comprehensive Monitoring"** с панелями:
 
-- WebSocket метрики
-- HTTP метрики
-- Database метрики
-- Circuit Breaker
-- JWT и Token метрики
-- File Transfers
-- Idempotency
+- **WebSocket**: активные соединения, отклонённые соединения, размер очереди, сообщения по типам, ошибки, отключения
+- **HTTP**: rate запросов, длительность (p50, p95, p99), ошибки по статус-кодам
+- **Database**: пул соединений, длительность запросов (p95, p99)
+- **Circuit Breaker**: состояние (closed/open/half-open)
+- **JWT и Token**: валидации, выдача и отзыв токенов
+- **File Transfers**: количество файлов, чанков, ошибки передачи
+- **Idempotency**: дубликаты сообщений
+- **Domain Errors**: ошибки по категориям и кодам
 
 **Доступ:** http://localhost:3000 (логин: `admin` / пароль: `admin`)
 

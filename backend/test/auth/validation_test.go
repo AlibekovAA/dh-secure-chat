@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/service"
@@ -238,7 +239,7 @@ func TestAsValidationError_WithOtherError(t *testing.T) {
 	err := commonerrors.NewDomainError(
 		"OTHER_ERROR",
 		commonerrors.CategoryInternal,
-		500,
+		http.StatusInternalServerError,
 		"other error",
 	)
 

@@ -13,13 +13,6 @@ var (
 		},
 	)
 
-	ChatWebSocketConnectionsTotal = promauto.NewCounter(
-		prometheus.CounterOpts{
-			Name: "chat_websocket_connections_total",
-			Help: "Total number of WebSocket connections established",
-		},
-	)
-
 	ChatWebSocketErrors = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "chat_websocket_errors_total",
@@ -74,15 +67,6 @@ var (
 		},
 	)
 
-	ChatWebSocketFileTransferDurationSeconds = promauto.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "chat_websocket_file_transfer_duration_seconds",
-			Help:    "Duration of file transfers in seconds",
-			Buckets: []float64{1, 5, 10, 30, 60, 120, 300, 600},
-		},
-		[]string{"status"},
-	)
-
 	ChatWebSocketFileTransferFailures = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "chat_websocket_file_transfer_failures_total",
@@ -111,13 +95,6 @@ var (
 		prometheus.CounterOpts{
 			Name: "chat_websocket_connections_rejected_total",
 			Help: "Total number of WebSocket connections rejected due to max connections limit",
-		},
-	)
-
-	ChatWebSocketIdempotencyCleanupDeleted = promauto.NewCounter(
-		prometheus.CounterOpts{
-			Name: "chat_websocket_idempotency_cleanup_deleted_total",
-			Help: "Total number of expired idempotency entries deleted during cleanup",
 		},
 	)
 

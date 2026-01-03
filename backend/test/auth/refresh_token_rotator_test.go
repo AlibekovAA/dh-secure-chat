@@ -9,6 +9,7 @@ import (
 	authdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/domain"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/service"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/clock"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/resilience"
@@ -23,10 +24,10 @@ func setupRefreshTokenRotator(t *testing.T) (*service.RefreshTokenRotator, *mock
 	log, _ := logger.New("", "test", "info")
 
 	dbCB := resilience.NewCircuitBreaker(resilience.CircuitBreakerConfig{
-		Threshold:  5,
-		Timeout:    5 * time.Second,
-		ResetAfter: 30 * time.Second,
-		Name:       "database",
+		Threshold:  constants.TestCircuitBreakerThreshold,
+		Timeout:    constants.TestCircuitBreakerTimeout,
+		ResetAfter: constants.TestCircuitBreakerReset,
+		Name:       constants.CircuitBreakerDatabaseName,
 		Logger:     log,
 	})
 
@@ -34,8 +35,8 @@ func setupRefreshTokenRotator(t *testing.T) (*service.RefreshTokenRotator, *mock
 		mockRefreshTokenRepo,
 		dbCB,
 		mockIDGenerator,
-		7*24*time.Hour,
-		5,
+		constants.DefaultRefreshTokenTTL,
+		constants.DefaultMaxRefreshTokensPerUser,
 		mockClock,
 		log,
 	)
@@ -102,7 +103,7 @@ func TestRefreshTokenRotator_IssueRefreshToken_RotateWhenMaxReached(t *testing.T
 	}
 
 	mockRefreshTokenRepo.countByUserIDFunc = func(ctx context.Context, uid string) (int, error) {
-		return 5, nil
+		return constants.DefaultMaxRefreshTokensPerUser, nil
 	}
 
 	mockRefreshTokenRepo.deleteOldestByUserIDFunc = func(ctx context.Context, uid string) error {
@@ -211,7 +212,7 @@ func TestRefreshTokenRotator_RotateIfNeeded_RotationNeeded(t *testing.T) {
 	userID := "user-123"
 
 	mockRefreshTokenRepo.countByUserIDFunc = func(ctx context.Context, uid string) (int, error) {
-		return 5, nil
+		return constants.DefaultMaxRefreshTokensPerUser, nil
 	}
 
 	mockRefreshTokenRepo.deleteOldestByUserIDFunc = func(ctx context.Context, uid string) error {
@@ -259,8 +260,8 @@ func TestGenerateRefreshToken_Success(t *testing.T) {
 		t.Error("expected token to be set")
 	}
 
-	if len(token) != 64 {
-		t.Errorf("expected token length 64, got %d", len(token))
+	if len(token) != constants.RefreshTokenHexLength {
+		t.Errorf("expected token length %d, got %d", constants.RefreshTokenHexLength, len(token))
 	}
 }
 
@@ -277,8 +278,8 @@ func TestHashRefreshToken_Success(t *testing.T) {
 		t.Error("expected same hash for same token")
 	}
 
-	if len(hash1) != 64 {
-		t.Errorf("expected hash length 64, got %d", len(hash1))
+	if len(hash1) != constants.RefreshTokenHexLength {
+		t.Errorf("expected hash length %d, got %d", constants.RefreshTokenHexLength, len(hash1))
 	}
 }
 

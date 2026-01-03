@@ -182,7 +182,6 @@ func (h *Hub) Run(ctx context.Context) {
 			h.clients.Store(client.userID, client)
 			totalClients := h.clientCount.Add(1)
 			observabilitymetrics.ChatWebSocketConnectionsActive.Inc()
-			observabilitymetrics.ChatWebSocketConnectionsTotal.Inc()
 			h.log.WithFields(client.ctx, logger.Fields{
 				"user_id":  client.userID,
 				"username": client.username,
@@ -607,11 +606,6 @@ func (h *Hub) updateFileTransferProgress(fileID string, chunkIndex int) {
 }
 
 func (h *Hub) completeFileTransfer(fileID string) {
-	var tr *transfer.Transfer
-	if value, ok := h.fileTracker.GetTransferByID(fileID); ok {
-		tr = value
-	}
-
 	if err := h.fileTracker.Complete(fileID); err != nil {
 		if errors.Is(err, commonerrors.ErrTransferNotFound) {
 			h.log.WithFields(h.ctx, logger.Fields{
@@ -628,10 +622,6 @@ func (h *Hub) completeFileTransfer(fileID string) {
 		return
 	}
 
-	if tr != nil {
-		duration := h.clock.Since(tr.StartedAt).Seconds()
-		observabilitymetrics.ChatWebSocketFileTransferDurationSeconds.WithLabelValues("success").Observe(duration)
-	}
 }
 
 func (h *Hub) notifyFileTransferFailed(tr *transfer.Transfer) {
@@ -639,8 +629,6 @@ func (h *Hub) notifyFileTransferFailed(tr *transfer.Transfer) {
 		return
 	}
 
-	duration := h.clock.Since(tr.StartedAt).Seconds()
-	observabilitymetrics.ChatWebSocketFileTransferDurationSeconds.WithLabelValues("failed").Observe(duration)
 	observabilitymetrics.ChatWebSocketFileTransferFailures.WithLabelValues("timeout_or_disconnect").Inc()
 
 	msg, err := marshalMessage(TypeFileComplete, FileCompletePayload{

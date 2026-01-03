@@ -6,7 +6,6 @@ import (
 
 	authrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/repository"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
-	"github.com/AlibekovAA/dh-secure-chat/backend/internal/observability/metrics"
 )
 
 type ExpiredDeleter interface {
@@ -28,12 +27,6 @@ func StartCleanup(ctx context.Context, repo ExpiredDeleter, log *logger.Logger, 
 				continue
 			}
 			if deleted > 0 {
-				switch repoName {
-				case "refresh token":
-					metrics.RefreshTokensCleanupDeleted.Add(float64(deleted))
-				case "revoked token":
-					metrics.RevokedTokensCleanupDeleted.Add(float64(deleted))
-				}
 				log.Infof("%s cleanup: deleted %d expired tokens", repoName, deleted)
 			}
 		}

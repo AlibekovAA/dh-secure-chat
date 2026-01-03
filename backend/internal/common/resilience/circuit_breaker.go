@@ -74,9 +74,6 @@ func (cb *CircuitBreaker) setState(state float64) {
 func (cb *CircuitBreaker) recordFailure() {
 	cb.failures.Add(1)
 	cb.lastFailure.Store(time.Now())
-	if cb.name != "" {
-		metrics.CircuitBreakerFailures.WithLabelValues(cb.name).Inc()
-	}
 	if cb.log != nil {
 		cb.log.Warnf("circuit breaker [%s]: failure recorded", cb.name)
 	}

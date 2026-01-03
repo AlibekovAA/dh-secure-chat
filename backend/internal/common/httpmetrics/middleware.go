@@ -36,7 +36,6 @@ func (c *Collector) Wrap(next http.Handler) http.Handler {
 		service := c.prefix
 
 		metrics.HTTPRequestsTotal.WithLabelValues(service, method, path).Inc()
-		metrics.HTTPRequestsInFlight.WithLabelValues(service).Inc()
 
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r)
@@ -44,7 +43,6 @@ func (c *Collector) Wrap(next http.Handler) http.Handler {
 		elapsed := time.Since(start)
 		statusClass := fmt.Sprintf("%dxx", rec.status/100)
 
-		metrics.HTTPRequestsInFlight.WithLabelValues(service).Dec()
 		metrics.HTTPRequestDurationSeconds.WithLabelValues(service, method, path, statusClass).Observe(elapsed.Seconds())
 	})
 }

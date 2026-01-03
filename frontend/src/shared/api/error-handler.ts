@@ -235,9 +235,7 @@ export async function parseApiError(response: Response): Promise<AppError> {
         appError.originalError = data.details;
       }
     }
-  } catch {
-    // Ignore parsing errors
-  }
+  } catch {}
 
   if (response.status === 401) {
     appError.code = ErrorCode.UNAUTHORIZED;

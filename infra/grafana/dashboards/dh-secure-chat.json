@@ -105,12 +105,12 @@
       "title": "HTTP Requests Rate",
       "targets": [
         {
-          "expr": "sum(rate(auth_requests_total[5m]))",
+          "expr": "sum(rate(http_requests_total{service=\"auth\"}[5m]))",
           "legendFormat": "Auth Service",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(chat_requests_total[5m]))",
+          "expr": "sum(rate(http_requests_total{service=\"chat\"}[5m]))",
           "legendFormat": "Chat Service",
           "refId": "B"
         }
@@ -129,32 +129,32 @@
       "title": "HTTP Request Duration (p50, p95, p99)",
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum(rate(auth_request_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{service=\"auth\"}[5m])) by (le))",
           "legendFormat": "Auth p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(rate(auth_request_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{service=\"auth\"}[5m])) by (le))",
           "legendFormat": "Auth p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum(rate(auth_request_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{service=\"auth\"}[5m])) by (le))",
           "legendFormat": "Auth p99",
           "refId": "C"
         },
         {
-          "expr": "histogram_quantile(0.50, sum(rate(chat_request_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{service=\"chat\"}[5m])) by (le))",
           "legendFormat": "Chat p50",
           "refId": "D"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(rate(chat_request_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{service=\"chat\"}[5m])) by (le))",
           "legendFormat": "Chat p95",
           "refId": "E"
         },
         {
-          "expr": "histogram_quantile(0.99, sum(rate(chat_request_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{service=\"chat\"}[5m])) by (le))",
           "legendFormat": "Chat p99",
           "refId": "F"
         }

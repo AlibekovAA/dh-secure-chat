@@ -13,31 +13,10 @@ var (
 		},
 	)
 
-	RefreshTokensUsed = promauto.NewCounter(
-		prometheus.CounterOpts{
-			Name: "refresh_tokens_used_total",
-			Help: "Total number of refresh tokens used",
-		},
-	)
-
 	RefreshTokensRevoked = promauto.NewCounter(
 		prometheus.CounterOpts{
 			Name: "refresh_tokens_revoked_total",
 			Help: "Total number of refresh tokens revoked",
-		},
-	)
-
-	RefreshTokensExpired = promauto.NewCounter(
-		prometheus.CounterOpts{
-			Name: "refresh_tokens_expired_total",
-			Help: "Total number of expired refresh tokens",
-		},
-	)
-
-	RefreshTokensCleanupDeleted = promauto.NewCounter(
-		prometheus.CounterOpts{
-			Name: "refresh_tokens_cleanup_deleted_total",
-			Help: "Total number of expired refresh tokens deleted during cleanup",
 		},
 	)
 
@@ -55,13 +34,6 @@ var (
 		},
 	)
 
-	RevokedTokensCleanupDeleted = promauto.NewCounter(
-		prometheus.CounterOpts{
-			Name: "revoked_tokens_cleanup_deleted_total",
-			Help: "Total number of expired revoked tokens deleted during cleanup",
-		},
-	)
-
 	JWTValidationsTotal = promauto.NewCounter(
 		prometheus.CounterOpts{
 			Name: "jwt_validations_total",
@@ -73,13 +45,6 @@ var (
 		prometheus.CounterOpts{
 			Name: "jwt_validations_failed_total",
 			Help: "Total number of failed JWT validations",
-		},
-	)
-
-	JWTRevokedChecksTotal = promauto.NewCounter(
-		prometheus.CounterOpts{
-			Name: "jwt_revoked_checks_total",
-			Help: "Total number of revoked token checks",
 		},
 	)
 )
