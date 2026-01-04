@@ -366,12 +366,12 @@ export function FileViewerModal({ filename, mimeType, blob, onClose, protected: 
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-[backdropEnter_0.2s_ease-out]"
       onClick={onClose}
       style={{ willChange: 'opacity' }}
     >
       <div
-        className="w-[95vw] h-[95vh] max-w-[95vw] max-h-[95vh] flex flex-col bg-black border border-emerald-700 rounded-xl overflow-hidden shadow-lg shadow-emerald-900/20 animate-[scaleIn_0.2s_ease-out]"
+        className="w-[95vw] h-[95vh] max-w-[95vw] max-h-[95vh] flex flex-col bg-black border border-emerald-700 rounded-xl overflow-hidden shadow-lg shadow-emerald-900/20 animate-[modalEnter_0.2s_ease-out]"
         onClick={(e) => e.stopPropagation()}
         style={{
           transform: 'translateZ(0)',

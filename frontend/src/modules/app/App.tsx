@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useToast } from "../../shared/ui/ToastProvider";
 import {
   getFriendlyErrorMessage,
@@ -6,6 +6,7 @@ import {
 } from "../../shared/api/error-handler";
 import { apiClient } from "../../shared/api/client";
 import { fetchMe, type UserSummary } from "../chat/api";
+import { LoadingSpinner } from "../../shared/ui/LoadingSpinner";
 
 const AuthScreen = lazy(() => import("./AuthScreen").then((module) => ({ default: module.AuthScreen })));
 const ChatScreen = lazy(() => import("./ChatScreen").then((module) => ({ default: module.ChatScreen })));
@@ -19,6 +20,12 @@ export function App() {
   const [hasSearched, setHasSearched] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const { showToast } = useToast();
+
+  const resetAuthState = useCallback(() => {
+    setToken(null);
+    setProfile(null);
+    setSearchResults([]);
+  }, []);
 
   const refreshAccessToken = useCallback(async (): Promise<string | null> => {
     try {
@@ -36,14 +43,8 @@ export function App() {
 
   useEffect(() => {
     apiClient.setRefreshTokenFn(refreshAccessToken);
-    apiClient.setOnTokenExpired(() => {
-      setToken(null);
-      setProfile(null);
-      setSearchResults([]);
-    });
-  }, [refreshAccessToken]);
+    apiClient.setOnTokenExpired(resetAuthState);
 
-  useEffect(() => {
     let cancelled = false;
 
     const init = async () => {
@@ -53,17 +54,13 @@ export function App() {
           return;
         }
         if (!newToken) {
-          setToken(null);
-          setProfile(null);
-          setSearchResults([]);
+          resetAuthState();
         }
       } catch (err) {
         if (cancelled) {
           return;
         }
-        setToken(null);
-        setProfile(null);
-        setSearchResults([]);
+        resetAuthState();
       } finally {
         if (!cancelled) {
           setIsInitializing(false);
@@ -76,7 +73,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [refreshAccessToken]);
+  }, [refreshAccessToken, resetAuthState]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -114,11 +111,9 @@ export function App() {
           const friendly = getFriendlyErrorMessage(err, "Не удалось получить профиль. Войдите снова.");
           showToast(friendly, "error");
         }
-        setToken(null);
-        setProfile(null);
-        setSearchResults([]);
+        resetAuthState();
       });
-  }, [token, showToast]);
+  }, [token, showToast, resetAuthState]);
 
   useEffect(() => {
     if (searchQuery.trim() === "") {
@@ -142,9 +137,7 @@ export function App() {
     } catch (err) {
       if (isSessionExpiredError(err)) {
         showToast("Сессия истекла. Войдите снова.", "error");
-        setToken(null);
-        setProfile(null);
-        setSearchResults([]);
+        resetAuthState();
       } else {
         const friendly = getFriendlyErrorMessage(err, "Ошибка поиска пользователей");
         showToast(friendly, "error");
@@ -154,7 +147,7 @@ export function App() {
     } finally {
       setIsSearching(false);
     }
-  }, [token, searchQuery, profile, showToast]);
+  }, [token, searchQuery, profile, showToast, resetAuthState]);
 
   const handleLogout = useCallback(async () => {
     try {
@@ -162,9 +155,7 @@ export function App() {
     } catch {
     } finally {
       apiClient.setToken(null);
-      setToken(null);
-      setProfile(null);
-      setSearchResults([]);
+      resetAuthState();
       setSearchQuery("");
       setHasSearched(false);
 
@@ -179,49 +170,39 @@ export function App() {
       } catch {
       }
     }
+  }, [resetAuthState]);
+
+  const handleAuthenticated = useCallback((newToken: string) => {
+    apiClient.setToken(newToken);
+    setToken(newToken);
   }, []);
 
+  const chatScreenProps = useMemo(
+    () => ({
+      token: token!,
+      profile: profile!,
+      searchQuery,
+      onSearchQueryChange: setSearchQuery,
+      searchResults,
+      onSearch: handleSearch,
+      isSearching,
+      hasSearched,
+      onLogout: handleLogout,
+      onTokenExpired: refreshAccessToken,
+    }),
+    [token, profile, searchQuery, searchResults, handleSearch, isSearching, hasSearched, handleLogout, refreshAccessToken]
+  );
+
   if (isInitializing) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-black text-emerald-50">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
-          <p className="text-xs text-emerald-500/80">Загрузка...</p>
-        </div>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen flex items-center justify-center bg-black text-emerald-50">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
-            <p className="text-xs text-emerald-500/80">Загрузка...</p>
-          </div>
-        </div>
-      }
-    >
+    <Suspense fallback={<LoadingSpinner />}>
       {token ? (
-        <ChatScreen
-          token={token}
-          profile={profile}
-          searchQuery={searchQuery}
-          onSearchQueryChange={setSearchQuery}
-          searchResults={searchResults}
-          onSearch={handleSearch}
-          isSearching={isSearching}
-          hasSearched={hasSearched}
-          onLogout={handleLogout}
-          onUserSelect={() => {}}
-          onTokenExpired={refreshAccessToken}
-        />
+        <ChatScreen {...chatScreenProps} />
       ) : (
-        <AuthScreen onAuthenticated={(token) => {
-          apiClient.setToken(token);
-          setToken(token);
-        }} />
+        <AuthScreen onAuthenticated={handleAuthenticated} />
       )}
     </Suspense>
   );

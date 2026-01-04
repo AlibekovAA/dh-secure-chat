@@ -280,6 +280,11 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
       const file = e.target.files?.[0];
       if (!file || isSendingFile || !isSessionActive || isChatBlocked) return;
 
+      if (file.size === 0) {
+        showToast('Файл пустой. Выберите файл с содержимым.', 'error');
+        return;
+      }
+
       if (file.size > MAX_FILE_SIZE) {
         showToast('Файл слишком большой. Максимальный размер: 50MB. Выберите файл меньшего размера.', 'error');
         return;
@@ -306,6 +311,11 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
           e.preventDefault();
           const file = item.getAsFile();
           if (!file) continue;
+
+          if (file.size === 0) {
+            showToast('Файл пустой. Выберите файл с содержимым.', 'error');
+            continue;
+          }
 
           if (file.size > MAX_FILE_SIZE) {
             showToast('Изображение слишком большое. Максимальный размер: 50MB. Выберите изображение меньшего размера.', 'error');
@@ -622,8 +632,9 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
                 try {
                   await sendVoice(file, duration);
                   showToast('Голосовое сообщение отправлено', 'success');
-                } catch {
-                  showToast('Не удалось отправить голосовое сообщение. Проверьте микрофон и попробуйте снова.', 'error');
+                } catch (err) {
+                  const errorMessage = err instanceof Error ? err.message : 'Не удалось отправить голосовое сообщение. Проверьте микрофон и попробуйте снова.';
+                  showToast(errorMessage, 'error');
                 }
               }}
               onError={(error) => showToast(error, 'error')}
@@ -635,8 +646,9 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
                 try {
                   await sendFile(file, 'both', undefined, duration);
                   showToast('Видео сообщение отправлено', 'success');
-                } catch {
-                  showToast('Не удалось отправить видео сообщение. Проверьте камеру и попробуйте снова.', 'error');
+                } catch (err) {
+                  const errorMessage = err instanceof Error ? err.message : 'Не удалось отправить видео сообщение. Проверьте камеру и попробуйте снова.';
+                  showToast(errorMessage, 'error');
                 }
               }}
               onError={(error) => showToast(error, 'error')}
@@ -745,13 +757,26 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
         <FileAccessDialog
           filename={pendingFile.name}
           onSelect={async (mode: FileAccessMode) => {
+            if (!pendingFile) {
+              setShowAccessDialog(false);
+              return;
+            }
+
+            if (pendingFile.size === 0) {
+              showToast('Файл пустой. Выберите файл с содержимым.', 'error');
+              setShowAccessDialog(false);
+              setPendingFile(null);
+              return;
+            }
+
             setShowAccessDialog(false);
             setIsSendingFile(true);
             try {
               await sendFile(pendingFile, mode);
               showToast('Файл отправлен', 'success');
             } catch (err) {
-              showToast('Не удалось отправить файл. Проверьте соединение и попробуйте снова.', 'error');
+              const errorMessage = err instanceof Error ? err.message : 'Не удалось отправить файл. Проверьте соединение и попробуйте снова.';
+              showToast(errorMessage, 'error');
             } finally {
               setIsSendingFile(false);
               setPendingFile(null);

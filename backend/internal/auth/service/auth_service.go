@@ -164,7 +164,12 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (AuthRe
 		return s.repo.Create(ctx, user)
 	})
 	if err != nil {
-		return s.handleDBCreateError(ctx, err, input.Username)
+		return s.handleDBError(ctx, err, input.Username, dbErrorConfig{
+			operation:             "register",
+			specificError:         commonerrors.ErrUsernameAlreadyExists,
+			specificErrorResponse: ErrUsernameTaken,
+			errorMessage:          "failed to create user",
+		})
 	}
 
 	if len(input.IdentityPubKey) > 0 {
@@ -237,7 +242,12 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (AuthResult, 
 		return fetchErr
 	})
 	if err != nil {
-		return s.handleDBFetchError(ctx, err, input.Username)
+		return s.handleDBError(ctx, err, input.Username, dbErrorConfig{
+			operation:             "login",
+			specificError:         userrepo.ErrUserNotFound,
+			specificErrorResponse: ErrInvalidCredentials,
+			errorMessage:          "failed to fetch user",
+		})
 	}
 
 	if err := s.hasher.Compare(user.PasswordHash, input.Password); err != nil {
@@ -301,9 +311,9 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken strin
 	txMgr := s.refreshTokenRepo.TxManager()
 	var err error
 
-	if !cacheHit {
-		err = s.dbCircuitBreaker.Call(ctx, func(ctx context.Context) error {
-			return txMgr.WithTx(ctx, func(txCtx context.Context, tx authrepo.RefreshTokenTx) error {
+	err = s.dbCircuitBreaker.Call(ctx, func(ctx context.Context) error {
+		return txMgr.WithTx(ctx, func(txCtx context.Context, tx authrepo.RefreshTokenTx) error {
+			if !cacheHit {
 				var fetchErr error
 				stored, fetchErr = tx.FindByTokenHashForUpdate(txCtx, hash)
 				if fetchErr != nil {
@@ -326,37 +336,21 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken strin
 				}
 				s.refreshTokenCache.Set(hash, stored, stored.UserID)
 				cachedUserID = stored.UserID
+			}
 
-				var userFetchErr error
-				user, userFetchErr = s.repo.FindByID(txCtx, userdomain.ID(stored.UserID))
-				if userFetchErr != nil {
-					return userFetchErr
-				}
+			var userFetchErr error
+			user, userFetchErr = s.repo.FindByID(txCtx, userdomain.ID(cachedUserID))
+			if userFetchErr != nil {
+				return userFetchErr
+			}
 
-				if delErr := tx.DeleteByTokenHash(txCtx, hash); delErr != nil {
-					return delErr
-				}
+			if delErr := tx.DeleteByTokenHash(txCtx, hash); delErr != nil {
+				return delErr
+			}
 
-				return nil
-			})
+			return nil
 		})
-	} else {
-		err = s.dbCircuitBreaker.Call(ctx, func(ctx context.Context) error {
-			return txMgr.WithTx(ctx, func(txCtx context.Context, tx authrepo.RefreshTokenTx) error {
-				var userFetchErr error
-				user, userFetchErr = s.repo.FindByID(txCtx, userdomain.ID(cachedUserID))
-				if userFetchErr != nil {
-					return userFetchErr
-				}
-
-				if delErr := tx.DeleteByTokenHash(txCtx, hash); delErr != nil {
-					return delErr
-				}
-
-				return nil
-			})
-		})
-	}
+	})
 
 	s.refreshTokenCache.Invalidate(hash)
 	if err != nil {
@@ -502,58 +496,49 @@ func (s *AuthService) ParseTokenForRevoke(ctx context.Context, tokenString strin
 	return s.tokenIssuer.ParseToken(tokenString)
 }
 
-func (s *AuthService) handleDBCreateError(ctx context.Context, err error, username string) (AuthResult, error) {
+type dbErrorConfig struct {
+	operation             string
+	specificError         error
+	specificErrorResponse commonerrors.DomainError
+	errorMessage          string
+}
+
+func (s *AuthService) handleDBError(ctx context.Context, err error, username string, config dbErrorConfig) (AuthResult, error) {
 	if errors.Is(err, commonerrors.ErrCircuitOpen) {
 		s.log.WithFields(ctx, logger.Fields{
 			"username": username,
-			"action":   "register_db_circuit_open",
-		}).Error("register failed: database circuit breaker is open")
+			"action":   config.operation + "_db_circuit_open",
+		}).Errorf("%s failed: database circuit breaker is open", config.operation)
 		return AuthResult{}, ErrServiceUnavailable.WithCause(err)
 	}
-	if errors.Is(err, commonerrors.ErrUsernameAlreadyExists) {
+	if errors.Is(err, config.specificError) {
+		actionField := config.operation + "_" + getSpecificErrorAction(config.specificError)
 		s.log.WithFields(ctx, logger.Fields{
 			"username": username,
-			"action":   "register_username_exists",
-		}).Warn("register failed: already exists")
-		return AuthResult{}, ErrUsernameTaken
+			"action":   actionField,
+		}).Warnf("%s failed: %v", config.operation, err)
+		return AuthResult{}, config.specificErrorResponse
 	}
 	s.log.WithFields(ctx, logger.Fields{
 		"username": username,
-		"action":   "register_create_failed",
-	}).Errorf("register failed: %v", err)
+		"action":   config.operation + "_db_failed",
+	}).Errorf("%s failed: %v", config.operation, err)
 	return AuthResult{}, commonerrors.NewDomainError(
 		"DB_ERROR",
 		commonerrors.CategoryInternal,
 		http.StatusInternalServerError,
-		"failed to create user",
+		config.errorMessage,
 	).WithCause(err)
 }
 
-func (s *AuthService) handleDBFetchError(ctx context.Context, err error, username string) (AuthResult, error) {
-	if errors.Is(err, commonerrors.ErrCircuitOpen) {
-		s.log.WithFields(ctx, logger.Fields{
-			"username": username,
-			"action":   "login_db_circuit_open",
-		}).Error("login failed: database circuit breaker is open")
-		return AuthResult{}, ErrServiceUnavailable.WithCause(err)
+func getSpecificErrorAction(err error) string {
+	if errors.Is(err, commonerrors.ErrUsernameAlreadyExists) {
+		return "username_exists"
 	}
 	if errors.Is(err, userrepo.ErrUserNotFound) {
-		s.log.WithFields(ctx, logger.Fields{
-			"username": username,
-			"action":   "login_user_not_found",
-		}).Warn("login failed: not found")
-		return AuthResult{}, ErrInvalidCredentials
+		return "user_not_found"
 	}
-	s.log.WithFields(ctx, logger.Fields{
-		"username": username,
-		"action":   "login_fetch_failed",
-	}).Errorf("login failed: %v", err)
-	return AuthResult{}, commonerrors.NewDomainError(
-		"DB_ERROR",
-		commonerrors.CategoryInternal,
-		http.StatusInternalServerError,
-		"failed to fetch user",
-	).WithCause(err)
+	return "specific_error"
 }
 
 func (s *AuthService) issueTokens(ctx context.Context, user userdomain.User) (string, authdomain.RefreshToken, error) {

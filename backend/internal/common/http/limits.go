@@ -7,10 +7,6 @@ import (
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 )
 
-const (
-	DefaultMaxRequestSize = constants.DefaultMaxRequestSize
-)
-
 type maxBytesReader struct {
 	reader io.ReadCloser
 	limit  int64
@@ -35,7 +31,7 @@ func (r *maxBytesReader) Close() error {
 
 func MaxRequestSizeMiddleware(maxBytes int64) func(http.Handler) http.Handler {
 	if maxBytes <= 0 {
-		maxBytes = DefaultMaxRequestSize
+		maxBytes = constants.DefaultMaxRequestSize
 	}
 
 	return func(next http.Handler) http.Handler {

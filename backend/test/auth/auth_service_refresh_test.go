@@ -226,3 +226,75 @@ func TestAuthService_RefreshAccessToken_UserNotFound(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestAuthService_RefreshAccessToken_CacheHit(t *testing.T) {
+	svc, mockUserRepo, _, mockRefreshTokenRepo, _, _, _, mockClock := setupAuthService(t)
+
+	refreshToken := "test-refresh-token-123"
+	hash := service.HashRefreshToken(refreshToken)
+	userID := "user-123"
+	username := "testuser"
+
+	storedToken := authdomain.RefreshToken{
+		ID:        "token-id",
+		TokenHash: hash,
+		UserID:    userID,
+		ExpiresAt: mockClock.Now().Add(constants.TestTokenExpiryOffset),
+		CreatedAt: mockClock.Now(),
+	}
+
+	callCount := 0
+	mockUserRepo.findByIDFunc = func(ctx context.Context, id userdomain.ID) (userdomain.User, error) {
+		callCount++
+		return userdomain.User{
+			ID:           userdomain.ID(userID),
+			Username:     username,
+			PasswordHash: "hashed",
+			CreatedAt:    mockClock.Now(),
+		}, nil
+	}
+
+	mockTx := &mockRefreshTokenTx{}
+	mockTx.findByTokenHashForUpdateFunc = func(ctx context.Context, h string) (authdomain.RefreshToken, error) {
+		return storedToken, nil
+	}
+	mockTx.deleteByTokenHashFunc = func(ctx context.Context, h string) error {
+		return nil
+	}
+
+	mockRefreshTokenRepo.txManagerFunc = func() authrepo.RefreshTokenTxManagerInterface {
+		return newTestRefreshTokenTxManagerWithFunc(func(ctx context.Context, fn func(context.Context, authrepo.RefreshTokenTx) error) error {
+			return fn(ctx, mockTx)
+		})
+	}
+
+	mockRefreshTokenRepo.createFunc = func(ctx context.Context, token authdomain.RefreshToken) error {
+		return nil
+	}
+
+	mockRefreshTokenRepo.countByUserIDFunc = func(ctx context.Context, uid string) (int, error) {
+		return 0, nil
+	}
+
+	result1, err := svc.RefreshAccessToken(context.Background(), refreshToken, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("expected no error on first call, got %v", err)
+	}
+
+	if result1.AccessToken == "" {
+		t.Error("expected access token to be set")
+	}
+
+	result2, err := svc.RefreshAccessToken(context.Background(), refreshToken, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("expected no error on second call (cache hit), got %v", err)
+	}
+
+	if result2.AccessToken == "" {
+		t.Error("expected access token to be set on cache hit")
+	}
+
+	if callCount < 2 {
+		t.Errorf("expected FindByID to be called at least twice, got %d", callCount)
+	}
+}

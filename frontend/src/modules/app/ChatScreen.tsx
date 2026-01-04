@@ -16,7 +16,6 @@ type Props = {
   searchResults: UserSummary[];
   onSearch(): void;
   onLogout(): void;
-  onUserSelect(user: UserSummary): void;
   isSearching?: boolean;
   hasSearched?: boolean;
   onTokenExpired?: () => Promise<string | null>;
@@ -30,7 +29,6 @@ export function ChatScreen({
   searchResults,
   onSearch,
   onLogout,
-  onUserSelect,
   isSearching = false,
   hasSearched = false,
   onTokenExpired,
@@ -201,10 +199,7 @@ export function ChatScreen({
                         <button
                           key={user.id}
                           type="button"
-                          onClick={() => {
-                            setSelectedPeer(user);
-                            onUserSelect(user);
-                          }}
+                          onClick={() => setSelectedPeer(user)}
                           className="w-full text-left rounded-lg border border-emerald-700/60 px-4 py-3 bg-black/60 hover:bg-emerald-900/50 smooth-transition button-press hover:border-emerald-500/80 hover:shadow-lg hover:shadow-emerald-500/10 hover:-translate-y-0.5 active:translate-y-0 group"
                           style={{
                             animation: `slideUp 0.3s ease-out ${index * 50}ms both`,

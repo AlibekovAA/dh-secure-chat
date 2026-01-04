@@ -173,4 +173,8 @@ func TestAuthService_Login_DatabaseError(t *testing.T) {
 	if domainErr, ok := commonerrors.AsDomainError(err); !ok || domainErr.Code() != "DB_ERROR" {
 		t.Errorf("expected DB_ERROR error, got %v", err)
 	}
+
+	if domainErr, ok := commonerrors.AsDomainError(err); ok && domainErr.Message() != "failed to fetch user" {
+		t.Errorf("expected error message 'failed to fetch user', got %s", domainErr.Message())
+	}
 }

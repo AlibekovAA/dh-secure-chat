@@ -538,8 +538,7 @@ export function useChatSession({
       }
 
       if (file.size === 0) {
-        setError('Файл пустой. Выберите файл с содержимым.');
-        return;
+        throw new Error('Файл пустой. Выберите файл с содержимым.');
       }
 
       try {
@@ -717,11 +716,15 @@ export function useChatSession({
 
   const sendVoice = useCallback(
     async (file: File, duration: number) => {
+      if (file.size === 0) {
+        throw new Error(
+          'Голосовое сообщение пустое. Запишите сообщение с звуком.',
+        );
+      }
       if (file.size > MAX_VOICE_SIZE) {
-        setError(
+        throw new Error(
           'Голосовое сообщение слишком большое. Максимальный размер: 10MB. Запишите более короткое сообщение.',
         );
-        return;
       }
       await sendFile(file, 'both', duration);
     },

@@ -28,49 +28,72 @@ func NewMessageRouter(hub *Hub, validator MessageValidator, log *logger.Logger) 
 	}
 }
 
-func (r *messageRouter) handleUnmarshalError(ctx context.Context, client *Client, err error, msgType string) error {
+type errorHandlerConfig struct {
+	err              commonerrors.DomainError
+	action           string
+	metricLabel      string
+	sendToUser       bool
+	logMessage       string
+	additionalFields logger.Fields
+}
+
+func (r *messageRouter) handleError(ctx context.Context, client *Client, err error, msgType string, config errorHandlerConfig) error {
 	if err == nil {
 		return nil
 	}
-	wsErr := commonerrors.ErrInvalidPayload.WithCause(err)
-	r.log.WithFields(ctx, logger.Fields{
+
+	wsErr := config.err.WithCause(err)
+	fields := logger.Fields{
 		"user_id": client.userID,
 		"type":    msgType,
-		"action":  "ws_invalid_payload",
-	}).Warnf("websocket invalid payload: %v", err)
-	observabilitymetrics.ChatWebSocketErrors.WithLabelValues("invalid_" + msgType + "_payload").Inc()
-	r.hub.sendErrorToUser(client.userID, wsErr)
+		"action":  config.action,
+	}
+	for k, v := range config.additionalFields {
+		fields[k] = v
+	}
+
+	r.log.WithFields(ctx, fields).Warnf(config.logMessage, err)
+	observabilitymetrics.ChatWebSocketErrors.WithLabelValues(config.metricLabel).Inc()
+
+	if config.sendToUser {
+		r.hub.sendErrorToUser(client.userID, wsErr)
+	}
+
 	return wsErr
+}
+
+func (r *messageRouter) handleUnmarshalError(ctx context.Context, client *Client, err error, msgType string) error {
+	return r.handleError(ctx, client, err, msgType, errorHandlerConfig{
+		err:         commonerrors.ErrInvalidPayload,
+		action:      "ws_invalid_payload",
+		metricLabel: "invalid_" + msgType + "_payload",
+		sendToUser:  true,
+		logMessage:  "websocket invalid payload: %v",
+	})
 }
 
 func (r *messageRouter) handleValidateUserIDError(ctx context.Context, client *Client, userID, msgType string) error {
 	if err := commonhttp.ValidateUUID(userID); err != nil {
-		wsErr := commonerrors.ErrInvalidPayload.WithCause(err)
-		r.log.WithFields(ctx, logger.Fields{
-			"user_id": client.userID,
-			"to":      userID,
-			"type":    msgType,
-			"action":  "ws_invalid_user_id",
-		}).Warnf("websocket invalid user ID: %v", err)
-		observabilitymetrics.ChatWebSocketErrors.WithLabelValues("invalid_user_id").Inc()
-		r.hub.sendErrorToUser(client.userID, wsErr)
-		return wsErr
+		return r.handleError(ctx, client, err, msgType, errorHandlerConfig{
+			err:              commonerrors.ErrInvalidPayload,
+			action:           "ws_invalid_user_id",
+			metricLabel:      "invalid_user_id",
+			sendToUser:       true,
+			logMessage:       "websocket invalid user ID: %v",
+			additionalFields: logger.Fields{"to": userID},
+		})
 	}
 	return nil
 }
 
 func (r *messageRouter) handleMarshalError(ctx context.Context, client *Client, err error, msgType string) error {
-	if err == nil {
-		return nil
-	}
-	wsErr := commonerrors.ErrMarshalError.WithCause(err)
-	r.log.WithFields(ctx, logger.Fields{
-		"user_id": client.userID,
-		"type":    msgType,
-		"action":  "ws_marshal_failed",
-	}).Warnf("websocket failed to marshal payload: %v", err)
-	observabilitymetrics.ChatWebSocketErrors.WithLabelValues("marshal_failed").Inc()
-	return wsErr
+	return r.handleError(ctx, client, err, msgType, errorHandlerConfig{
+		err:         commonerrors.ErrMarshalError,
+		action:      "ws_marshal_failed",
+		metricLabel: "marshal_failed",
+		sendToUser:  false,
+		logMessage:  "websocket failed to marshal payload: %v",
+	})
 }
 
 type payloadWithFrom interface {

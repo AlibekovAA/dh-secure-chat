@@ -331,6 +331,10 @@ func TestAuthService_Register_CreateOtherError(t *testing.T) {
 	if domainErr, ok := commonerrors.AsDomainError(err); !ok || domainErr.Code() != "DB_ERROR" {
 		t.Errorf("expected DB_ERROR error, got %v", err)
 	}
+
+	if domainErr, ok := commonerrors.AsDomainError(err); ok && domainErr.Message() != "failed to create user" {
+		t.Errorf("expected error message 'failed to create user', got %s", domainErr.Message())
+	}
 }
 
 func setupRefreshTokenRotatorForCoverage(t *testing.T) (*service.RefreshTokenRotator, *mockRefreshTokenRepo, *mockIDGenerator, *clock.MockClock) {
@@ -432,5 +436,124 @@ func TestValidationError_Unwrap(t *testing.T) {
 
 	if !errors.Is(unwrapped, service.ErrValidation) {
 		t.Errorf("expected ErrValidation, got %v", unwrapped)
+	}
+}
+
+func TestAuthService_CloseRefreshTokenCache(t *testing.T) {
+	svc, _, _, _, _, _, _, _ := setupAuthService(t)
+
+	svc.CloseRefreshTokenCache()
+
+	svc.CloseRefreshTokenCache()
+}
+
+func TestAuthService_Register_IssueAccessTokenError(t *testing.T) {
+	svc, mockUserRepo, _, mockRefreshTokenRepo, _, mockHasher, mockIDGenerator, _ := setupAuthService(t)
+
+	mockHasher.hashFunc = func(p string) (string, error) {
+		return "hashed", nil
+	}
+
+	callCount := 0
+	mockIDGenerator.newIDFunc = func() (string, error) {
+		callCount++
+		if callCount == 1 {
+			return "user-123", nil
+		}
+		return "", errors.New("id generation failed for token")
+	}
+
+	mockUserRepo.createFunc = func(ctx context.Context, user userdomain.User) error {
+		return nil
+	}
+
+	mockRefreshTokenRepo.countByUserIDFunc = func(ctx context.Context, uid string) (int, error) {
+		return 0, nil
+	}
+
+	_, err := svc.Register(context.Background(), service.RegisterInput{
+		Username: "testuser",
+		Password: "password123",
+	})
+
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestAuthService_Register_DatabaseError(t *testing.T) {
+	svc, mockUserRepo, _, _, _, mockHasher, _, _ := setupAuthService(t)
+
+	mockHasher.hashFunc = func(p string) (string, error) {
+		return "hashed", nil
+	}
+
+	mockUserRepo.createFunc = func(ctx context.Context, user userdomain.User) error {
+		return errors.New("database connection timeout")
+	}
+
+	_, err := svc.Register(context.Background(), service.RegisterInput{
+		Username: "testuser",
+		Password: "password123",
+	})
+
+	if err == nil {
+		t.Fatal("expected error")
+	}
+
+	if domainErr, ok := commonerrors.AsDomainError(err); !ok || domainErr.Code() != "DB_ERROR" {
+		t.Errorf("expected DB_ERROR error, got %v", err)
+	}
+
+	if domainErr, ok := commonerrors.AsDomainError(err); ok && domainErr.Message() != "failed to create user" {
+		t.Errorf("expected error message 'failed to create user', got %s", domainErr.Message())
+	}
+}
+
+func TestAuthService_Register_DatabaseError_UnknownSpecificError(t *testing.T) {
+	svc, mockUserRepo, _, _, _, mockHasher, _, _ := setupAuthService(t)
+
+	mockHasher.hashFunc = func(p string) (string, error) {
+		return "hashed", nil
+	}
+
+	unknownError := errors.New("unknown database error")
+	mockUserRepo.createFunc = func(ctx context.Context, user userdomain.User) error {
+		return unknownError
+	}
+
+	_, err := svc.Register(context.Background(), service.RegisterInput{
+		Username: "testuser",
+		Password: "password123",
+	})
+
+	if err == nil {
+		t.Fatal("expected error")
+	}
+
+	if domainErr, ok := commonerrors.AsDomainError(err); !ok || domainErr.Code() != "DB_ERROR" {
+		t.Errorf("expected DB_ERROR error, got %v", err)
+	}
+}
+
+func TestAuthService_Login_DatabaseError_UnknownSpecificError(t *testing.T) {
+	svc, mockUserRepo, _, _, _, _, _, _ := setupAuthService(t)
+
+	unknownError := errors.New("unknown database error")
+	mockUserRepo.findByUsernameFunc = func(ctx context.Context, username string) (userdomain.User, error) {
+		return userdomain.User{}, unknownError
+	}
+
+	_, err := svc.Login(context.Background(), service.LoginInput{
+		Username: "testuser",
+		Password: "password123",
+	})
+
+	if err == nil {
+		t.Fatal("expected error")
+	}
+
+	if domainErr, ok := commonerrors.AsDomainError(err); !ok || domainErr.Code() != "DB_ERROR" {
+		t.Errorf("expected DB_ERROR error, got %v", err)
 	}
 }

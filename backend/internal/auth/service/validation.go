@@ -87,7 +87,7 @@ func isValidPassword(value string) bool {
 		}
 	}
 
-	return hasLetter && hasDigit
+	return false
 }
 
 func AsValidationError(err error) (ValidationError, bool) {
