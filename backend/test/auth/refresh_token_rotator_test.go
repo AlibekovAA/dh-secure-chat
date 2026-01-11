@@ -54,8 +54,8 @@ func TestRefreshTokenRotator_IssueRefreshToken_Success(t *testing.T) {
 		return tokenID, nil
 	}
 
-	mockRefreshTokenRepo.countByUserIDFunc = func(ctx context.Context, uid string) (int, error) {
-		return 0, nil
+	mockRefreshTokenRepo.deleteExcessByUserIDFunc = func(ctx context.Context, uid string, maxTokens int) error {
+		return nil
 	}
 
 	mockRefreshTokenRepo.createFunc = func(ctx context.Context, token authdomain.RefreshToken) error {
@@ -102,13 +102,12 @@ func TestRefreshTokenRotator_IssueRefreshToken_RotateWhenMaxReached(t *testing.T
 		return tokenID, nil
 	}
 
-	mockRefreshTokenRepo.countByUserIDFunc = func(ctx context.Context, uid string) (int, error) {
-		return constants.DefaultMaxRefreshTokensPerUser, nil
-	}
-
-	mockRefreshTokenRepo.deleteOldestByUserIDFunc = func(ctx context.Context, uid string) error {
+	mockRefreshTokenRepo.deleteExcessByUserIDFunc = func(ctx context.Context, uid string, maxTokens int) error {
 		if uid != userID {
 			t.Errorf("expected userID %s, got %s", userID, uid)
+		}
+		if maxTokens != constants.DefaultMaxRefreshTokensPerUser {
+			t.Errorf("expected maxTokens %d, got %d", constants.DefaultMaxRefreshTokensPerUser, maxTokens)
 		}
 		return nil
 	}
@@ -140,8 +139,8 @@ func TestRefreshTokenRotator_IssueRefreshToken_IDGenerationError(t *testing.T) {
 		return "", errors.New("id generation error")
 	}
 
-	mockRefreshTokenRepo.countByUserIDFunc = func(ctx context.Context, uid string) (int, error) {
-		return 0, nil
+	mockRefreshTokenRepo.deleteExcessByUserIDFunc = func(ctx context.Context, uid string, maxTokens int) error {
+		return nil
 	}
 
 	user := userdomain.User{
@@ -163,8 +162,8 @@ func TestRefreshTokenRotator_IssueRefreshToken_CircuitBreakerOpen(t *testing.T) 
 		return "token-id", nil
 	}
 
-	mockRefreshTokenRepo.countByUserIDFunc = func(ctx context.Context, uid string) (int, error) {
-		return 0, nil
+	mockRefreshTokenRepo.deleteExcessByUserIDFunc = func(ctx context.Context, uid string, maxTokens int) error {
+		return nil
 	}
 
 	mockRefreshTokenRepo.createFunc = func(ctx context.Context, token authdomain.RefreshToken) error {
@@ -192,11 +191,11 @@ func TestRefreshTokenRotator_RotateIfNeeded_NoRotation(t *testing.T) {
 
 	userID := "user-123"
 
-	mockRefreshTokenRepo.countByUserIDFunc = func(ctx context.Context, uid string) (int, error) {
+	mockRefreshTokenRepo.deleteExcessByUserIDFunc = func(ctx context.Context, uid string, maxTokens int) error {
 		if uid != userID {
 			t.Errorf("expected userID %s, got %s", userID, uid)
 		}
-		return 3, nil
+		return nil
 	}
 
 	err := rotator.RotateIfNeeded(context.Background(), userID)
@@ -211,13 +210,12 @@ func TestRefreshTokenRotator_RotateIfNeeded_RotationNeeded(t *testing.T) {
 
 	userID := "user-123"
 
-	mockRefreshTokenRepo.countByUserIDFunc = func(ctx context.Context, uid string) (int, error) {
-		return constants.DefaultMaxRefreshTokensPerUser, nil
-	}
-
-	mockRefreshTokenRepo.deleteOldestByUserIDFunc = func(ctx context.Context, uid string) error {
+	mockRefreshTokenRepo.deleteExcessByUserIDFunc = func(ctx context.Context, uid string, maxTokens int) error {
 		if uid != userID {
 			t.Errorf("expected userID %s, got %s", userID, uid)
+		}
+		if maxTokens != constants.DefaultMaxRefreshTokensPerUser {
+			t.Errorf("expected maxTokens %d, got %d", constants.DefaultMaxRefreshTokensPerUser, maxTokens)
 		}
 		return nil
 	}
@@ -234,8 +232,8 @@ func TestRefreshTokenRotator_RotateIfNeeded_CircuitBreakerOpen(t *testing.T) {
 
 	userID := "user-123"
 
-	mockRefreshTokenRepo.countByUserIDFunc = func(ctx context.Context, uid string) (int, error) {
-		return 0, commonerrors.ErrCircuitOpen
+	mockRefreshTokenRepo.deleteExcessByUserIDFunc = func(ctx context.Context, uid string, maxTokens int) error {
+		return commonerrors.ErrCircuitOpen
 	}
 
 	err := rotator.RotateIfNeeded(context.Background(), userID)

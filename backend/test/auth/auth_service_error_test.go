@@ -65,8 +65,8 @@ func TestAuthService_Register_IssueTokensError(t *testing.T) {
 		return nil
 	}
 
-	mockRefreshTokenRepo.countByUserIDFunc = func(ctx context.Context, uid string) (int, error) {
-		return 0, errors.New("refresh token error")
+	mockRefreshTokenRepo.deleteExcessByUserIDFunc = func(ctx context.Context, uid string, maxTokens int) error {
+		return errors.New("refresh token error")
 	}
 
 	_, err := svc.Register(context.Background(), service.RegisterInput{
@@ -95,8 +95,8 @@ func TestAuthService_Login_IssueTokensError(t *testing.T) {
 		return nil
 	}
 
-	mockRefreshTokenRepo.countByUserIDFunc = func(ctx context.Context, uid string) (int, error) {
-		return 0, errors.New("refresh token error")
+	mockRefreshTokenRepo.deleteExcessByUserIDFunc = func(ctx context.Context, uid string, maxTokens int) error {
+		return errors.New("refresh token error")
 	}
 
 	_, err := svc.Login(context.Background(), service.LoginInput{
@@ -237,8 +237,8 @@ func TestAuthService_RefreshAccessToken_IssueTokensError(t *testing.T) {
 		})
 	}
 
-	mockRefreshTokenRepo.countByUserIDFunc = func(ctx context.Context, uid string) (int, error) {
-		return 0, errors.New("refresh token error")
+	mockRefreshTokenRepo.deleteExcessByUserIDFunc = func(ctx context.Context, uid string, maxTokens int) error {
+		return errors.New("refresh token error")
 	}
 
 	_, err := svc.RefreshAccessToken(context.Background(), refreshToken, "127.0.0.1")
@@ -368,8 +368,8 @@ func setupRefreshTokenRotatorForCoverage(t *testing.T) (*service.RefreshTokenRot
 func TestRefreshTokenRotator_RotateIfNeeded_CountOtherError(t *testing.T) {
 	rotator, mockRefreshTokenRepo, _, _ := setupRefreshTokenRotatorForCoverage(t)
 
-	mockRefreshTokenRepo.countByUserIDFunc = func(ctx context.Context, uid string) (int, error) {
-		return 0, errors.New("other database error")
+	mockRefreshTokenRepo.deleteExcessByUserIDFunc = func(ctx context.Context, uid string, maxTokens int) error {
+		return errors.New("other database error")
 	}
 
 	err := rotator.RotateIfNeeded(context.Background(), "user-123")
@@ -382,26 +382,22 @@ func TestRefreshTokenRotator_RotateIfNeeded_CountOtherError(t *testing.T) {
 func TestRefreshTokenRotator_RotateIfNeeded_DeleteOldestError(t *testing.T) {
 	rotator, mockRefreshTokenRepo, _, _ := setupRefreshTokenRotatorForCoverage(t)
 
-	mockRefreshTokenRepo.countByUserIDFunc = func(ctx context.Context, uid string) (int, error) {
-		return constants.DefaultMaxRefreshTokensPerUser, nil
-	}
-
-	mockRefreshTokenRepo.deleteOldestByUserIDFunc = func(ctx context.Context, uid string) error {
+	mockRefreshTokenRepo.deleteExcessByUserIDFunc = func(ctx context.Context, uid string, maxTokens int) error {
 		return errors.New("delete error")
 	}
 
 	err := rotator.RotateIfNeeded(context.Background(), "user-123")
 
-	if err != nil {
-		t.Errorf("expected no error (non-critical), got %v", err)
+	if err == nil {
+		t.Fatal("expected error")
 	}
 }
 
 func TestRefreshTokenRotator_IssueRefreshToken_RotateError(t *testing.T) {
 	rotator, mockRefreshTokenRepo, _, _ := setupRefreshTokenRotatorForCoverage(t)
 
-	mockRefreshTokenRepo.countByUserIDFunc = func(ctx context.Context, uid string) (int, error) {
-		return 0, errors.New("count error")
+	mockRefreshTokenRepo.deleteExcessByUserIDFunc = func(ctx context.Context, uid string, maxTokens int) error {
+		return errors.New("count error")
 	}
 
 	user := userdomain.User{
@@ -467,8 +463,8 @@ func TestAuthService_Register_IssueAccessTokenError(t *testing.T) {
 		return nil
 	}
 
-	mockRefreshTokenRepo.countByUserIDFunc = func(ctx context.Context, uid string) (int, error) {
-		return 0, nil
+	mockRefreshTokenRepo.deleteExcessByUserIDFunc = func(ctx context.Context, uid string, maxTokens int) error {
+		return nil
 	}
 
 	_, err := svc.Register(context.Background(), service.RegisterInput{

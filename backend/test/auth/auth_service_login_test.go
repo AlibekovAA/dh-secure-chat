@@ -43,8 +43,8 @@ func TestAuthService_Login_Success(t *testing.T) {
 		return nil
 	}
 
-	mockRefreshTokenRepo.countByUserIDFunc = func(ctx context.Context, uid string) (int, error) {
-		return 0, nil
+	mockRefreshTokenRepo.deleteExcessByUserIDFunc = func(ctx context.Context, uid string, maxTokens int) error {
+		return nil
 	}
 
 	result, err := svc.Login(context.Background(), service.LoginInput{

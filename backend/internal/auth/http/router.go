@@ -32,13 +32,12 @@ type Handler struct {
 	log  *logger.Logger
 }
 
-func NewHandler(auth *service.AuthService, cfg config.AuthConfig, log *logger.Logger) http.Handler {
+func NewHandler(auth service.Service, cfg config.AuthConfig, log *logger.Logger) http.Handler {
 	h := &Handler{
-		auth: auth,
+		auth: auth.(*service.AuthService),
 		log:  log,
 	}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/health", commonhttp.HealthHandler(log))
 	mux.HandleFunc("/api/auth/register", commonhttp.RequireMethod(http.MethodPost)(commonhttp.WithTimeout(cfg.RequestTimeout)(h.register)))
 	mux.HandleFunc("/api/auth/login", commonhttp.RequireMethod(http.MethodPost)(commonhttp.WithTimeout(cfg.RequestTimeout)(h.login)))
 	mux.HandleFunc("/api/auth/refresh", commonhttp.RequireMethod(http.MethodPost)(commonhttp.WithTimeout(cfg.RequestTimeout)(h.refresh)))

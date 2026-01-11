@@ -32,7 +32,7 @@ func (c *Collector) Wrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		method := r.Method
-		path := r.URL.Path
+		path := NormalizePath(r.URL.Path)
 		service := c.prefix
 
 		metrics.HTTPRequestsTotal.WithLabelValues(service, method, path).Inc()

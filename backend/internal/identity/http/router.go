@@ -18,9 +18,9 @@ type Handler struct {
 	log      *logger.Logger
 }
 
-func NewHandler(identity *service.IdentityService, log *logger.Logger) http.Handler {
+func NewHandler(identity service.Service, log *logger.Logger) http.Handler {
 	h := &Handler{
-		identity: identity,
+		identity: identity.(*service.IdentityService),
 		log:      log,
 	}
 

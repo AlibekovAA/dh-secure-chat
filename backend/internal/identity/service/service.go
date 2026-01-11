@@ -24,10 +24,15 @@ type IdentityService struct {
 	log  *logger.Logger
 }
 
-func NewIdentityService(repo identityrepo.Repository, log *logger.Logger) *IdentityService {
+type IdentityServiceDeps struct {
+	Repo identityrepo.Repository
+	Log  *logger.Logger
+}
+
+func NewIdentityService(deps IdentityServiceDeps) *IdentityService {
 	return &IdentityService{
-		repo: repo,
-		log:  log,
+		repo: deps.Repo,
+		log:  deps.Log,
 	}
 }
 

@@ -51,37 +51,22 @@ func NewRefreshTokenRotator(
 }
 
 func (rtr *RefreshTokenRotator) RotateIfNeeded(ctx context.Context, userID string) error {
-	var count int
 	err := rtr.dbCircuitBreaker.Call(ctx, func(ctx context.Context) error {
-		var countErr error
-		count, countErr = rtr.refreshTokenRepo.CountByUserID(ctx, userID)
-		return countErr
+		return rtr.refreshTokenRepo.DeleteExcessByUserID(ctx, userID, rtr.maxRefreshTokens)
 	})
 	if err != nil {
 		if errors.Is(err, commonerrors.ErrCircuitOpen) {
 			rtr.log.WithFields(ctx, logger.Fields{
 				"user_id": userID,
-				"action":  "count_refresh_tokens_db_circuit_open",
-			}).Error("failed to count refresh tokens: database circuit breaker is open")
+				"action":  "delete_excess_refresh_tokens_db_circuit_open",
+			}).Error("failed to delete excess refresh tokens: database circuit breaker is open")
 			return err
 		}
 		rtr.log.WithFields(ctx, logger.Fields{
 			"user_id": userID,
-			"action":  "count_refresh_tokens_failed",
-		}).Errorf("failed to count refresh tokens: %v", err)
+			"action":  "delete_excess_refresh_tokens_failed",
+		}).Warnf("failed to delete excess refresh tokens: %v", err)
 		return err
-	}
-
-	if count >= rtr.maxRefreshTokens {
-		err = rtr.dbCircuitBreaker.Call(ctx, func(ctx context.Context) error {
-			return rtr.refreshTokenRepo.DeleteOldestByUserID(ctx, userID)
-		})
-		if err != nil {
-			rtr.log.WithFields(ctx, logger.Fields{
-				"user_id": userID,
-				"action":  "delete_oldest_refresh_token_failed",
-			}).Warnf("failed to delete oldest refresh token: %v", err)
-		}
 	}
 
 	return nil

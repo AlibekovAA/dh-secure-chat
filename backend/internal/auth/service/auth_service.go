@@ -21,6 +21,16 @@ import (
 	userrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/repository"
 )
 
+type Service interface {
+	Register(ctx context.Context, input RegisterInput) (AuthResult, error)
+	Login(ctx context.Context, input LoginInput) (AuthResult, error)
+	RefreshAccessToken(ctx context.Context, refreshToken string, clientIP string) (AuthResult, error)
+	RevokeRefreshToken(ctx context.Context, refreshToken string) error
+	RevokeAccessToken(ctx context.Context, jti string, userID string) error
+	ParseTokenForRevoke(ctx context.Context, tokenString string) (jwtverify.Claims, error)
+	CloseRefreshTokenCache()
+}
+
 type AuthService struct {
 	repo                userrepo.Repository
 	identityService     identityservice.Service
@@ -34,7 +44,7 @@ type AuthService struct {
 	accessTokenTTL      time.Duration
 	tokenIssuer         *TokenIssuer
 	refreshTokenRotator *RefreshTokenRotator
-	credentialValidator *CredentialValidator
+	credentialValidator CredentialValidator
 	refreshTokenCache   *RefreshTokenCache
 }
 

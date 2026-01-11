@@ -110,8 +110,7 @@ type mockRefreshTokenRepo struct {
 	createFunc               func(ctx context.Context, token authdomain.RefreshToken) error
 	findByTokenHashFunc      func(ctx context.Context, hash string) (authdomain.RefreshToken, error)
 	deleteByTokenHashFunc    func(ctx context.Context, hash string) error
-	countByUserIDFunc        func(ctx context.Context, userID string) (int, error)
-	deleteOldestByUserIDFunc func(ctx context.Context, userID string) error
+	deleteExcessByUserIDFunc func(ctx context.Context, userID string, maxTokens int) error
 	deleteExpiredFunc        func(ctx context.Context) (int64, error)
 	txManagerFunc            func() authrepo.RefreshTokenTxManagerInterface
 }
@@ -137,16 +136,9 @@ func (m *mockRefreshTokenRepo) DeleteByTokenHash(ctx context.Context, hash strin
 	return nil
 }
 
-func (m *mockRefreshTokenRepo) CountByUserID(ctx context.Context, userID string) (int, error) {
-	if m.countByUserIDFunc != nil {
-		return m.countByUserIDFunc(ctx, userID)
-	}
-	return 0, nil
-}
-
-func (m *mockRefreshTokenRepo) DeleteOldestByUserID(ctx context.Context, userID string) error {
-	if m.deleteOldestByUserIDFunc != nil {
-		return m.deleteOldestByUserIDFunc(ctx, userID)
+func (m *mockRefreshTokenRepo) DeleteExcessByUserID(ctx context.Context, userID string, maxTokens int) error {
+	if m.deleteExcessByUserIDFunc != nil {
+		return m.deleteExcessByUserIDFunc(ctx, userID, maxTokens)
 	}
 	return nil
 }

@@ -86,8 +86,8 @@ func TestAuthService_Register_Success(t *testing.T) {
 		return nil
 	}
 
-	mockRefreshTokenRepo.countByUserIDFunc = func(ctx context.Context, uid string) (int, error) {
-		return 0, nil
+	mockRefreshTokenRepo.deleteExcessByUserIDFunc = func(ctx context.Context, uid string, maxTokens int) error {
+		return nil
 	}
 
 	result, err := svc.Register(context.Background(), service.RegisterInput{
@@ -223,8 +223,8 @@ func TestAuthService_Register_IdentityKeyError_InvalidKey(t *testing.T) {
 		return nil
 	}
 
-	mockRefreshTokenRepo.countByUserIDFunc = func(ctx context.Context, uid string) (int, error) {
-		return 0, nil
+	mockRefreshTokenRepo.deleteExcessByUserIDFunc = func(ctx context.Context, uid string, maxTokens int) error {
+		return nil
 	}
 
 	result, err := svc.Register(context.Background(), service.RegisterInput{
@@ -265,8 +265,8 @@ func TestAuthService_Register_IdentityKeyError_OtherError(t *testing.T) {
 		return nil
 	}
 
-	mockRefreshTokenRepo.countByUserIDFunc = func(ctx context.Context, uid string) (int, error) {
-		return 0, nil
+	mockRefreshTokenRepo.deleteExcessByUserIDFunc = func(ctx context.Context, uid string, maxTokens int) error {
+		return nil
 	}
 
 	result, err := svc.Register(context.Background(), service.RegisterInput{
@@ -346,8 +346,8 @@ func TestAuthService_Register_WithoutIdentityKey(t *testing.T) {
 		return nil
 	}
 
-	mockRefreshTokenRepo.countByUserIDFunc = func(ctx context.Context, uid string) (int, error) {
-		return 0, nil
+	mockRefreshTokenRepo.deleteExcessByUserIDFunc = func(ctx context.Context, uid string, maxTokens int) error {
+		return nil
 	}
 
 	result, err := svc.Register(context.Background(), service.RegisterInput{

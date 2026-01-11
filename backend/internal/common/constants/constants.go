@@ -47,6 +47,7 @@ const (
 	DBPoolConnMaxIdleTime = 10 * time.Minute
 	DBPoolHealthCheck     = 1 * time.Minute
 	DBPoolConnectTimeout  = 15 * time.Second
+	DBPoolCloseTimeout    = 5 * time.Second
 	DBPoolMaxAttempts     = 10
 	DBPoolRetryDelay      = 1 * time.Second
 	DBPoolMetricsInterval = 30 * time.Second

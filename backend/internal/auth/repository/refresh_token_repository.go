@@ -16,8 +16,7 @@ type RefreshTokenRepository interface {
 	Create(ctx context.Context, token authdomain.RefreshToken) error
 	FindByTokenHash(ctx context.Context, hash string) (authdomain.RefreshToken, error)
 	DeleteByTokenHash(ctx context.Context, hash string) error
-	CountByUserID(ctx context.Context, userID string) (int, error)
-	DeleteOldestByUserID(ctx context.Context, userID string) error
+	DeleteExcessByUserID(ctx context.Context, userID string, maxTokens int) error
 	DeleteExpired(ctx context.Context) (int64, error)
 	TxManager() RefreshTokenTxManagerInterface
 }
@@ -97,26 +96,7 @@ func (r *PgRefreshTokenRepository) DeleteByTokenHash(ctx context.Context, hash s
 	return db.HandleExecError(err, "delete refresh token", start)
 }
 
-func (r *PgRefreshTokenRepository) CountByUserID(ctx context.Context, userID string) (int, error) {
-	ctx, cancel := context.WithTimeout(ctx, constants.DBQueryTimeout)
-	defer cancel()
-
-	start := time.Now()
-	row := r.pool.QueryRow(
-		ctx,
-		`SELECT COUNT(*) FROM refresh_tokens WHERE user_id = $1`,
-		userID,
-	)
-
-	var count int
-	if err := row.Scan(&count); err != nil {
-		return 0, db.HandleQueryError(err, nil, "count refresh tokens", start)
-	}
-	db.MeasureQueryDuration("count refresh tokens", start)
-	return count, nil
-}
-
-func (r *PgRefreshTokenRepository) DeleteOldestByUserID(ctx context.Context, userID string) error {
+func (r *PgRefreshTokenRepository) DeleteExcessByUserID(ctx context.Context, userID string, maxTokens int) error {
 	ctx, cancel := context.WithTimeout(ctx, constants.DBQueryTimeout)
 	defer cancel()
 
@@ -124,16 +104,18 @@ func (r *PgRefreshTokenRepository) DeleteOldestByUserID(ctx context.Context, use
 	_, err := r.pool.Exec(
 		ctx,
 		`DELETE FROM refresh_tokens
-		 WHERE id = (
+		 WHERE user_id = $1
+		 AND id NOT IN (
 		 	SELECT id
 		 	FROM refresh_tokens
 		 	WHERE user_id = $1
-		 	ORDER BY created_at ASC
-		 	LIMIT 1
+		 	ORDER BY created_at DESC
+		 	LIMIT $2
 		 )`,
 		userID,
+		maxTokens,
 	)
-	return db.HandleExecError(err, "delete oldest refresh token", start)
+	return db.HandleExecError(err, "delete excess refresh tokens", start)
 }
 
 func (r *PgRefreshTokenRepository) DeleteExpired(ctx context.Context) (int64, error) {

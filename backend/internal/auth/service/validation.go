@@ -23,11 +23,11 @@ func (e ValidationError) Unwrap() error {
 
 type CredentialValidator struct{}
 
-func NewCredentialValidator() *CredentialValidator {
-	return &CredentialValidator{}
+func NewCredentialValidator() CredentialValidator {
+	return CredentialValidator{}
 }
 
-func (cv *CredentialValidator) Validate(username, password string) error {
+func (cv CredentialValidator) Validate(username, password string) error {
 	return validateCredentials(username, password)
 }
 

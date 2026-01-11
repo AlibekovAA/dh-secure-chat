@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sync"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
@@ -24,7 +25,6 @@ func main() {
 		os.Stderr.WriteString(fmt.Sprintf("failed to initialize app: %v\n", err))
 		os.Exit(1)
 	}
-	defer app.Pool.Close()
 
 	refreshTokenRepo := authrepo.NewPgRefreshTokenRepository(app.Pool)
 	revokedTokenRepo := authrepo.NewPgRevokedTokenRepository(app.Pool)
@@ -54,14 +54,23 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go authcleanup.StartRefreshTokenCleanup(ctx, refreshTokenRepo, app.Log)
-	go authcleanup.StartRevokedTokenCleanup(ctx, revokedTokenRepo, app.Log)
+	var cleanupWg sync.WaitGroup
+	cleanupWg.Add(2)
+	go func() {
+		defer cleanupWg.Done()
+		authcleanup.StartRefreshTokenCleanup(ctx, refreshTokenRepo, app.Log)
+	}()
+	go func() {
+		defer cleanupWg.Done()
+		authcleanup.StartRevokedTokenCleanup(ctx, revokedTokenRepo, app.Log)
+	}()
 
 	handler := authhttp.NewHandler(authService, app.Config, app.Log)
 
 	mux := http.NewServeMux()
-	mux.Handle("/", handler)
+	mux.HandleFunc("/health", commonhttp.HealthHandler(app.Log))
 	mux.Handle("/metrics", promhttp.Handler())
+	mux.Handle("/", handler)
 
 	baseHandler := commonhttp.BuildBaseHandler("auth", app.Log, mux)
 	finalHandler := baseHandler
@@ -73,11 +82,17 @@ func main() {
 		func(ctx context.Context) error {
 			app.Log.Infof("auth service: stopping cleanup goroutines")
 			cancel()
+			srv.WaitGroupWithTimeout(ctx, &cleanupWg, app.Log, "auth service: cleanup goroutines stopped")
 			return nil
 		},
 		func(ctx context.Context) error {
 			app.Log.Infof("auth service: closing refresh token cache")
 			authService.CloseRefreshTokenCache()
+			return nil
+		},
+		func(ctx context.Context) error {
+			app.Log.Infof("auth service: closing database pool")
+			srv.ClosePoolWithTimeout(ctx, app.Pool, app.Log, "auth")
 			return nil
 		},
 	}

@@ -20,7 +20,7 @@ type App struct {
 	Pool            *pgxpool.Pool
 	UserRepo        userrepo.Repository
 	IdentityRepo    identityrepo.Repository
-	IdentityService *identityservice.IdentityService
+	IdentityService identityservice.Service
 }
 
 type AuthApp struct {
@@ -89,7 +89,10 @@ func initializeApp(log *logger.Logger, databaseURL string) (*App, error) {
 
 	userRepo := userrepo.NewPgRepository(pool)
 	identityRepo := identityrepo.NewPgRepository(pool)
-	identityService := identityservice.NewIdentityService(identityRepo, log)
+	identityService := identityservice.NewIdentityService(identityservice.IdentityServiceDeps{
+		Repo: identityRepo,
+		Log:  log,
+	})
 
 	return &App{
 		Log:             log,

@@ -5,7 +5,10 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
+
+	"github.com/jackc/pgx/v4/pgxpool"
 
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
@@ -54,5 +57,35 @@ func StartWithGracefulShutdownAndHooks(
 		log.Errorf("%s service forced to shutdown: %v", serviceName, err)
 	} else {
 		log.Infof("%s service stopped gracefully", serviceName)
+	}
+}
+
+func WaitGroupWithTimeout(ctx context.Context, wg *sync.WaitGroup, log *logger.Logger, operation string) {
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		log.Infof("%s completed", operation)
+	case <-ctx.Done():
+		log.Warnf("%s timeout", operation)
+	}
+}
+
+func ClosePoolWithTimeout(ctx context.Context, pool *pgxpool.Pool, log *logger.Logger, serviceName string) {
+	poolCloseCtx, poolCloseCancel := context.WithTimeout(ctx, constants.DBPoolCloseTimeout)
+	defer poolCloseCancel()
+	done := make(chan struct{})
+	go func() {
+		pool.Close()
+		close(done)
+	}()
+	select {
+	case <-done:
+		log.Infof("%s service: database pool closed", serviceName)
+	case <-poolCloseCtx.Done():
+		log.Warnf("%s service: database pool close timeout", serviceName)
 	}
 }

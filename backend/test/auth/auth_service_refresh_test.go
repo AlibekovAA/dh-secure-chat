@@ -61,8 +61,8 @@ func TestAuthService_RefreshAccessToken_Success(t *testing.T) {
 		return nil
 	}
 
-	mockRefreshTokenRepo.countByUserIDFunc = func(ctx context.Context, uid string) (int, error) {
-		return 0, nil
+	mockRefreshTokenRepo.deleteExcessByUserIDFunc = func(ctx context.Context, uid string, maxTokens int) error {
+		return nil
 	}
 
 	result, err := svc.RefreshAccessToken(context.Background(), refreshToken, "127.0.0.1")
@@ -272,8 +272,8 @@ func TestAuthService_RefreshAccessToken_CacheHit(t *testing.T) {
 		return nil
 	}
 
-	mockRefreshTokenRepo.countByUserIDFunc = func(ctx context.Context, uid string) (int, error) {
-		return 0, nil
+	mockRefreshTokenRepo.deleteExcessByUserIDFunc = func(ctx context.Context, uid string, maxTokens int) error {
+		return nil
 	}
 
 	result1, err := svc.RefreshAccessToken(context.Background(), refreshToken, "127.0.0.1")

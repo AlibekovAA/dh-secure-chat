@@ -7,6 +7,7 @@ import (
 
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/httpmetrics"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/observability/metrics"
 )
@@ -45,7 +46,7 @@ func (h *ErrorHandler) HandleError(w http.ResponseWriter, r *http.Request, err e
 
 	metrics.HTTPErrorsTotal.WithLabelValues(
 		strconv.Itoa(http.StatusInternalServerError),
-		r.URL.Path,
+		httpmetrics.NormalizePath(r.URL.Path),
 		r.Method,
 	).Inc()
 
@@ -84,7 +85,7 @@ func (h *ErrorHandler) handleDomainError(w http.ResponseWriter, r *http.Request,
 
 	metrics.HTTPErrorsTotal.WithLabelValues(
 		strconv.Itoa(status),
-		r.URL.Path,
+		httpmetrics.NormalizePath(r.URL.Path),
 		r.Method,
 	).Inc()
 

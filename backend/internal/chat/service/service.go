@@ -16,6 +16,12 @@ import (
 	userrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/repository"
 )
 
+type Service interface {
+	GetMe(ctx context.Context, userID string) (dto.User, error)
+	SearchUsers(ctx context.Context, query string, limit int) ([]dto.UserSummary, error)
+	GetIdentityKey(ctx context.Context, userID string) ([]byte, error)
+}
+
 type ChatService struct {
 	repo            userrepo.Repository
 	identityService identityservice.Service

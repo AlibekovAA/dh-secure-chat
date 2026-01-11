@@ -27,7 +27,6 @@ func main() {
 		os.Stderr.WriteString(fmt.Sprintf("failed to initialize app: %v\n", err))
 		os.Exit(1)
 	}
-	defer app.Pool.Close()
 
 	chatSvc := chatservice.NewChatService(chatservice.ChatServiceDeps{
 		Repo:            app.UserRepo,
@@ -89,7 +88,12 @@ func main() {
 			app.Log.Infof("chat service: shutting down WebSocket hub")
 			hub.Shutdown()
 			cancel()
-			wg.Wait()
+			srv.WaitGroupWithTimeout(ctx, &wg, app.Log, "chat service: WebSocket hub stopped")
+			return nil
+		},
+		func(ctx context.Context) error {
+			app.Log.Infof("chat service: closing database pool")
+			srv.ClosePoolWithTimeout(ctx, app.Pool, app.Log, "chat")
 			return nil
 		},
 	}

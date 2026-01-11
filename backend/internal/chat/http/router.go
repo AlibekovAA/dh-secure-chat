@@ -36,9 +36,9 @@ type userResponse struct {
 	Username string `json:"username"`
 }
 
-func NewHandler(chat *service.ChatService, hub websocket.HubInterface, cfg config.ChatConfig, log *logger.Logger, pool *pgxpool.Pool) http.Handler {
+func NewHandler(chat service.Service, hub websocket.HubInterface, cfg config.ChatConfig, log *logger.Logger, pool *pgxpool.Pool) http.Handler {
 	h := &Handler{
-		chat:      chat,
+		chat:      chat.(*service.ChatService),
 		hub:       hub,
 		jwtSecret: cfg.JWTSecret,
 		cfg:       cfg,
@@ -63,7 +63,7 @@ func NewHandler(chat *service.ChatService, hub websocket.HubInterface, cfg confi
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/chat/me", commonhttp.WithTimeout(cfg.RequestTimeout)(h.me))
+	mux.HandleFunc("/api/chat/me", commonhttp.RequireMethod(http.MethodGet)(commonhttp.WithTimeout(cfg.RequestTimeout)(h.me)))
 	mux.HandleFunc("/api/chat/users", commonhttp.RequireMethod(http.MethodGet)(commonhttp.WithTimeout(cfg.SearchTimeout)(h.searchUsers)))
 	mux.HandleFunc("/api/chat/users/", commonhttp.RequireMethod(http.MethodGet)(commonhttp.WithTimeout(cfg.RequestTimeout)(h.getIdentityKey)))
 	mux.HandleFunc("/ws/", h.handleWebSocket)
@@ -74,7 +74,12 @@ func NewHandler(chat *service.ChatService, hub websocket.HubInterface, cfg confi
 func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	claims, ok := jwtverify.FromContext(r.Context())
 	if !ok {
-		commonhttp.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		commonhttp.HandleError(w, r, commonerrors.NewDomainError(
+			"UNAUTHORIZED",
+			commonerrors.CategoryUnauthorized,
+			http.StatusUnauthorized,
+			"unauthorized",
+		), h.log)
 		return
 	}
 
