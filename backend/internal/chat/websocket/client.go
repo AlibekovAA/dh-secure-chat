@@ -3,6 +3,7 @@ package websocket
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -31,6 +32,7 @@ type Client struct {
 	authTimeout         time.Duration
 	ctx                 context.Context
 	cancel              context.CancelFunc
+	wg                  sync.WaitGroup
 }
 
 func (c *Client) UserID() string {
@@ -79,8 +81,15 @@ func NewAuthenticatedClient(hub HubInterface, conn *gorillaWS.Conn, claims jwtve
 }
 
 func (c *Client) Start() {
-	go c.writePump()
-	go c.readPump()
+	c.wg.Add(2)
+	go func() {
+		defer c.wg.Done()
+		c.writePump()
+	}()
+	go func() {
+		defer c.wg.Done()
+		c.readPump()
+	}()
 }
 
 func (c *Client) Stop() {
@@ -90,6 +99,23 @@ func (c *Client) Stop() {
 func (c *Client) Close() {
 	if c.closed.CompareAndSwap(false, true) {
 		close(c.send)
+	}
+}
+
+func (c *Client) WaitForShutdown(timeout time.Duration) {
+	done := make(chan struct{})
+	go func() {
+		c.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(timeout):
+		c.log.WithFields(c.ctx, logger.Fields{
+			"user_id": c.userID,
+			"action":  "ws_shutdown_timeout",
+		}).Warn("websocket client shutdown timeout exceeded")
 	}
 }
 
@@ -126,27 +152,13 @@ func (c *Client) readPump() {
 		default:
 		}
 
-		type readResult struct {
-			messageType int
-			message     []byte
-			err         error
+		if !c.authenticated {
+			_ = c.conn.SetReadDeadline(time.Now().Add(c.authTimeout))
+		} else {
+			_ = c.conn.SetReadDeadline(time.Now().Add(c.pongWait))
 		}
 
-		readChan := make(chan readResult, 1)
-		go func() {
-			msgType, msgBytes, err := c.conn.ReadMessage()
-			readChan <- readResult{messageType: msgType, message: msgBytes, err: err}
-		}()
-
-		var result readResult
-		select {
-		case <-c.ctx.Done():
-			return
-		case result = <-readChan:
-		}
-
-		messageBytes := result.message
-		err := result.err
+		_, messageBytes, err := c.conn.ReadMessage()
 		if err != nil {
 			if gorillaWS.IsUnexpectedCloseError(err, gorillaWS.CloseGoingAway, gorillaWS.CloseAbnormalClosure) {
 				if c.authenticated {

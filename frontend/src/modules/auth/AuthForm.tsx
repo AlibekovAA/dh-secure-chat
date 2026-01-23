@@ -93,7 +93,7 @@ export function AuthForm({ onAuthenticated }: Props) {
     try {
       if (mode === "login") {
         const result = await login(username, password);
-        showToast("Успешный вход", "success");
+        showToast("Успешный вход", "success", { duration: 2000 });
         onAuthenticated(result.token);
         return;
       }
@@ -113,7 +113,7 @@ export function AuthForm({ onAuthenticated }: Props) {
       }
 
       await register(username, password, identityPubKey);
-      showToast("Регистрация прошла успешно.", "success");
+      showToast("Регистрация прошла успешно.", "success", { duration: 2000 });
       switchMode("login", false);
       setConfirmPassword("");
       setSubmitting(false);
@@ -131,22 +131,20 @@ export function AuthForm({ onAuthenticated }: Props) {
         <button
           type="button"
           onClick={() => switchMode("login", true)}
-          className={`flex-1 py-2 text-sm font-medium smooth-transition button-press ${
-            mode === "login"
-              ? "bg-emerald-600 text-black"
-              : "bg-black text-emerald-400 hover:bg-emerald-900/40"
-          }`}
+          className={`flex-1 py-2 text-sm font-medium smooth-transition button-press ${mode === "login"
+            ? "bg-emerald-600 text-black"
+            : "bg-black text-emerald-400 hover:bg-emerald-900/40"
+            }`}
         >
           Вход
         </button>
         <button
           type="button"
           onClick={() => switchMode("register", true)}
-          className={`flex-1 py-2 text-sm font-medium smooth-transition button-press ${
-            mode === "register"
-              ? "bg-emerald-600 text-black"
-              : "bg-black text-emerald-400 hover:bg-emerald-900/40"
-          }`}
+          className={`flex-1 py-2 text-sm font-medium smooth-transition button-press ${mode === "register"
+            ? "bg-emerald-600 text-black"
+            : "bg-black text-emerald-400 hover:bg-emerald-900/40"
+            }`}
         >
           Регистрация
         </button>
@@ -234,23 +232,21 @@ export function AuthForm({ onAuthenticated }: Props) {
                     return (
                       <div
                         key={level}
-                        className={`flex-1 rounded-full transition-all duration-300 ${
-                          isActive ? colorClass : "bg-emerald-900/30"
-                        }`}
+                        className={`flex-1 rounded-full transition-all duration-300 ${isActive ? colorClass : "bg-emerald-900/30"
+                          }`}
                       />
                     );
                   })}
                 </div>
                 <div className="flex items-center justify-between">
-                  <p className={`text-xs font-medium ${
-                    passwordStrength.strength === "weak"
-                      ? "text-red-400"
-                      : passwordStrength.strength === "medium"
-                        ? "text-yellow-400"
-                        : passwordStrength.strength === "strong"
-                          ? "text-emerald-400"
-                          : "text-emerald-300"
-                  }`}>
+                  <p className={`text-xs font-medium ${passwordStrength.strength === "weak"
+                    ? "text-red-400"
+                    : passwordStrength.strength === "medium"
+                      ? "text-yellow-400"
+                      : passwordStrength.strength === "strong"
+                        ? "text-emerald-400"
+                        : "text-emerald-300"
+                    }`}>
                     {passwordStrength.strength === "weak"
                       ? "Слабый"
                       : passwordStrength.strength === "medium"
@@ -283,13 +279,12 @@ export function AuthForm({ onAuthenticated }: Props) {
                 type={showConfirmPassword ? "text" : "password"}
                 value={confirmPassword}
                 onChange={event => setConfirmPassword(event.target.value)}
-                className={`w-full rounded-md bg-black border pr-16 px-3 py-2 text-sm text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500 ${
-                  confirmPassword && password !== confirmPassword
-                    ? "border-red-500/60 focus:ring-red-500"
-                    : confirmPassword && password === confirmPassword
-                      ? "border-emerald-500/60"
-                      : "border-emerald-700"
-                }`}
+                className={`w-full rounded-md bg-black border pr-16 px-3 py-2 text-sm text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500 ${confirmPassword && password !== confirmPassword
+                  ? "border-red-500/60 focus:ring-red-500"
+                  : confirmPassword && password === confirmPassword
+                    ? "border-emerald-500/60"
+                    : "border-emerald-700"
+                  }`}
                 autoComplete="new-password"
                 disabled={submitting}
               />
@@ -308,11 +303,10 @@ export function AuthForm({ onAuthenticated }: Props) {
                 opacity: confirmPassword ? 1 : 0
               }}
             >
-              <p className={`text-xs mt-1 ${
-                password === confirmPassword
-                  ? "text-emerald-400"
-                  : "text-red-400"
-              }`}>
+              <p className={`text-xs mt-1 ${password === confirmPassword
+                ? "text-emerald-400"
+                : "text-red-400"
+                }`}>
                 {password === confirmPassword ? "Пароли совпадают" : "Пароли не совпадают"}
               </p>
             </div>

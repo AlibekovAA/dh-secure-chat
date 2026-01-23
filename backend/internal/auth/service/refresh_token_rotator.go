@@ -20,9 +20,13 @@ import (
 	userdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
 )
 
+type RefreshTokenRotatorInterface interface {
+	IssueRefreshToken(ctx context.Context, user userdomain.User) (authdomain.RefreshToken, error)
+}
+
 type RefreshTokenRotator struct {
 	refreshTokenRepo authrepo.RefreshTokenRepository
-	dbCircuitBreaker *resilience.CircuitBreaker
+	dbCircuitBreaker resilience.CircuitBreakerInterface
 	idGenerator      commoncrypto.IDGenerator
 	clock            clock.Clock
 	maxRefreshTokens int
@@ -32,7 +36,7 @@ type RefreshTokenRotator struct {
 
 func NewRefreshTokenRotator(
 	refreshTokenRepo authrepo.RefreshTokenRepository,
-	dbCircuitBreaker *resilience.CircuitBreaker,
+	dbCircuitBreaker resilience.CircuitBreakerInterface,
 	idGenerator commoncrypto.IDGenerator,
 	refreshTokenTTL time.Duration,
 	maxRefreshTokens int,

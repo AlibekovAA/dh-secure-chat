@@ -34,6 +34,8 @@ const (
 	WebSocketProcessorTimeout            = 30 * time.Second
 	WebSocketDebugSampleRate             = 0.01
 	WebSocketShutdownNotificationTimeout = 5 * time.Second
+	WebSocketClientShutdownTimeout       = 2 * time.Second
+	WebSocketClientShutdownTimeoutLong   = 5 * time.Second
 	WebSocketFileTrackerCleanupInterval  = 1 * time.Minute
 
 	LastSeenQueueSize     = 100

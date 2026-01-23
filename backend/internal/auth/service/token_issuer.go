@@ -12,6 +12,11 @@ import (
 	userdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
 )
 
+type TokenIssuerInterface interface {
+	IssueAccessToken(user userdomain.User) (string, string, error)
+	ParseToken(tokenString string) (jwtverify.Claims, error)
+}
+
 type TokenIssuer struct {
 	jwtSecret      []byte
 	idGenerator    commoncrypto.IDGenerator

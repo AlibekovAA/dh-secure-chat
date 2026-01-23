@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v4/pgxpool"
 
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/db"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/domain"
@@ -25,6 +26,9 @@ func NewPgRepository(pool *pgxpool.Pool) *PgRepository {
 }
 
 func (r *PgRepository) Create(ctx context.Context, key domain.IdentityKey) error {
+	ctx, cancel := context.WithTimeout(ctx, constants.DBQueryTimeout)
+	defer cancel()
+
 	start := time.Now()
 	_, err := r.pool.Exec(
 		ctx,
@@ -36,6 +40,9 @@ func (r *PgRepository) Create(ctx context.Context, key domain.IdentityKey) error
 }
 
 func (r *PgRepository) FindByUserID(ctx context.Context, userID string) (domain.IdentityKey, error) {
+	ctx, cancel := context.WithTimeout(ctx, constants.DBQueryTimeout)
+	defer cancel()
+
 	start := time.Now()
 	row := r.pool.QueryRow(
 		ctx,

@@ -201,7 +201,8 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
           }
         }
       } catch (err) {
-        showToast('Не удалось отправить сообщение. Проверьте соединение и попробуйте снова.', 'error');
+        const errorMessage = err instanceof Error ? err.message : 'Не удалось отправить сообщение. Проверьте соединение и попробуйте снова.';
+        showToast(errorMessage, 'error');
       } finally {
         setIsSending(false);
       }
@@ -378,8 +379,8 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
   }, [onClose, showFingerprintModal]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm smooth-transition" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="w-full max-w-2xl h-[80vh] flex flex-col bg-black border border-emerald-700 rounded-xl overflow-hidden modal-enter glow-emerald" style={{ willChange: 'transform, opacity' }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-[backdropEnter_0.2s_ease-out]" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="w-full max-w-2xl h-[80vh] flex flex-col bg-black border border-emerald-700 rounded-xl overflow-hidden animate-[modalEnter_0.3s_cubic-bezier(0.4,0,0.2,1)] glow-emerald" style={{ willChange: 'transform, opacity' }}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-emerald-700/60 bg-black/80">
           <div className="flex items-center gap-3">
             <button
@@ -424,13 +425,12 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
             <button
               type="button"
               onClick={() => setShowFingerprintModal(true)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                fingerprintWarning
-                  ? 'bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 border border-yellow-700/40'
-                  : isPeerVerified(peer.id, peerFingerprint || '')
-                    ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-700/40'
-                    : 'bg-emerald-900/40 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-700/60'
-              }`}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${fingerprintWarning
+                ? 'bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 border border-yellow-700/40'
+                : isPeerVerified(peer.id, peerFingerprint || '')
+                  ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-700/40'
+                  : 'bg-emerald-900/40 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-700/60'
+                }`}
             >
               {fingerprintWarning ? (
                 <span className="flex items-center gap-1.5">

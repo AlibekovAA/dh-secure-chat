@@ -115,10 +115,12 @@ func (u *LastSeenUpdater) flush(pending map[string]struct{}) {
 		err = u.circuitBreaker.CallWithFallback(ctx, func(callCtx context.Context) error {
 			return u.repo.UpdateLastSeenBatch(callCtx, ids)
 		}, func() error {
-			u.log.WithFields(ctx, logger.Fields{
-				"count":  len(ids),
-				"action": "last_seen_batch_skipped",
-			}).Debug("last_seen update skipped: circuit breaker is open")
+			if u.log.ShouldLog(logger.DEBUG) {
+				u.log.WithFields(ctx, logger.Fields{
+					"count":  len(ids),
+					"action": "last_seen_batch_skipped",
+				}).Debug("last_seen update skipped: circuit breaker is open")
+			}
 			return nil
 		})
 	} else {

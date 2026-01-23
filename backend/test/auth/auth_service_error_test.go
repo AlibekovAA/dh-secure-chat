@@ -344,7 +344,7 @@ func setupRefreshTokenRotatorForCoverage(t *testing.T) (*service.RefreshTokenRot
 	mockClock := clock.NewMockClock(time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC))
 	log, _ := logger.New("", "test", "info")
 
-	dbCB := resilience.NewCircuitBreaker(resilience.CircuitBreakerConfig{
+	databaseCircuitBreaker := resilience.NewCircuitBreaker(resilience.CircuitBreakerConfig{
 		Threshold:  constants.TestCircuitBreakerThreshold,
 		Timeout:    constants.TestCircuitBreakerTimeout,
 		ResetAfter: constants.TestCircuitBreakerReset,
@@ -354,7 +354,7 @@ func setupRefreshTokenRotatorForCoverage(t *testing.T) (*service.RefreshTokenRot
 
 	rotator := service.NewRefreshTokenRotator(
 		mockRefreshTokenRepo,
-		dbCB,
+		databaseCircuitBreaker,
 		mockIDGenerator,
 		constants.DefaultRefreshTokenTTL,
 		constants.DefaultMaxRefreshTokensPerUser,

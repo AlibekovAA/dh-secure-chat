@@ -9,6 +9,7 @@ import (
 	pgx "github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/db"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
@@ -33,6 +34,9 @@ func NewPgRepository(pool *pgxpool.Pool) *PgRepository {
 }
 
 func (r *PgRepository) Create(ctx context.Context, user domain.User) error {
+	ctx, cancel := context.WithTimeout(ctx, constants.DBQueryTimeout)
+	defer cancel()
+
 	start := time.Now()
 	_, err := r.pool.Exec(
 		ctx,
@@ -54,6 +58,9 @@ func (r *PgRepository) Create(ctx context.Context, user domain.User) error {
 }
 
 func (r *PgRepository) FindByUsername(ctx context.Context, username string) (domain.User, error) {
+	ctx, cancel := context.WithTimeout(ctx, constants.DBQueryTimeout)
+	defer cancel()
+
 	start := time.Now()
 	row := r.pool.QueryRow(
 		ctx,
@@ -70,6 +77,9 @@ func (r *PgRepository) FindByUsername(ctx context.Context, username string) (dom
 }
 
 func (r *PgRepository) FindByID(ctx context.Context, id domain.ID) (domain.User, error) {
+	ctx, cancel := context.WithTimeout(ctx, constants.DBQueryTimeout)
+	defer cancel()
+
 	start := time.Now()
 	row := r.pool.QueryRow(
 		ctx,
@@ -86,6 +96,9 @@ func (r *PgRepository) FindByID(ctx context.Context, id domain.ID) (domain.User,
 }
 
 func (r *PgRepository) SearchByUsername(ctx context.Context, query string, limit int) ([]domain.Summary, error) {
+	ctx, cancel := context.WithTimeout(ctx, constants.DBQueryTimeout)
+	defer cancel()
+
 	start := time.Now()
 	searchPattern := "%" + query + "%"
 	rows, err := r.pool.Query(
@@ -121,6 +134,9 @@ func (r *PgRepository) SearchByUsername(ctx context.Context, query string, limit
 }
 
 func (r *PgRepository) UpdateLastSeen(ctx context.Context, userID domain.ID) error {
+	ctx, cancel := context.WithTimeout(ctx, constants.DBQueryTimeout)
+	defer cancel()
+
 	start := time.Now()
 	_, err := r.pool.Exec(
 		ctx,
@@ -131,6 +147,9 @@ func (r *PgRepository) UpdateLastSeen(ctx context.Context, userID domain.ID) err
 }
 
 func (r *PgRepository) UpdateLastSeenBatch(ctx context.Context, userIDs []domain.ID) error {
+	ctx, cancel := context.WithTimeout(ctx, constants.DBQueryTimeout)
+	defer cancel()
+
 	start := time.Now()
 
 	ids := make([]string, 0, len(userIDs))
@@ -147,6 +166,9 @@ func (r *PgRepository) UpdateLastSeenBatch(ctx context.Context, userIDs []domain
 }
 
 func (r *PgRepository) Delete(ctx context.Context, id domain.ID) error {
+	ctx, cancel := context.WithTimeout(ctx, constants.DBQueryTimeout)
+	defer cancel()
+
 	start := time.Now()
 	_, err := r.pool.Exec(
 		ctx,

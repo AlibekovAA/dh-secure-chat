@@ -13,6 +13,10 @@ import (
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/observability/metrics"
 )
 
+type CircuitBreakerInterface interface {
+	Call(ctx context.Context, fn func(context.Context) error) error
+}
+
 type CircuitBreaker struct {
 	failures    atomic.Int32
 	lastFailure atomic.Value
@@ -32,69 +36,69 @@ type CircuitBreakerConfig struct {
 }
 
 func NewCircuitBreaker(config CircuitBreakerConfig) *CircuitBreaker {
-	cb := &CircuitBreaker{
+	breaker := &CircuitBreaker{
 		threshold:  config.Threshold,
 		timeout:    config.Timeout,
 		resetAfter: config.ResetAfter,
 		name:       config.Name,
 		log:        config.Logger,
 	}
-	cb.lastFailure.Store(time.Time{})
-	return cb
+	breaker.lastFailure.Store(time.Time{})
+	return breaker
 }
 
-func (cb *CircuitBreaker) IsOpen() bool {
-	if cb.failures.Load() < cb.threshold {
-		cb.setState(0)
+func (breaker *CircuitBreaker) IsOpen() bool {
+	if breaker.failures.Load() < breaker.threshold {
+		breaker.setState(0)
 		return false
 	}
 
-	lastFailure := cb.lastFailure.Load().(time.Time)
+	lastFailure := breaker.lastFailure.Load().(time.Time)
 	if lastFailure.IsZero() {
-		cb.setState(0)
+		breaker.setState(0)
 		return false
 	}
 
-	if time.Since(lastFailure) > cb.resetAfter {
-		cb.reset()
-		cb.setState(0)
+	if time.Since(lastFailure) > breaker.resetAfter {
+		breaker.reset()
+		breaker.setState(0)
 		return false
 	}
 
-	cb.setState(1)
+	breaker.setState(1)
 	return true
 }
 
-func (cb *CircuitBreaker) setState(state float64) {
-	if cb.name != "" {
-		metrics.CircuitBreakerState.WithLabelValues(cb.name).Set(state)
+func (breaker *CircuitBreaker) setState(state float64) {
+	if breaker.name != "" {
+		metrics.CircuitBreakerState.WithLabelValues(breaker.name).Set(state)
 	}
 }
 
-func (cb *CircuitBreaker) recordFailure() {
-	cb.failures.Add(1)
-	cb.lastFailure.Store(time.Now())
-	if cb.log != nil {
-		cb.log.Warnf("circuit breaker [%s]: failure recorded", cb.name)
+func (breaker *CircuitBreaker) recordFailure() {
+	breaker.failures.Add(1)
+	breaker.lastFailure.Store(time.Now())
+	if breaker.log != nil {
+		breaker.log.Warnf("circuit breaker [%s]: failure recorded", breaker.name)
 	}
 }
 
-func (cb *CircuitBreaker) reset() {
-	cb.failures.Store(0)
-	cb.lastFailure.Store(time.Time{})
+func (breaker *CircuitBreaker) reset() {
+	breaker.failures.Store(0)
+	breaker.lastFailure.Store(time.Time{})
 }
 
-func (cb *CircuitBreaker) Call(ctx context.Context, fn func(context.Context) error) error {
-	return cb.CallWithFallback(ctx, fn, nil)
+func (breaker *CircuitBreaker) Call(ctx context.Context, fn func(context.Context) error) error {
+	return breaker.CallWithFallback(ctx, fn, nil)
 }
 
-func (cb *CircuitBreaker) CallWithFallback(ctx context.Context, fn func(context.Context) error, fallback func() error) error {
-	if cb.IsOpen() {
-		if cb.log != nil {
+func (breaker *CircuitBreaker) CallWithFallback(ctx context.Context, fn func(context.Context) error, fallback func() error) error {
+	if breaker.IsOpen() {
+		if breaker.log != nil {
 			if fallback != nil {
-				cb.log.Warnf("circuit breaker [%s]: circuit is open, using fallback", cb.name)
+				breaker.log.Warnf("circuit breaker [%s]: circuit is open, using fallback", breaker.name)
 			} else {
-				cb.log.Warnf("circuit breaker [%s]: circuit is open, rejecting request", cb.name)
+				breaker.log.Warnf("circuit breaker [%s]: circuit is open, rejecting request", breaker.name)
 			}
 		}
 		if fallback != nil {
@@ -103,23 +107,23 @@ func (cb *CircuitBreaker) CallWithFallback(ctx context.Context, fn func(context.
 		return commonerrors.ErrCircuitOpen
 	}
 
-	callCtx, cancel := context.WithTimeout(ctx, cb.timeout)
+	callCtx, cancel := context.WithTimeout(ctx, breaker.timeout)
 	defer cancel()
 
 	err := fn(callCtx)
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
-			cb.recordFailure()
+			breaker.recordFailure()
 		}
 		if fallback != nil {
-			if cb.log != nil {
-				cb.log.Infof("circuit breaker [%s]: operation failed, using fallback", cb.name)
+			if breaker.log != nil {
+				breaker.log.Infof("circuit breaker [%s]: operation failed, using fallback", breaker.name)
 			}
 			return fallback()
 		}
 		return err
 	}
 
-	cb.reset()
+	breaker.reset()
 	return nil
 }

@@ -276,13 +276,15 @@ func (r *messageRouter) routeFileStart(ctx context.Context, client *Client, msg 
 	}
 
 	forwardMsg := &WSMessage{Type: msg.Type, Payload: payloadBytes}
-	r.log.WithFields(ctx, logger.Fields{
-		"from":     client.userID,
-		"to":       payload.To,
-		"file_id":  payload.FileID,
-		"filename": payload.Filename,
-		"action":   "ws_file_start",
-	}).Debug("websocket file_start")
+	if r.log.ShouldLog(logger.DEBUG) {
+		r.log.WithFields(ctx, logger.Fields{
+			"from":     client.userID,
+			"to":       payload.To,
+			"file_id":  payload.FileID,
+			"filename": payload.Filename,
+			"action":   "ws_file_start",
+		}).Debug("websocket file_start")
+	}
 
 	if r.hub.forwardMessage(ctx, forwardMsg, &payload, true, client.userID) {
 		observabilitymetrics.ChatWebSocketFilesTotal.Inc()

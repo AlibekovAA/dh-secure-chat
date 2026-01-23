@@ -38,76 +38,76 @@ export type ErrorMapping = {
 const ERROR_MAPPINGS: ErrorMapping[] = [
   {
     pattern: /invalid credentials|invalid username or password/i,
-    message: 'Неверное имя пользователя или пароль.',
+    message: 'Неверное имя пользователя или пароль',
   },
   {
     pattern: /username already taken|username already exists/i,
-    message: 'Это имя пользователя уже занято.',
+    message: 'Это имя пользователя уже занято',
   },
   {
     pattern: /username must be between/i,
-    message: 'Имя пользователя должно быть от 3 до 32 символов.',
+    message: 'Имя пользователя должно быть от 3 до 32 символов',
   },
   {
     pattern: /password must be between/i,
-    message: 'Пароль должен быть от 8 до 72 символов.',
+    message: 'Пароль должен быть от 8 до 72 символов',
   },
   {
     pattern: /username may contain only/i,
     message:
-      'Имя пользователя может содержать только буквы, цифры, подчёркивание и дефис.',
+      'Имя пользователя может содержать только буквы, цифры, подчёркивание и дефис',
   },
   {
     pattern: /password must contain at least/i,
-    message: 'Пароль должен содержать хотя бы одну букву и одну цифру.',
+    message: 'Пароль должен содержать хотя бы одну букву и одну цифру',
   },
   {
     pattern: /query is empty/i,
-    message: 'Поисковый запрос не может быть пустым.',
+    message: 'Поисковый запрос не может быть пустым',
   },
   {
     pattern: /query is too long/i,
-    message: 'Поисковый запрос слишком длинный.',
+    message: 'Поисковый запрос слишком длинный',
   },
   {
     pattern: /session_expired|invalid refresh token|refresh token/i,
-    message: 'Сессия истекла. Войдите снова.',
+    message: 'Сессия истекла. Войдите снова',
   },
   {
     pattern: /unauthorized|invalid token|token expired/i,
-    message: 'Сессия истекла. Войдите снова.',
+    message: 'Сессия истекла. Войдите снова',
   },
   {
     pattern: /service temporarily unavailable|circuit breaker/i,
-    message: 'Сервис временно недоступен. Попробуйте позже.',
+    message: 'Сервис временно недоступен. Попробуйте позже',
   },
   {
     pattern: /file size exceeds maximum/i,
-    message: 'Файл слишком большой. Максимальный размер: 50MB.',
+    message: 'Файл слишком большой. Максимальный размер: 50MB',
   },
   {
     pattern: /user not found/i,
-    message: 'Пользователь не найден.',
+    message: 'Пользователь не найден',
   },
   {
     pattern: /identity key not found/i,
-    message: 'Ключ идентификации не найден.',
+    message: 'Ключ идентификации не найден',
   },
   {
     pattern: /failed to load profile/i,
-    message: 'Не удалось загрузить профиль.',
+    message: 'Не удалось загрузить профиль',
   },
   {
     pattern: /search failed/i,
-    message: 'Ошибка поиска пользователей.',
+    message: 'Ошибка поиска пользователей',
   },
   {
     pattern: /failed to get identity key/i,
-    message: 'Не удалось получить ключ идентификации.',
+    message: 'Не удалось получить ключ идентификации',
   },
   {
     pattern: /failed to get fingerprint/i,
-    message: 'Не удалось получить fingerprint.',
+    message: 'Не удалось получить fingerprint',
   },
 ];
 

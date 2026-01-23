@@ -1,15 +1,20 @@
 import { createContext, ReactNode, useContext, useMemo, useState } from "react";
 
-type ToastKind = "success" | "error" | "warning";
+type ToastKind = "success" | "error" | "warning" | "info";
 
 type Toast = {
   id: number;
   message: string;
   kind: ToastKind;
+  duration?: number;
 };
 
 type ToastContextValue = {
-  showToast(message: string, kind?: ToastKind): void;
+  showToast(
+    message: string,
+    kind?: ToastKind,
+    options?: { duration?: number }
+  ): void;
   removeToast(id: number): void;
 };
 
@@ -28,14 +33,20 @@ export function ToastProvider({ children }: Props) {
 
   const value = useMemo<ToastContextValue>(
     () => ({
-      showToast(message, kind = "error") {
+      showToast(message, kind = "error", options) {
         setToasts(current => {
           const id = (current.at(-1)?.id ?? 0) + 1;
-          const newToast = { id, message, kind };
+          const duration = options?.duration ?? (kind === "error" ? 5000 : 3500);
+          const newToast: Toast = {
+            id,
+            message,
+            kind,
+            duration
+          };
 
           setTimeout(() => {
             setToasts(prev => prev.filter(toast => toast.id !== id));
-          }, 3500);
+          }, duration);
 
           return [...current, newToast];
         });
@@ -55,13 +66,14 @@ export function ToastProvider({ children }: Props) {
             className="pointer-events-auto animate-toast-enter"
           >
             <div
-              className={`w-full rounded-lg border px-4 py-3 text-sm shadow-xl backdrop-blur-md smooth-transition ${
-                toast.kind === "error"
-                  ? "border-red-500/50 bg-red-900/90 text-red-50"
-                  : toast.kind === "success"
-                    ? "border-emerald-500/50 bg-emerald-900/90 text-emerald-50"
-                    : "border-yellow-400/50 bg-yellow-900/90 text-yellow-50"
-              }`}
+              className={`w-full rounded-lg border px-4 py-3 text-sm shadow-xl backdrop-blur-md smooth-transition ${toast.kind === "error"
+                ? "border-red-500/50 bg-red-900/90 text-red-50"
+                : toast.kind === "success"
+                  ? "border-emerald-500/50 bg-emerald-900/90 text-emerald-50"
+                  : toast.kind === "warning"
+                    ? "border-yellow-400/50 bg-yellow-900/90 text-yellow-50"
+                    : "border-blue-400/50 bg-blue-900/90 text-blue-50"
+                }`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-2 flex-1 min-w-0">

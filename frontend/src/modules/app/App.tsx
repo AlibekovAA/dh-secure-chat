@@ -79,7 +79,7 @@ export function App() {
     const handleBeforeUnload = () => {
       try {
         import("../../shared/storage/indexeddb").then(({ clearAllKeys }) => {
-          clearAllKeys().catch(() => {});
+          clearAllKeys().catch(() => { });
         });
       } catch {
       }

@@ -15,6 +15,7 @@
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -31,6 +32,7 @@
     transform: translateY(16px);
     opacity: 0;
   }
+
   to {
     transform: translateY(0);
     opacity: 1;
@@ -42,6 +44,7 @@
     transform: scale(0.95);
     opacity: 0;
   }
+
   to {
     transform: scale(1);
     opacity: 1;
@@ -53,6 +56,7 @@
     transform: scale(0.96) translateY(8px);
     opacity: 0;
   }
+
   to {
     transform: scale(1) translateY(0);
     opacity: 1;
@@ -64,6 +68,7 @@
     transform: scale(1) translateY(0);
     opacity: 1;
   }
+
   to {
     transform: scale(0.96) translateY(8px);
     opacity: 0;
@@ -75,6 +80,7 @@
     opacity: 0;
     backdrop-filter: blur(0px);
   }
+
   to {
     opacity: 1;
     backdrop-filter: blur(4px);
@@ -86,6 +92,7 @@
     opacity: 1;
     backdrop-filter: blur(4px);
   }
+
   to {
     opacity: 0;
     backdrop-filter: blur(0px);
@@ -96,17 +103,20 @@
   0% {
     background-position: -1000px 0;
   }
+
   100% {
     background-position: 1000px 0;
   }
 }
 
 @keyframes pulse-glow {
+
   0%,
   100% {
     box-shadow: 0 0 5px rgba(16, 185, 129, 0.3),
       0 0 10px rgba(16, 185, 129, 0.2);
   }
+
   50% {
     box-shadow: 0 0 10px rgba(16, 185, 129, 0.5),
       0 0 20px rgba(16, 185, 129, 0.3);
@@ -114,12 +124,14 @@
 }
 
 @keyframes typing {
+
   0%,
   60%,
   100% {
     transform: translateY(0) scale(1);
     opacity: 0.7;
   }
+
   30% {
     transform: translateY(-8px) scale(1.1);
     opacity: 1;
@@ -183,12 +195,10 @@
   }
 
   .skeleton {
-    background: linear-gradient(
-      90deg,
-      rgba(16, 185, 129, 0.1) 0%,
-      rgba(16, 185, 129, 0.2) 50%,
-      rgba(16, 185, 129, 0.1) 100%
-    );
+    background: linear-gradient(90deg,
+        rgba(16, 185, 129, 0.1) 0%,
+        rgba(16, 185, 129, 0.2) 50%,
+        rgba(16, 185, 129, 0.1) 100%);
     background-size: 1000px 100%;
     animation: shimmer 2s infinite;
   }
@@ -221,6 +231,57 @@
   .animate-toast-enter {
     animation: toastSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
   }
+
+  .page-enter {
+    animation: pageFadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+
+  .page-exit {
+    animation: pageFadeOut 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+
+  .slide-in-right {
+    animation: slideInRight 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+
+  .slide-out-left {
+    animation: slideOutLeft 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+
+  .animate-bounce-subtle {
+    animation: bounce 0.6s ease-in-out;
+  }
+
+  .ripple-effect {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .ripple-effect::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    transform: translate(-50%, -50%);
+    animation: ripple 0.6s ease-out;
+  }
+
+  .hover-lift {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .hover-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+  }
+
+  .press-scale:active {
+    transform: scale(0.96);
+  }
 }
 
 @keyframes toastSlideIn {
@@ -228,8 +289,81 @@
     transform: translateX(100%);
     opacity: 0;
   }
+
   to {
     transform: translateX(0);
     opacity: 1;
+  }
+}
+
+@keyframes pageFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pageFadeOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOutLeft {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+
+  to {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+}
+
+@keyframes bounce {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes ripple {
+  0% {
+    transform: scale(0);
+    opacity: 1;
+  }
+
+  100% {
+    transform: scale(4);
+    opacity: 0;
   }
 }

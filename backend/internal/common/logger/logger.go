@@ -55,6 +55,7 @@ type LoggerInterface interface {
 	Fatal(msg string)
 	Fatalf(format string, args ...any)
 	WithFields(ctx context.Context, fields Fields) *Entry
+	ShouldLog(level LogLevel) bool
 }
 
 type Logger struct {
@@ -240,6 +241,16 @@ func (l *Logger) WithFields(ctx context.Context, fields Fields) *Entry {
 		ctx:    ctx,
 		fields: fields,
 	}
+}
+
+func (l *Logger) ShouldLog(level LogLevel) bool {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	return level >= l.level
+}
+
+func (l *Logger) ShouldSample(prob float64) bool {
+	return l.sample(prob)
 }
 
 type Entry struct {

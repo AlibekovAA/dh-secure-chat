@@ -8,7 +8,6 @@ import (
 
 	pgx "github.com/jackc/pgx/v4"
 
-	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/observability/metrics"
 )
 
@@ -47,7 +46,7 @@ func handleError(err error, notFoundErr error, operation string, startTime time.
 	}
 	errorType := strings.TrimPrefix(strings.TrimPrefix(fmt.Sprintf("%T", err), "*"), "pgx.")
 	metrics.DBQueryErrors.WithLabelValues(operation, table, errorType).Inc()
-	return commonerrors.ErrDatabaseError.WithCause(err)
+	return fmt.Errorf("%s in database: %w", operation, err)
 }
 
 func HandleQueryError(err error, notFoundErr error, operation string, startTime time.Time) error {

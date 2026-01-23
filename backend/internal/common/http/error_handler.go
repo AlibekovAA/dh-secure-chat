@@ -75,7 +75,9 @@ func (h *ErrorHandler) handleDomainError(w http.ResponseWriter, r *http.Request,
 		logFields["trace_id"] = traceID
 	}
 
-	h.log.WithFields(ctx, logFields).Debugf("domain error: %s", domainErr.Error())
+	if h.log.ShouldLog(logger.DEBUG) {
+		h.log.WithFields(ctx, logFields).Debugf("domain error: %s", domainErr.Error())
+	}
 
 	metrics.DomainErrorsTotal.WithLabelValues(
 		string(domainErr.Category()),

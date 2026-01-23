@@ -45,9 +45,18 @@ type userExistenceCacheEntry struct {
 	expiresAt time.Time
 }
 
-var jsonBufferPool = sync.Pool{
+type jsonEncoderPoolItem struct {
+	buf *bytes.Buffer
+	enc *json.Encoder
+}
+
+var jsonEncoderPool = sync.Pool{
 	New: func() interface{} {
-		return &bytes.Buffer{}
+		buf := &bytes.Buffer{}
+		return &jsonEncoderPoolItem{
+			buf: buf,
+			enc: json.NewEncoder(buf),
+		}
 	},
 }
 
@@ -77,6 +86,12 @@ type Hub struct {
 	cancel                context.CancelFunc
 }
 
+type HubDeps struct {
+	Log      *logger.Logger
+	UserRepo userrepo.Repository
+	Clock    clock.Clock
+}
+
 type HubConfig struct {
 	MaxFileSize             int64
 	MaxVoiceSize            int64
@@ -93,41 +108,44 @@ type HubConfig struct {
 	DebugSampleRate         float64
 }
 
-func NewHub(log *logger.Logger, userRepo userrepo.Repository, config HubConfig) *Hub {
+func NewHub(deps HubDeps, config HubConfig) *Hub {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	clk := clock.NewRealClock()
+	timeClock := deps.Clock
+	if timeClock == nil {
+		timeClock = clock.NewRealClock()
+	}
 	hub := &Hub{
 		register:        make(chan *Client),
 		unregister:      make(chan *Client),
-		log:             log,
-		userRepo:        userRepo,
-		fileTracker:     transfer.NewTracker(config.FileTransferTimeout, clk),
-		idempotency:     NewIdempotencyTracker(ctx, config.IdempotencyTTL, clk),
+		log:             deps.Log,
+		userRepo:        deps.UserRepo,
+		fileTracker:     transfer.NewTracker(config.FileTransferTimeout, timeClock),
+		idempotency:     NewIdempotencyTracker(ctx, config.IdempotencyTTL, timeClock),
 		sendTimeout:     config.SendTimeout,
 		maxConnections:  config.MaxConnections,
-		clock:           clk,
+		clock:           timeClock,
 		debugSampleRate: config.DebugSampleRate,
 		ctx:             ctx,
 		cancel:          cancel,
 	}
 
 	validator := NewDefaultValidator(config.MaxFileSize, config.MaxVoiceSize)
-	router := NewMessageRouter(hub, validator, log)
+	router := NewMessageRouter(hub, validator, deps.Log)
 
-	hub.processor = NewMessageProcessor(config.ProcessorWorkers, router, log, config.ProcessorQueueSize)
+	hub.processor = NewMessageProcessor(config.ProcessorWorkers, router, deps.Log, config.ProcessorQueueSize)
 
 	idempotencyAdapter := &idempotencyAdapter{tracker: hub.idempotency}
-	hub.idempotencyMiddleware = middleware.NewIdempotencyMiddleware(idempotencyAdapter, log)
+	hub.idempotencyMiddleware = middleware.NewIdempotencyMiddleware(idempotencyAdapter, deps.Log)
 
 	lastSeenCircuitBreaker := resilience.NewCircuitBreaker(resilience.CircuitBreakerConfig{
 		Threshold:  config.CircuitBreakerThreshold,
 		Timeout:    config.CircuitBreakerTimeout,
 		ResetAfter: config.CircuitBreakerReset,
 		Name:       "last_seen_update",
-		Logger:     log,
+		Logger:     deps.Log,
 	})
-	hub.lastSeenUpdater = NewLastSeenUpdater(ctx, userRepo, log, config.LastSeenUpdateInterval, lastSeenCircuitBreaker, clk)
+	hub.lastSeenUpdater = NewLastSeenUpdater(ctx, deps.UserRepo, deps.Log, config.LastSeenUpdateInterval, lastSeenCircuitBreaker, timeClock)
 
 	go hub.fileTrackerCleanup()
 	go hub.userExistenceCacheCleanup()
@@ -160,6 +178,7 @@ func (h *Hub) Run(ctx context.Context) {
 				}).Info("websocket closing existing connection")
 				existingClient.Stop()
 				existingClient.Close()
+				existingClient.WaitForShutdown(constants.WebSocketClientShutdownTimeout)
 				h.clients.Delete(client.userID)
 				observabilitymetrics.ChatWebSocketConnectionsActive.Dec()
 				h.clientCount.Add(-1)
@@ -175,6 +194,8 @@ func (h *Hub) Run(ctx context.Context) {
 					"action":  "ws_register_rejected",
 				}).Warn("websocket connection rejected: max connections limit reached")
 				client.Stop()
+				client.Close()
+				client.WaitForShutdown(constants.WebSocketClientShutdownTimeout)
 				client.conn.Close()
 				continue
 			}
@@ -225,6 +246,7 @@ func (h *Hub) shutdown() {
 			cancel()
 		}
 		client.Close()
+		client.WaitForShutdown(constants.WebSocketClientShutdownTimeoutLong)
 	}
 
 	h.clients.Range(func(key, value interface{}) bool {
@@ -263,12 +285,11 @@ func (h *Hub) SendToUserWithContext(ctx context.Context, userID string, message 
 
 	client := value.(*Client)
 
-	buf := jsonBufferPool.Get().(*bytes.Buffer)
-	buf.Reset()
-	defer jsonBufferPool.Put(buf)
+	item := jsonEncoderPool.Get().(*jsonEncoderPoolItem)
+	item.buf.Reset()
+	defer jsonEncoderPool.Put(item)
 
-	encoder := json.NewEncoder(buf)
-	if err := encoder.Encode(message); err != nil {
+	if err := item.enc.Encode(message); err != nil {
 		h.log.WithFields(ctx, logger.Fields{
 			"user_id": userID,
 			"action":  "ws_marshal",
@@ -277,7 +298,7 @@ func (h *Hub) SendToUserWithContext(ctx context.Context, userID string, message 
 		return commonerrors.ErrMarshalError.WithCause(err)
 	}
 
-	messageBytes := buf.Bytes()
+	messageBytes := item.buf.Bytes()
 	if len(messageBytes) > 0 && messageBytes[len(messageBytes)-1] == '\n' {
 		messageBytes = messageBytes[:len(messageBytes)-1]
 	}
@@ -449,12 +470,14 @@ func (h *Hub) forwardMessage(ctx context.Context, msg *WSMessage, payload payloa
 		return false
 	}
 
-	h.log.WithFields(ctx, logger.Fields{
-		"from":   fromUserID,
-		"to":     to,
-		"type":   string(msg.Type),
-		"action": "ws_message_forwarded",
-	}).DebugSampled(h.debugSampleRate, "websocket message forwarded")
+	if h.log.ShouldLog(logger.DEBUG) && h.log.ShouldSample(h.debugSampleRate) {
+		h.log.WithFields(ctx, logger.Fields{
+			"from":   fromUserID,
+			"to":     to,
+			"type":   string(msg.Type),
+			"action": "ws_message_forwarded",
+		}).Debug("websocket message forwarded")
+	}
 	return true
 }
 
@@ -523,6 +546,7 @@ func (h *Hub) handleUnregister(client *Client) {
 
 	client.Stop()
 	client.Close()
+	client.WaitForShutdown(constants.WebSocketClientShutdownTimeout)
 	observabilitymetrics.ChatWebSocketConnectionsActive.Dec()
 	observabilitymetrics.ChatWebSocketDisconnections.WithLabelValues("unregister").Inc()
 	h.log.WithFields(client.ctx, logger.Fields{
@@ -590,11 +614,13 @@ func (h *Hub) trackFileTransfer(payload FileStartPayload) {
 func (h *Hub) updateFileTransferProgress(fileID string, chunkIndex int) {
 	if err := h.fileTracker.UpdateProgress(fileID, chunkIndex); err != nil {
 		if errors.Is(err, commonerrors.ErrTransferNotFound) {
-			h.log.WithFields(h.ctx, logger.Fields{
-				"file_id":     fileID,
-				"chunk_index": chunkIndex,
-				"action":      "ws_file_progress_skipped",
-			}).Debug("websocket file transfer progress skipped (no tracking)")
+			if h.log.ShouldLog(logger.DEBUG) {
+				h.log.WithFields(h.ctx, logger.Fields{
+					"file_id":     fileID,
+					"chunk_index": chunkIndex,
+					"action":      "ws_file_progress_skipped",
+				}).Debug("websocket file transfer progress skipped (no tracking)")
+			}
 			return
 		}
 		h.log.WithFields(h.ctx, logger.Fields{
@@ -608,10 +634,12 @@ func (h *Hub) updateFileTransferProgress(fileID string, chunkIndex int) {
 func (h *Hub) completeFileTransfer(fileID string) {
 	if err := h.fileTracker.Complete(fileID); err != nil {
 		if errors.Is(err, commonerrors.ErrTransferNotFound) {
-			h.log.WithFields(h.ctx, logger.Fields{
-				"file_id": fileID,
-				"action":  "ws_file_complete_skipped",
-			}).Debug("websocket file transfer complete skipped (no tracking)")
+			if h.log.ShouldLog(logger.DEBUG) {
+				h.log.WithFields(h.ctx, logger.Fields{
+					"file_id": fileID,
+					"action":  "ws_file_complete_skipped",
+				}).Debug("websocket file transfer complete skipped (no tracking)")
+			}
 			return
 		}
 		h.log.WithFields(h.ctx, logger.Fields{

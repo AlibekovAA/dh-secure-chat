@@ -14,6 +14,7 @@ import (
 	chatservice "github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/service"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/websocket"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/bootstrap"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/clock"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	commonhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/http"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/jwtverify"
@@ -50,7 +51,11 @@ func main() {
 		DebugSampleRate:         constants.WebSocketDebugSampleRate,
 	}
 
-	hub := websocket.NewHub(app.Log, app.UserRepo, hubConfig)
+	hub := websocket.NewHub(websocket.HubDeps{
+		Log:      app.Log,
+		UserRepo: app.UserRepo,
+		Clock:    clock.NewRealClock(),
+	}, hubConfig)
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
 	wg.Add(1)

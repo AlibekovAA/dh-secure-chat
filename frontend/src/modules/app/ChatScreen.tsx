@@ -75,7 +75,7 @@ export function ChatScreen({
           <button
             type="button"
             onClick={onLogout}
-            className="text-emerald-400 hover:text-emerald-200 underline underline-offset-4 smooth-transition button-press rounded px-2 py-1 hover:bg-emerald-900/40"
+            className="text-emerald-400 hover:text-emerald-200 underline underline-offset-4 smooth-transition hover-lift press-scale rounded px-2 py-1 hover:bg-emerald-900/40"
           >
             Выйти
           </button>
@@ -200,7 +200,7 @@ export function ChatScreen({
                           key={user.id}
                           type="button"
                           onClick={() => setSelectedPeer(user)}
-                          className="w-full text-left rounded-lg border border-emerald-700/60 px-4 py-3 bg-black/60 hover:bg-emerald-900/50 smooth-transition button-press hover:border-emerald-500/80 hover:shadow-lg hover:shadow-emerald-500/10 hover:-translate-y-0.5 active:translate-y-0 group"
+                          className="w-full text-left rounded-lg border border-emerald-700/60 px-4 py-3 bg-black/60 hover:bg-emerald-900/50 smooth-transition hover-lift press-scale hover:border-emerald-500/80 hover:shadow-lg hover:shadow-emerald-500/10 group"
                           style={{
                             animation: `slideUp 0.3s ease-out ${index * 50}ms both`,
                           }}
