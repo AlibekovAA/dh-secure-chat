@@ -1,12 +1,23 @@
-import type { WorkerMessage, WorkerResponse } from './file-encryption-types';
-import type { EncryptedChunk } from './file-encryption';
+import type {
+  WorkerMessage,
+  WorkerResponse,
+} from '@/shared/crypto/file-encryption-types';
+import type { EncryptedChunk } from '@/shared/crypto/file-encryption';
 
 let worker: Worker | null = null;
 let requestCounter = 0;
-const pendingRequests = new Map<
+const pendingEncryptRequests = new Map<
   string,
   {
-    resolve: (value: any) => void;
+    resolve: (value: { chunks: EncryptedChunk[]; totalSize: number }) => void;
+    reject: (error: Error) => void;
+    onProgress?: (progress: number) => void;
+  }
+>();
+const pendingDecryptRequests = new Map<
+  string,
+  {
+    resolve: (value: Blob) => void;
     reject: (error: Error) => void;
     onProgress?: (progress: number) => void;
   }
@@ -16,34 +27,50 @@ function getWorker(): Worker {
   if (!worker) {
     worker = new Worker(
       new URL('./file-encryption.worker.ts', import.meta.url),
-      { type: 'module' },
+      { type: 'module' }
     );
 
     worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
       const { requestId, type } = e.data;
 
-      const pending = pendingRequests.get(requestId);
-      if (!pending) return;
-
       if (type === 'encrypt-result') {
-        pending.resolve(e.data.result);
-        pendingRequests.delete(requestId);
+        const pending = pendingEncryptRequests.get(requestId);
+        if (pending) {
+          pending.resolve(e.data.result);
+          pendingEncryptRequests.delete(requestId);
+        }
       } else if (type === 'decrypt-result') {
-        pending.resolve(e.data.result);
-        pendingRequests.delete(requestId);
+        const pending = pendingDecryptRequests.get(requestId);
+        if (pending) {
+          pending.resolve(e.data.result);
+          pendingDecryptRequests.delete(requestId);
+        }
       } else if (type === 'error') {
-        pending.reject(new Error(e.data.error));
-        pendingRequests.delete(requestId);
+        const pendingEncrypt = pendingEncryptRequests.get(requestId);
+        const pendingDecrypt = pendingDecryptRequests.get(requestId);
+        const pending = pendingEncrypt || pendingDecrypt;
+        if (pending) {
+          pending.reject(new Error(e.data.error));
+          pendingEncryptRequests.delete(requestId);
+          pendingDecryptRequests.delete(requestId);
+        }
       } else if (type === 'progress') {
-        pending.onProgress?.(e.data.progress);
+        const pendingEncrypt = pendingEncryptRequests.get(requestId);
+        const pendingDecrypt = pendingDecryptRequests.get(requestId);
+        pendingEncrypt?.onProgress?.(e.data.progress);
+        pendingDecrypt?.onProgress?.(e.data.progress);
       }
     };
 
     worker.onerror = (error) => {
       console.error('File encryption worker error:', error);
-      for (const [requestId, pending] of pendingRequests.entries()) {
+      for (const [requestId, pending] of pendingEncryptRequests.entries()) {
         pending.reject(new Error('Worker error'));
-        pendingRequests.delete(requestId);
+        pendingEncryptRequests.delete(requestId);
+      }
+      for (const [requestId, pending] of pendingDecryptRequests.entries()) {
+        pending.reject(new Error('Worker error'));
+        pendingDecryptRequests.delete(requestId);
       }
     };
   }
@@ -58,14 +85,14 @@ async function exportKey(key: CryptoKey): Promise<ArrayBuffer> {
 export async function encryptFileWithWorker(
   sessionKey: CryptoKey,
   file: File,
-  onProgress?: (progress: number) => void,
+  onProgress?: (progress: number) => void
 ): Promise<{ chunks: EncryptedChunk[]; totalSize: number }> {
   const requestId = `encrypt-${++requestCounter}`;
   const fileData = await file.arrayBuffer();
   const keyData = await exportKey(sessionKey);
 
   return new Promise((resolve, reject) => {
-    pendingRequests.set(requestId, { resolve, reject, onProgress });
+    pendingEncryptRequests.set(requestId, { resolve, reject, onProgress });
 
     const worker = getWorker();
     worker.postMessage(
@@ -75,7 +102,7 @@ export async function encryptFileWithWorker(
         keyData,
         requestId,
       } as WorkerMessage,
-      [fileData, keyData],
+      [fileData, keyData]
     );
   });
 }
@@ -83,13 +110,13 @@ export async function encryptFileWithWorker(
 export async function decryptFileWithWorker(
   sessionKey: CryptoKey,
   chunks: EncryptedChunk[],
-  onProgress?: (progress: number) => void,
+  onProgress?: (progress: number) => void
 ): Promise<Blob> {
   const requestId = `decrypt-${++requestCounter}`;
   const keyData = await exportKey(sessionKey);
 
   return new Promise((resolve, reject) => {
-    pendingRequests.set(requestId, { resolve, reject, onProgress });
+    pendingDecryptRequests.set(requestId, { resolve, reject, onProgress });
 
     const worker = getWorker();
     worker.postMessage(
@@ -99,7 +126,7 @@ export async function decryptFileWithWorker(
         keyData,
         requestId,
       } as WorkerMessage,
-      [keyData],
+      [keyData]
     );
   });
 }

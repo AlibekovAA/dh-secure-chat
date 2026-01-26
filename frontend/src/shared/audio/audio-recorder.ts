@@ -1,4 +1,4 @@
-import { checkMediaRecorderSupport } from '../browser-support';
+import { checkMediaRecorderSupport } from '@/shared/browser-support';
 
 export type RecordingState = 'idle' | 'recording' | 'stopped' | 'error';
 
@@ -51,7 +51,7 @@ export class AudioRecorder {
         }
       };
 
-      this.mediaRecorder.onerror = (event) => {
+      this.mediaRecorder.onerror = (_event) => {
         this.state = 'error';
         this.stop();
       };

@@ -1,4 +1,4 @@
-import { DB_NAME, DB_VERSION, DB_STORE_NAME } from '../constants';
+import { DB_NAME, DB_VERSION, DB_STORE_NAME } from '@/shared/constants';
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -35,7 +35,7 @@ function openDB(): Promise<IDBDatabase> {
 export async function saveKey(
   id: string,
   keyData: string,
-  type: string,
+  type: string
 ): Promise<void> {
   try {
     const db = await openDB();
@@ -51,7 +51,7 @@ export async function saveKey(
     throw new Error(
       `Failed to save key to IndexedDB: ${
         err instanceof Error ? err.message : String(err)
-      }`,
+      }`
     );
   }
 }
@@ -90,7 +90,7 @@ export async function clearAllKeys(): Promise<void> {
     throw new Error(
       `Failed to clear keys from IndexedDB: ${
         err instanceof Error ? err.message : String(err)
-      }`,
+      }`
     );
   }
 }

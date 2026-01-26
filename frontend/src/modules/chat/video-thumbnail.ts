@@ -2,7 +2,10 @@ import {
   VIDEO_THUMBNAIL_SIZE,
   VIDEO_THUMBNAIL_CACHE_PREFIX,
   VIDEO_THUMBNAIL_CACHE_DURATION_MS,
-} from '../../shared/constants';
+  VIDEO_THUMBNAIL_SEEK_TIME,
+  JPEG_QUALITY,
+  VIDEO_THUMBNAIL_BG_COLOR,
+} from '@/shared/constants';
 
 interface CachedThumbnail {
   dataUrl: string;
@@ -14,7 +17,7 @@ function getCacheKey(fileId: string): string {
 }
 
 export async function getCachedThumbnail(
-  fileId: string,
+  fileId: string
 ): Promise<string | null> {
   try {
     const cached = localStorage.getItem(getCacheKey(fileId));
@@ -36,7 +39,7 @@ export async function getCachedThumbnail(
 
 export async function cacheThumbnail(
   fileId: string,
-  dataUrl: string,
+  dataUrl: string
 ): Promise<void> {
   try {
     const cached: CachedThumbnail = {
@@ -53,7 +56,7 @@ export async function cacheThumbnail(
 
 export async function generateVideoThumbnail(
   videoBlob: Blob,
-  fileId: string,
+  fileId: string
 ): Promise<string> {
   const cached = await getCachedThumbnail(fileId);
   if (cached) {
@@ -83,7 +86,7 @@ export async function generateVideoThumbnail(
     };
 
     video.addEventListener('loadedmetadata', () => {
-      video.currentTime = 0.1;
+      video.currentTime = VIDEO_THUMBNAIL_SEEK_TIME;
     });
 
     video.addEventListener('seeked', () => {
@@ -106,7 +109,7 @@ export async function generateVideoThumbnail(
           offsetX = (size - drawWidth) / 2;
         }
 
-        ctx.fillStyle = '#0a0a0a';
+        ctx.fillStyle = VIDEO_THUMBNAIL_BG_COLOR;
         ctx.fillRect(0, 0, size, size);
 
         ctx.beginPath();
@@ -115,7 +118,7 @@ export async function generateVideoThumbnail(
 
         ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
 
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
         cacheThumbnail(fileId, dataUrl).catch(() => {});
         cleanup();
         resolve(dataUrl);
@@ -125,7 +128,7 @@ export async function generateVideoThumbnail(
       }
     });
 
-    video.addEventListener('error', (e) => {
+    video.addEventListener('error', (_e) => {
       cleanup();
       reject(new Error('Failed to load video for thumbnail'));
     });

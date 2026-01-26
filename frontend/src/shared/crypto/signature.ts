@@ -1,9 +1,9 @@
 export async function signEphemeralKey(
   ephemeralPublicKeyBase64: string,
-  identityPrivateKey: CryptoKey,
+  identityPrivateKey: CryptoKey
 ): Promise<string> {
   const data = Uint8Array.from(atob(ephemeralPublicKeyBase64), (c) =>
-    c.charCodeAt(0),
+    c.charCodeAt(0)
   );
 
   try {
@@ -18,7 +18,7 @@ export async function signEphemeralKey(
         namedCurve: 'P-256',
       },
       false,
-      ['sign'],
+      ['sign']
     );
 
     const signature = await crypto.subtle.sign(
@@ -27,14 +27,14 @@ export async function signEphemeralKey(
         hash: 'SHA-256',
       },
       ecdsaPrivateKey,
-      data,
+      data
     );
 
     return btoa(String.fromCharCode(...new Uint8Array(signature)));
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     throw new Error(
-      `Failed to sign ephemeral key: ${errorMessage}. Identity key may be invalid or corrupted.`,
+      `Failed to sign ephemeral key: ${errorMessage}. Identity key may be invalid or corrupted.`
     );
   }
 }
@@ -42,19 +42,19 @@ export async function signEphemeralKey(
 export async function verifyEphemeralKeySignature(
   ephemeralPublicKeyBase64: string,
   signature: string,
-  identityPublicKeyBase64: string,
+  identityPublicKeyBase64: string
 ): Promise<boolean> {
   try {
     const data = Uint8Array.from(atob(ephemeralPublicKeyBase64), (c) =>
-      c.charCodeAt(0),
+      c.charCodeAt(0)
     );
 
     const signatureBytes = Uint8Array.from(atob(signature), (c) =>
-      c.charCodeAt(0),
+      c.charCodeAt(0)
     );
 
     const publicKeyData = Uint8Array.from(atob(identityPublicKeyBase64), (c) =>
-      c.charCodeAt(0),
+      c.charCodeAt(0)
     );
 
     const ecdsaPublicKey = await crypto.subtle.importKey(
@@ -65,7 +65,7 @@ export async function verifyEphemeralKeySignature(
         namedCurve: 'P-256',
       },
       false,
-      ['verify'],
+      ['verify']
     );
 
     return await crypto.subtle.verify(
@@ -75,7 +75,7 @@ export async function verifyEphemeralKeySignature(
       },
       ecdsaPublicKey,
       signatureBytes,
-      data,
+      data
     );
   } catch {
     return false;

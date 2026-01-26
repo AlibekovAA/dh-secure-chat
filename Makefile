@@ -139,7 +139,7 @@ help:
 	@echo "  clean        - Remove ALL Docker containers, images, and volumes"
 	@echo "  backend      - Run backend services locally without Docker"
 	@echo "  frontend     - Run frontend locally without Docker"
-	@echo "  format                - Run go fmt, go vet, and go lint"
+	@echo "  format       - Format and lint all code (backend + frontend)"
 	@echo "  go-test-auth          - Run auth service tests"
 	@echo "  go-test-auth-coverage - Run auth service tests with HTML coverage report"
 
@@ -151,12 +151,23 @@ frontend:
 	cd frontend && npm run dev
 
 format:
+	@echo "=== Backend ==="
 	@echo "Running go fmt..."
 	cd backend && goimports -w .
 	@echo "Running go vet..."
 	cd backend && go vet ./...
 	@echo "Running go lint..."
 	cd backend && golangci-lint run ./...
+	@echo ""
+	@echo "=== Frontend ==="
+	@echo "Running TypeScript type check..."
+	cd frontend && npm run type-check
+	@echo "Formatting code with Prettier..."
+	cd frontend && npm run format
+	@echo "Running ESLint with auto-fix..."
+	cd frontend && npm run lint:fix
+	@echo ""
+	@echo "All code formatted and linted!"
 
 go-test-auth:
 	@echo "Running auth service tests..."

@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { checkMediaRecorderSupport } from '../../shared/browser-support';
-import { VideoRecorderModal } from './VideoRecorderModal';
+import { checkMediaRecorderSupport } from '@/shared/browser-support';
+import { VideoRecorderModal } from '@/modules/chat/VideoRecorderModal';
 
 type Props = {
   onRecorded: (file: File, duration: number) => void;
@@ -20,7 +20,10 @@ export function VideoRecorder({ onRecorded, onError, disabled }: Props) {
       setIsModalOpen(true);
     } catch (error) {
       setIsSupported(false);
-      const message = error instanceof Error ? error.message : 'Запись видео не поддерживается';
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Запись видео не поддерживается';
       onError(message);
     }
   };

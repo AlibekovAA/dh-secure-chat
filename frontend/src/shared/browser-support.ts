@@ -39,7 +39,7 @@ export function checkWebCryptoSupport(): void {
   if (!support.webCrypto) {
     throw new Error(
       getBrowserSupportMessage(['Web Crypto API']) ||
-        'Web Crypto API не поддерживается',
+        'Web Crypto API не поддерживается'
     );
   }
 }
@@ -49,7 +49,7 @@ export function checkMediaRecorderSupport(): void {
   if (!support.mediaRecorder || !support.getUserMedia) {
     throw new Error(
       getBrowserSupportMessage(['MediaRecorder API', 'getUserMedia API']) ||
-        'Запись аудио не поддерживается',
+        'Запись аудио не поддерживается'
     );
   }
 }

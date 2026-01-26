@@ -1,10 +1,10 @@
 import { useCallback } from 'react';
-import type { FileStartPayload } from '../../../shared/websocket/types';
-import { decryptFile } from '../../../shared/crypto/file-encryption';
-import type { SessionKey } from '../../../shared/crypto/session';
-import type { ChatMessage } from '../useChatSession';
-import { extractDurationFromFilename, isVideoFile } from '../utils';
-import type { WSMessage } from '../../../shared/websocket/types';
+import type { FileStartPayload } from '@/shared/websocket/types';
+import { decryptFile } from '@/shared/crypto/file-encryption';
+import type { SessionKey } from '@/shared/crypto/session';
+import type { ChatMessage } from '@/modules/chat/useChatSession';
+import { extractDurationFromFilename, isVideoFile } from '@/modules/chat/utils';
+import type { WSMessage } from '@/shared/websocket/types';
 
 type FileBuffer = {
   chunks: Array<{ ciphertext: string; nonce: string }>;
@@ -58,7 +58,7 @@ export function useFileTransfer({
         const chunk = chunks[i];
         if (!chunk || !chunk.ciphertext || !chunk.nonce) {
           setError(
-            `Не все части файла получены (${sortedChunks.length}/${expectedChunks})`,
+            `Не все части файла получены (${sortedChunks.length}/${expectedChunks})`
           );
           return;
         }
@@ -68,7 +68,7 @@ export function useFileTransfer({
       try {
         const decryptedBlob = await decryptFile(
           sessionKeyRef.current,
-          sortedChunks,
+          sortedChunks
         );
 
         if (!decryptedBlob || decryptedBlob.size === 0) {
@@ -90,7 +90,7 @@ export function useFileTransfer({
           metadata.mime_type && metadata.mime_type.startsWith('audio/');
         const isVideo = !isVoice && isVideoFile(metadata.mime_type || '');
         const extractedDuration = extractDurationFromFilename(
-          metadata.filename,
+          metadata.filename
         );
 
         const newMessage: ChatMessage = {
@@ -106,24 +106,24 @@ export function useFileTransfer({
                 },
               }
             : isVideo
-            ? {
-                video: {
-                  filename: metadata.filename,
-                  mimeType,
-                  size: metadata.total_size,
-                  duration: extractedDuration > 0 ? extractedDuration : 0,
-                  blob,
-                },
-              }
-            : {
-                file: {
-                  filename: metadata.filename,
-                  mimeType,
-                  size: metadata.total_size,
-                  blob,
-                  accessMode: metadata.access_mode || 'both',
-                },
-              }),
+              ? {
+                  video: {
+                    filename: metadata.filename,
+                    mimeType,
+                    size: metadata.total_size,
+                    duration: extractedDuration > 0 ? extractedDuration : 0,
+                    blob,
+                  },
+                }
+              : {
+                  file: {
+                    filename: metadata.filename,
+                    mimeType,
+                    size: metadata.total_size,
+                    blob,
+                    accessMode: metadata.access_mode || 'both',
+                  },
+                }),
           timestamp: Date.now(),
           isOwn: false,
         };
@@ -141,18 +141,16 @@ export function useFileTransfer({
           });
         }
       } catch (err) {
-        setError(
-          'Не удалось расшифровать файл. Возможно, сессия была прервана.',
-        );
+        setError('Не удалось расшифровать файл');
         fileBuffersRef.current.delete(fileId);
       }
     },
-    [sessionKeyRef, setMessages, setError, sendRef, peerId],
+    [sessionKeyRef, setMessages, setError, sendRef, peerId, fileBuffersRef]
   );
 
   const clearFileBuffers = useCallback(() => {
     fileBuffersRef.current.clear();
-  }, []);
+  }, [fileBuffersRef]);
 
   return {
     handleIncomingFile,

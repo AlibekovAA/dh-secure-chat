@@ -1,10 +1,10 @@
-import type { WSMessage, ConnectionState } from './types';
-import { SequenceManager } from './sequence-manager';
+import type { WSMessage, ConnectionState } from '@/shared/websocket/types';
+import { SequenceManager } from '@/shared/websocket/sequence-manager';
 import {
   MAX_RECONNECT_DELAY_MS,
   WEBSOCKET_MAX_RECONNECT_ATTEMPTS,
   WEBSOCKET_BASE_DELAY_MS,
-} from '../constants';
+} from '@/shared/constants';
 
 type MessageHandler = (message: WSMessage) => void;
 
@@ -56,7 +56,7 @@ export class WebSocketClient {
           JSON.stringify({
             type: 'auth',
             payload: { token: this.token },
-          }),
+          })
         );
       };
 
@@ -111,15 +111,15 @@ export class WebSocketClient {
                         this.isRefreshingToken = false;
                         this.handlers.onError?.(
                           new Error(
-                            'Не удалось обновить токен доступа. Войдите снова.',
-                          ),
+                            'Не удалось обновить токен доступа. Войдите снова.'
+                          )
                         );
                       } catch (err) {
                         this.isRefreshingToken = false;
                         this.handlers.onError?.(
                           new Error(
-                            'Ошибка при обновлении токена доступа. Войдите снова.',
-                          ),
+                            'Ошибка при обновлении токена доступа. Войдите снова.'
+                          )
                         );
                       }
                     })();
@@ -130,8 +130,8 @@ export class WebSocketClient {
                     new Error(
                       isTokenError
                         ? 'Токен доступа истек. Попытка обновления...'
-                        : payload.error,
-                    ),
+                        : payload.error
+                    )
                   );
                   this.ws?.close();
                   return;
@@ -146,7 +146,7 @@ export class WebSocketClient {
               if (message.sequence !== undefined) {
                 const { messages, hasGap } = this.sequenceManager.addMessage(
                   message.sequence,
-                  message,
+                  message
                 );
                 if (hasGap) {
                   console.warn('WebSocket: detected missing sequence numbers');
@@ -162,20 +162,18 @@ export class WebSocketClient {
                 'Failed to parse WebSocket message:',
                 parseErr,
                 'Data:',
-                messageData,
+                messageData
               );
             }
           }
         } catch (err) {
-          this.handlers.onError?.(
-            new Error('Не удалось разобрать сообщение WebSocket'),
-          );
+          this.handlers.onError?.(new Error('Ошибка обработки сообщения'));
         }
       };
 
       this.ws.onerror = () => {
         this.setState('error');
-        this.handlers.onError?.(new Error('Ошибка подключения WebSocket'));
+        this.handlers.onError?.(new Error('Ошибка подключения'));
       };
 
       this.ws.onclose = () => {
@@ -190,11 +188,7 @@ export class WebSocketClient {
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
           this.scheduleReconnect();
         } else {
-          this.handlers.onError?.(
-            new Error(
-              'Достигнуто максимальное количество попыток переподключения',
-            ),
-          );
+          this.handlers.onError?.(new Error('Не удалось подключиться'));
         }
       };
     } catch (err) {
@@ -202,7 +196,7 @@ export class WebSocketClient {
       this.handlers.onError?.(
         err instanceof Error
           ? err
-          : new Error('Не удалось создать WebSocket соединение'),
+          : new Error('Не удалось установить соединение')
       );
     }
   }
@@ -254,7 +248,7 @@ export class WebSocketClient {
     this.reconnectAttempts++;
     const delay = Math.min(
       this.baseDelay * Math.pow(2, this.reconnectAttempts - 1),
-      MAX_RECONNECT_DELAY_MS,
+      MAX_RECONNECT_DELAY_MS
     );
 
     this.reconnectTimer = setTimeout(() => {

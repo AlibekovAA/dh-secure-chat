@@ -1,10 +1,10 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { generateVideoThumbnail } from './video-thumbnail';
+import { generateVideoThumbnail } from '@/modules/chat/video-thumbnail';
 import {
   VIDEO_THUMBNAIL_INTERSECTION_THRESHOLD,
   VIDEO_THUMBNAIL_REQUEST_IDLE_TIMEOUT_MS,
   VIDEO_THUMBNAIL_ROOT_MARGIN,
-} from '../../shared/constants';
+} from '@/shared/constants';
 
 type Props = {
   blob: Blob;
@@ -14,13 +14,7 @@ type Props = {
   isOwn: boolean;
 };
 
-export function VideoCircle({
-  blob,
-  filename,
-  fileId,
-  onClick,
-  isOwn,
-}: Props) {
+export function VideoCircle({ blob, filename, fileId, onClick, isOwn }: Props) {
   const [thumbnail, setThumbnail] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -48,7 +42,9 @@ export function VideoCircle({
     };
 
     if ('requestIdleCallback' in window) {
-      requestIdleCallback(generateThumbnail, { timeout: VIDEO_THUMBNAIL_REQUEST_IDLE_TIMEOUT_MS });
+      requestIdleCallback(generateThumbnail, {
+        timeout: VIDEO_THUMBNAIL_REQUEST_IDLE_TIMEOUT_MS,
+      });
     } else {
       setTimeout(generateThumbnail, 0);
     }
@@ -86,7 +82,7 @@ export function VideoCircle({
       {
         rootMargin: VIDEO_THUMBNAIL_ROOT_MARGIN,
         threshold: VIDEO_THUMBNAIL_INTERSECTION_THRESHOLD,
-      },
+      }
     );
 
     observerRef.current.observe(containerRef.current);
@@ -98,27 +94,33 @@ export function VideoCircle({
     };
   }, [loadThumbnail, thumbnail, error]);
 
-  const handlePlayClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    if (videoRef.current && videoUrl) {
-      if (videoRef.current.paused) {
-        videoRef.current.play().then(() => {
-          setIsPlaying(true);
-        }).catch((err) => {
-          console.error('Failed to play video:', err);
-          if (onClick) {
-            onClick();
-          }
-        });
-      } else {
-        videoRef.current.pause();
-        setIsPlaying(false);
+  const handlePlayClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      if (videoRef.current && videoUrl) {
+        if (videoRef.current.paused) {
+          videoRef.current
+            .play()
+            .then(() => {
+              setIsPlaying(true);
+            })
+            .catch((err) => {
+              console.error('Failed to play video:', err);
+              if (onClick) {
+                onClick();
+              }
+            });
+        } else {
+          videoRef.current.pause();
+          setIsPlaying(false);
+        }
+      } else if (onClick) {
+        onClick();
       }
-    } else if (onClick) {
-      onClick();
-    }
-  }, [onClick, videoUrl]);
+    },
+    [onClick, videoUrl]
+  );
 
   const handleVideoEnded = useCallback(() => {
     setIsPlaying(false);

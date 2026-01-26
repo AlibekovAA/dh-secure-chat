@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { getFingerprint } from './api';
+import { getFingerprint } from '@/modules/chat/api';
 import {
   fingerprintToEmojis,
   formatFingerprint,
   hasPeerFingerprintChanged,
   isPeerVerified,
   saveVerifiedPeer,
-} from '../../shared/crypto/fingerprint';
+} from '@/shared/crypto/fingerprint';
 
 type Props = {
   token: string;
@@ -42,7 +42,7 @@ export function FingerprintVerificationModal({
         setError(
           err instanceof Error
             ? err.message
-            : 'Не удалось загрузить fingerprint',
+            : 'Не удалось загрузить fingerprint'
         );
       } finally {
         setIsLoading(false);
@@ -64,27 +64,27 @@ export function FingerprintVerificationModal({
       peerFingerprint
         ? hasPeerFingerprintChanged(peerId, peerFingerprint)
         : false,
-    [peerId, peerFingerprint],
+    [peerId, peerFingerprint]
   );
 
   const formattedMyFingerprint = useMemo(
     () => (myFingerprint ? formatFingerprint(myFingerprint) : null),
-    [myFingerprint],
+    [myFingerprint]
   );
 
   const formattedPeerFingerprint = useMemo(
     () => (peerFingerprint ? formatFingerprint(peerFingerprint) : null),
-    [peerFingerprint],
+    [peerFingerprint]
   );
 
   const myFingerprintEmojis = useMemo(
     () => (myFingerprint ? fingerprintToEmojis(myFingerprint) : null),
-    [myFingerprint],
+    [myFingerprint]
   );
 
   const peerFingerprintEmojis = useMemo(
     () => (peerFingerprint ? fingerprintToEmojis(peerFingerprint) : null),
-    [peerFingerprint],
+    [peerFingerprint]
   );
 
   return (

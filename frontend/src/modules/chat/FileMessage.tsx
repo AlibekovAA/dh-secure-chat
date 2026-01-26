@@ -21,7 +21,8 @@ function getFileIcon(mimeType: string): string {
   if (mimeType === 'application/pdf') return '📄';
   if (mimeType.includes('word') || mimeType.includes('document')) return '📝';
   if (mimeType.includes('sheet') || mimeType.includes('excel')) return '📊';
-  if (mimeType.includes('presentation') || mimeType.includes('powerpoint')) return '📽️';
+  if (mimeType.includes('presentation') || mimeType.includes('powerpoint'))
+    return '📽️';
   if (mimeType === 'text/plain') return '📃';
   return '📎';
 }
@@ -36,7 +37,8 @@ export function FileMessage({
   onDownloadStateChange,
   onView,
 }: Props) {
-  const canDownload = isOwn || accessMode === 'download_only' || accessMode === 'both';
+  const canDownload =
+    isOwn || accessMode === 'download_only' || accessMode === 'both';
   const canView = isOwn || accessMode === 'view_only' || accessMode === 'both';
 
   const handleDownload = () => {

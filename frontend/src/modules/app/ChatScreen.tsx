@@ -1,7 +1,7 @@
-import { useEffect, useState, type KeyboardEvent } from "react";
-import type { UserSummary } from "../chat/api";
-import { ChatWindow } from "../chat/ChatWindow";
-import { RESULTS_PER_PAGE } from '../../shared/constants';
+import { useEffect, useState, type KeyboardEvent } from 'react';
+import type { UserSummary } from '@/modules/chat/api';
+import { ChatWindow } from '@/modules/chat/ChatWindow';
+import { RESULTS_PER_PAGE } from '@/shared/constants';
 
 type Profile = {
   id: string;
@@ -37,7 +37,7 @@ export function ChatScreen({
   const [selectedPeer, setSelectedPeer] = useState<UserSummary | null>(null);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && !isSearching && searchQuery.trim()) {
+    if (e.key === 'Enter' && !isSearching && searchQuery.trim()) {
       e.preventDefault();
       setCurrentPage(1);
       onSearch();
@@ -60,7 +60,9 @@ export function ChatScreen({
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-black via-emerald-950/10 to-black text-emerald-50">
       <header className="flex items-center justify-between px-4 py-3 border-b border-emerald-700/60">
         <div>
-          <h1 className="text-xl font-semibold text-emerald-400">dh-secure-chat</h1>
+          <h1 className="text-xl font-semibold text-emerald-400">
+            dh-secure-chat
+          </h1>
           <p className="text-[11px] text-emerald-500/80">
             Защищённый мессенджер с E2E шифрованием и DH‑обменом ключами
           </p>
@@ -85,22 +87,30 @@ export function ChatScreen({
       <main className="flex-1 flex items-center justify-center px-4 py-6">
         <div className="w-full max-w-4xl grid gap-6 md:grid-cols-2">
           <section className="rounded-xl glass-effect px-5 py-4 text-sm text-emerald-200 smooth-transition hover:border-emerald-600/60">
-            <h2 className="text-sm font-semibold text-emerald-300 mb-2">Профиль</h2>
-            <p className="text-xs text-emerald-500/80 mb-1">Имя: {profile?.username ?? "…"}</p>
-            <p className="text-xs text-emerald-500/80 break-all mb-3 font-mono">ID: {profile?.id ?? "…"}</p>
+            <h2 className="text-sm font-semibold text-emerald-300 mb-2">
+              Профиль
+            </h2>
+            <p className="text-xs text-emerald-500/80 mb-1">
+              Имя: {profile?.username ?? '…'}
+            </p>
+            <p className="text-xs text-emerald-500/80 break-all mb-3 font-mono">
+              ID: {profile?.id ?? '…'}
+            </p>
             <p className="text-xs text-emerald-500/70">
               Выберите собеседника, чтобы начать защищённый диалог.
             </p>
           </section>
 
           <section className="rounded-xl glass-effect px-5 py-4 text-sm text-emerald-200 smooth-transition hover:border-emerald-600/60">
-            <h2 className="text-sm font-semibold text-emerald-300 mb-2">Найти собеседника</h2>
+            <h2 className="text-sm font-semibold text-emerald-300 mb-2">
+              Найти собеседника
+            </h2>
             <div className="space-y-2">
               <div className="relative">
                 <input
                   type="text"
                   value={searchQuery}
-                  onChange={e => onSearchQueryChange(e.target.value)}
+                  onChange={(e) => onSearchQueryChange(e.target.value)}
                   onKeyDown={handleKeyDown}
                   disabled={isSearching}
                   className="w-full rounded-md bg-black border border-emerald-700 pr-24 px-3 py-2 text-sm text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed smooth-transition hover:border-emerald-600 focus:glow-emerald-hover"
@@ -111,7 +121,7 @@ export function ChatScreen({
                   {searchQuery.trim() && !isSearching && (
                     <button
                       type="button"
-                      onClick={() => onSearchQueryChange("")}
+                      onClick={() => onSearchQueryChange('')}
                       className="flex items-center justify-center w-5 h-5 rounded text-emerald-500 hover:text-emerald-300 hover:bg-emerald-900/40 transition-colors"
                       aria-label="Очистить поиск"
                     >
@@ -139,7 +149,7 @@ export function ChatScreen({
                     {isSearching ? (
                       <div className="w-3 h-3 border-2 border-black border-t-transparent rounded-full animate-spin" />
                     ) : (
-                      "Поиск"
+                      'Поиск'
                     )}
                   </button>
                 </div>
@@ -149,7 +159,9 @@ export function ChatScreen({
                   <div className="flex items-center justify-center h-full">
                     <div className="w-5 h-5 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
                   </div>
-                ) : hasSearched && searchResults.length === 0 && searchQuery.trim() ? (
+                ) : hasSearched &&
+                  searchResults.length === 0 &&
+                  searchQuery.trim() ? (
                   <div className="flex flex-col items-center justify-center h-full px-4 animate-[fadeIn_0.4s_ease-out]">
                     <div className="w-12 h-12 rounded-full bg-emerald-900/20 border border-emerald-700/30 flex items-center justify-center mb-3 animate-[scaleIn_0.3s_ease-out]">
                       <svg
@@ -166,9 +178,12 @@ export function ChatScreen({
                         />
                       </svg>
                     </div>
-                    <p className="text-sm font-medium text-emerald-400/80 mb-1">Пользователь не найден</p>
+                    <p className="text-sm font-medium text-emerald-400/80 mb-1">
+                      Пользователь не найден
+                    </p>
                     <p className="text-xs text-emerald-500/60 text-center max-w-xs">
-                      Попробуйте изменить запрос или проверьте правильность написания
+                      Попробуйте изменить запрос или проверьте правильность
+                      написания
                     </p>
                   </div>
                 ) : searchResults.length === 0 ? (

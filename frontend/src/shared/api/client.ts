@@ -1,5 +1,8 @@
-import { parseApiError } from './error-handler';
-import { SESSION_EXPIRED_ERROR, UNAUTHORIZED_MESSAGE } from '../constants';
+import { parseApiError } from '@/shared/api/error-handler';
+import {
+  SESSION_EXPIRED_ERROR,
+  UNAUTHORIZED_MESSAGE,
+} from '@/shared/constants';
 
 type RefreshTokenCallback = () => Promise<string | null>;
 type OnTokenExpiredCallback = () => void;
@@ -35,7 +38,7 @@ class ApiClient {
   private async request<T>(
     url: string,
     options: RequestInit = {},
-    retry = true,
+    retry = true
   ): Promise<T> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -54,11 +57,27 @@ class ApiClient {
 
     if (!response.ok) {
       const isRefreshEndpoint = url.includes('/api/auth/refresh');
+
+      if (response.status === 401 && isRefreshEndpoint) {
+        this.token = null;
+        if (this.onTokenExpired) {
+          this.onTokenExpired();
+        }
+        const error = new Error(SESSION_EXPIRED_ERROR);
+        (error as { silent?: boolean }).silent = true;
+        throw error;
+      }
+
+      const isAuthEndpoint =
+        url.includes('/api/auth/login') || url.includes('/api/auth/register');
+
       if (
         response.status === 401 &&
         retry &&
         this.refreshTokenFn &&
-        !isRefreshEndpoint
+        this.token &&
+        !isRefreshEndpoint &&
+        !isAuthEndpoint
       ) {
         const newToken = await this.refreshToken();
         if (newToken) {
@@ -93,11 +112,15 @@ class ApiClient {
       }
 
       if (response.status === 401) {
-        this.token = null;
-        if (this.onTokenExpired) {
-          this.onTokenExpired();
+        if (!isAuthEndpoint) {
+          this.token = null;
+          if (this.onTokenExpired) {
+            this.onTokenExpired();
+          }
         }
-        throw new Error(UNAUTHORIZED_MESSAGE);
+
+        const errorMessage = await parseApiError(response);
+        throw new Error(errorMessage.message);
       }
 
       const errorMessage = await parseApiError(response);
@@ -115,7 +138,7 @@ class ApiClient {
   async post<T>(
     url: string,
     body?: unknown,
-    options?: RequestInit,
+    options?: RequestInit
   ): Promise<T> {
     return this.request<T>(url, {
       ...options,

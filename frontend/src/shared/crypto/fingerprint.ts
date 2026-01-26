@@ -1,7 +1,7 @@
 import {
   VERIFIED_PEERS_STORAGE,
   FINGERPRINT_HISTORY_STORAGE,
-} from '../constants';
+} from '@/shared/constants';
 
 export function normalizeFingerprint(fingerprint: string): string {
   return fingerprint.replace(/[^0-9a-fA-F]/g, '').toLowerCase();
@@ -77,7 +77,7 @@ export function saveVerifiedPeer(userId: string, fingerprint: string): void {
   }
 
   const existingEntry = history[userId].find(
-    (h) => h.fingerprint === normalized,
+    (h) => h.fingerprint === normalized
   );
   if (existingEntry) {
     if (!existingEntry.verifiedAt) {
@@ -92,7 +92,7 @@ export function saveVerifiedPeer(userId: string, fingerprint: string): void {
 
   if (oldFingerprint && oldFingerprint !== normalized) {
     const oldEntry = history[userId].find(
-      (h) => h.fingerprint === oldFingerprint,
+      (h) => h.fingerprint === oldFingerprint
     );
     if (oldEntry && !oldEntry.changedAt) {
       oldEntry.changedAt = now;
@@ -120,7 +120,7 @@ export function isPeerVerified(userId: string, fingerprint: string): boolean {
 
 export function hasPeerFingerprintChanged(
   userId: string,
-  currentFingerprint: string,
+  currentFingerprint: string
 ): boolean {
   const peers = getVerifiedPeers();
   const stored = peers[userId];
@@ -135,7 +135,7 @@ export function getVerifiedPeerFingerprint(userId: string): string | undefined {
 
 export function saveVerifiedPeerFingerprint(
   userId: string,
-  fingerprint: string,
+  fingerprint: string
 ): void {
   saveVerifiedPeer(userId, fingerprint);
 }

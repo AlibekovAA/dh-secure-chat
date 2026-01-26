@@ -4,7 +4,7 @@ import {
   IMAGE_MIME_TYPES,
   PDF_MIME_TYPE,
   TEXT_MIME_TYPES,
-} from '../../shared/constants';
+} from '@/shared/constants';
 
 type Props = {
   filename: string;
@@ -14,8 +14,13 @@ type Props = {
   protected?: boolean;
 };
 
-export function FileViewerModal({ filename, mimeType, blob, onClose, protected: isProtected = false }: Props) {
-  const modalRef = useRef<HTMLDivElement>(null);
+export function FileViewerModal({
+  filename,
+  mimeType,
+  blob,
+  onClose,
+  protected: isProtected = false,
+}: Props) {
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [textContent, setTextContent] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -123,14 +128,16 @@ export function FileViewerModal({ filename, mimeType, blob, onClose, protected: 
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'F12' ||
-          (e.ctrlKey && e.shiftKey && e.key === 'I') ||
-          (e.ctrlKey && e.shiftKey && e.key === 'J') ||
-          (e.ctrlKey && e.shiftKey && e.key === 'C') ||
-          (e.ctrlKey && e.key === 'S') ||
-          (e.ctrlKey && e.key === 'P') ||
-          (e.key === 'PrintScreen') ||
-          (e.altKey && e.key === 'PrintScreen')) {
+      if (
+        e.key === 'F12' ||
+        (e.ctrlKey && e.shiftKey && e.key === 'I') ||
+        (e.ctrlKey && e.shiftKey && e.key === 'J') ||
+        (e.ctrlKey && e.shiftKey && e.key === 'C') ||
+        (e.ctrlKey && e.key === 'S') ||
+        (e.ctrlKey && e.key === 'P') ||
+        e.key === 'PrintScreen' ||
+        (e.altKey && e.key === 'PrintScreen')
+      ) {
         e.preventDefault();
         return false;
       }
@@ -200,8 +207,18 @@ export function FileViewerModal({ filename, mimeType, blob, onClose, protected: 
           <div className="text-center">
             <div className="bg-red-900/20 border border-red-700/40 rounded-lg px-4 py-3 mb-4 max-w-md mx-auto">
               <div className="flex items-center gap-2 justify-center mb-2">
-                <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <svg
+                  className="w-5 h-5 text-red-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
                 </svg>
                 <p className="text-sm font-medium text-red-300">{error}</p>
               </div>
@@ -221,11 +238,18 @@ export function FileViewerModal({ filename, mimeType, blob, onClose, protected: 
     if (IMAGE_MIME_TYPES.includes(mimeType)) {
       if (isProtected && canvasRef.current) {
         return (
-          <div className="flex items-center justify-center h-full w-full bg-black/40 overflow-auto p-4" style={{ userSelect: 'none' }}>
+          <div
+            className="flex items-center justify-center h-full w-full bg-black/40 overflow-auto p-4"
+            style={{ userSelect: 'none' }}
+          >
             <canvas
               ref={canvasRef}
               className="max-w-full max-h-full"
-              style={{ pointerEvents: 'none', userSelect: 'none', display: 'block' }}
+              style={{
+                pointerEvents: 'none',
+                userSelect: 'none',
+                display: 'block',
+              }}
             />
           </div>
         );
@@ -246,7 +270,11 @@ export function FileViewerModal({ filename, mimeType, blob, onClose, protected: 
     if (mimeType === PDF_MIME_TYPE && objectUrl) {
       return (
         <div className="w-full h-full">
-          <iframe src={objectUrl} className="w-full h-full border-0" title={filename} />
+          <iframe
+            src={objectUrl}
+            className="w-full h-full border-0"
+            title={filename}
+          />
         </div>
       );
     }
@@ -254,7 +282,9 @@ export function FileViewerModal({ filename, mimeType, blob, onClose, protected: 
     if (TEXT_MIME_TYPES.includes(mimeType) && textContent !== null) {
       return (
         <div className="h-full overflow-auto bg-black/40 p-4">
-          <pre className="text-sm text-emerald-100 whitespace-pre-wrap font-mono">{textContent}</pre>
+          <pre className="text-sm text-emerald-100 whitespace-pre-wrap font-mono">
+            {textContent}
+          </pre>
         </div>
       );
     }
@@ -266,7 +296,9 @@ export function FileViewerModal({ filename, mimeType, blob, onClose, protected: 
             <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-10">
               <div className="flex flex-col items-center gap-3 w-full max-w-md px-4">
                 <div className="w-10 h-10 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
-                <p className="text-sm text-emerald-400/80">Подготовка видео...</p>
+                <p className="text-sm text-emerald-400/80">
+                  Подготовка видео...
+                </p>
                 {videoProgress > 0 && (
                   <div className="w-full bg-emerald-900/30 rounded-full h-1.5 overflow-hidden">
                     <div
@@ -284,7 +316,9 @@ export function FileViewerModal({ filename, mimeType, blob, onClose, protected: 
           {videoError && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-10">
               <div className="text-center">
-                <p className="text-sm text-red-400 mb-2">Ошибка загрузки видео</p>
+                <p className="text-sm text-red-400 mb-2">
+                  Ошибка загрузки видео
+                </p>
                 <button
                   onClick={() => {
                     setVideoError(false);
@@ -325,7 +359,9 @@ export function FileViewerModal({ filename, mimeType, blob, onClose, protected: 
             onProgress={(e) => {
               const video = e.currentTarget;
               if (video.buffered.length > 0 && video.duration > 0) {
-                const bufferedEnd = video.buffered.end(video.buffered.length - 1);
+                const bufferedEnd = video.buffered.end(
+                  video.buffered.length - 1
+                );
                 const progress = (bufferedEnd / video.duration) * 100;
                 setVideoProgress(Math.min(progress, 100));
                 if (progress >= 100) {
@@ -380,8 +416,12 @@ export function FileViewerModal({ filename, mimeType, blob, onClose, protected: 
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-emerald-700/60 bg-gradient-to-r from-black via-emerald-950/20 to-black">
           <div className="flex-1 min-w-0">
-            <h3 className="text-lg font-semibold bg-gradient-to-r from-emerald-300 to-emerald-400 bg-clip-text text-transparent truncate">{filename}</h3>
-            <p className="text-xs text-emerald-400/80 mt-1 font-medium">{mimeType}</p>
+            <h3 className="text-lg font-semibold bg-gradient-to-r from-emerald-300 to-emerald-400 bg-clip-text text-transparent truncate">
+              {filename}
+            </h3>
+            <p className="text-xs text-emerald-400/80 mt-1 font-medium">
+              {mimeType}
+            </p>
           </div>
           <div className="flex items-center gap-3 ml-4">
             {isProtected && (
@@ -395,8 +435,18 @@ export function FileViewerModal({ filename, mimeType, blob, onClose, protected: 
                 onClick={handleDownload}
                 className="px-3 py-1.5 text-sm font-medium rounded-md bg-emerald-500 hover:bg-emerald-400 text-black transition-colors flex items-center gap-2"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                  />
                 </svg>
                 Скачать
               </button>
@@ -407,8 +457,18 @@ export function FileViewerModal({ filename, mimeType, blob, onClose, protected: 
               className="text-emerald-400 hover:text-emerald-200 smooth-transition rounded-md p-1.5 hover:bg-emerald-900/40"
               aria-label="Закрыть"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
               </svg>
             </button>
           </div>
@@ -416,13 +476,17 @@ export function FileViewerModal({ filename, mimeType, blob, onClose, protected: 
 
         <div
           className="flex-1 overflow-hidden relative"
-          style={isProtected ? {
-            userSelect: 'none',
-            WebkitUserSelect: 'none',
-            MozUserSelect: 'none',
-            msUserSelect: 'none',
-            WebkitTouchCallout: 'none',
-          } : {}}
+          style={
+            isProtected
+              ? {
+                  userSelect: 'none',
+                  WebkitUserSelect: 'none',
+                  MozUserSelect: 'none',
+                  msUserSelect: 'none',
+                  WebkitTouchCallout: 'none',
+                }
+              : {}
+          }
         >
           {renderContent()}
         </div>

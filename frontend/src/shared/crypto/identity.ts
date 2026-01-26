@@ -1,5 +1,5 @@
-import { checkWebCryptoSupport as checkBrowserSupport } from '../browser-support';
-import { IDENTITY_KEY_STORAGE, MASTER_KEY_STORAGE } from '../constants';
+import { checkWebCryptoSupport as checkBrowserSupport } from '@/shared/browser-support';
+import { IDENTITY_KEY_STORAGE, MASTER_KEY_STORAGE } from '@/shared/constants';
 
 export type IdentityKeyPair = {
   publicKey: CryptoKey;
@@ -20,7 +20,7 @@ export async function generateIdentityKeyPair(): Promise<IdentityKeyPair> {
         namedCurve: 'P-256',
       },
       true,
-      ['deriveKey', 'deriveBits'],
+      ['deriveKey', 'deriveBits']
     );
 
     return {
@@ -31,12 +31,12 @@ export async function generateIdentityKeyPair(): Promise<IdentityKeyPair> {
     const error = err instanceof Error ? err.message : String(err);
     if (error.includes('not supported') || error.includes('not implemented')) {
       throw new Error(
-        'Генерация ключей не поддерживается. Используйте современный браузер (Chrome, Firefox, Safari, Edge).',
+        'Генерация ключей не поддерживается. Используйте современный браузер (Chrome, Firefox, Safari, Edge).'
       );
     }
     if (error.includes('secure context') || error.includes('HTTPS')) {
       throw new Error(
-        'Для генерации ключей требуется безопасное соединение (HTTPS).',
+        'Для генерации ключей требуется безопасное соединение (HTTPS).'
       );
     }
     throw new Error(`Ошибка генерации ключей: ${error}`);
@@ -59,7 +59,7 @@ export async function importPublicKey(base64: string): Promise<CryptoKey> {
       namedCurve: 'P-256',
     },
     true,
-    [],
+    []
   );
 }
 
@@ -72,7 +72,7 @@ async function getOrCreateMasterKey(): Promise<CryptoKey> {
       keyData,
       { name: 'AES-GCM' },
       false,
-      ['encrypt', 'decrypt'],
+      ['encrypt', 'decrypt']
     );
   }
 
@@ -82,13 +82,13 @@ async function getOrCreateMasterKey(): Promise<CryptoKey> {
     masterKey,
     { name: 'AES-GCM' },
     false,
-    ['encrypt', 'decrypt'],
+    ['encrypt', 'decrypt']
   );
 
   const exported = await crypto.subtle.exportKey('raw', key);
   sessionStorage.setItem(
     MASTER_KEY_STORAGE,
-    btoa(String.fromCharCode(...new Uint8Array(exported))),
+    btoa(String.fromCharCode(...new Uint8Array(exported)))
   );
   return key;
 }
@@ -102,7 +102,7 @@ async function encryptKeyData(data: string): Promise<string> {
     const encrypted = await crypto.subtle.encrypt(
       { name: 'AES-GCM', iv: nonce },
       masterKey,
-      dataBytes,
+      dataBytes
     );
 
     const encryptedArray = new Uint8Array(encrypted);
@@ -120,7 +120,7 @@ async function decryptKeyData(encryptedData: string): Promise<string | null> {
   try {
     const masterKey = await getOrCreateMasterKey();
     const combined = Uint8Array.from(atob(encryptedData), (c) =>
-      c.charCodeAt(0),
+      c.charCodeAt(0)
     );
 
     if (combined.length < 13) {
@@ -133,7 +133,7 @@ async function decryptKeyData(encryptedData: string): Promise<string | null> {
     const decrypted = await crypto.subtle.decrypt(
       { name: 'AES-GCM', iv: nonce },
       masterKey,
-      encrypted,
+      encrypted
     );
 
     return btoa(String.fromCharCode(...new Uint8Array(decrypted)));
@@ -145,29 +145,33 @@ async function decryptKeyData(encryptedData: string): Promise<string | null> {
 async function saveToIndexedDB(key: string, data: string): Promise<void> {
   try {
     if ('indexedDB' in window) {
-      const { saveKey } = await import('../storage/indexeddb');
+      const { saveKey } = await import('@/shared/storage/indexeddb');
       await saveKey(key, data, 'identity');
       return;
     }
-  } catch {}
+  } catch {
+    void 0;
+  }
   localStorage.setItem(key, data);
 }
 
 async function loadFromIndexedDB(key: string): Promise<string | null> {
   try {
     if ('indexedDB' in window) {
-      const { loadKey } = await import('../storage/indexeddb');
+      const { loadKey } = await import('@/shared/storage/indexeddb');
       const stored = await loadKey(key);
       if (stored) {
         return stored;
       }
     }
-  } catch {}
+  } catch {
+    void 0;
+  }
   return localStorage.getItem(key);
 }
 
 export async function saveIdentityPrivateKey(
-  privateKey: CryptoKey,
+  privateKey: CryptoKey
 ): Promise<void> {
   const exported = await crypto.subtle.exportKey('pkcs8', privateKey);
   const base64 = btoa(String.fromCharCode(...new Uint8Array(exported)));
@@ -186,7 +190,9 @@ export async function loadIdentityPrivateKey(): Promise<CryptoKey | null> {
 
     try {
       decrypted = await decryptKeyData(stored);
-    } catch {}
+    } catch {
+      void 0;
+    }
 
     if (!decrypted) {
       decrypted = stored;
@@ -201,7 +207,7 @@ export async function loadIdentityPrivateKey(): Promise<CryptoKey | null> {
         namedCurve: 'P-256',
       },
       true,
-      ['deriveKey', 'deriveBits'],
+      ['deriveKey', 'deriveBits']
     );
   } catch (err) {
     return null;

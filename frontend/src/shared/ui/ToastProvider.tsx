@@ -1,6 +1,6 @@
-import { createContext, ReactNode, useContext, useMemo, useState } from "react";
+import { createContext, ReactNode, useMemo, useState } from 'react';
 
-type ToastKind = "success" | "error" | "warning" | "info";
+type ToastKind = 'success' | 'error' | 'warning' | 'info';
 
 type Toast = {
   id: number;
@@ -18,7 +18,7 @@ type ToastContextValue = {
   removeToast(id: number): void;
 };
 
-const ToastContext = createContext<ToastContextValue | null>(null);
+export const ToastContext = createContext<ToastContextValue | null>(null);
 
 type Props = {
   children: ReactNode;
@@ -28,30 +28,31 @@ export function ToastProvider({ children }: Props) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const removeToast = (id: number) => {
-    setToasts(current => current.filter(toast => toast.id !== id));
+    setToasts((current) => current.filter((toast) => toast.id !== id));
   };
 
   const value = useMemo<ToastContextValue>(
     () => ({
-      showToast(message, kind = "error", options) {
-        setToasts(current => {
+      showToast(message, kind = 'error', options) {
+        setToasts((current) => {
           const id = (current.at(-1)?.id ?? 0) + 1;
-          const duration = options?.duration ?? (kind === "error" ? 5000 : 3500);
+          const duration =
+            options?.duration ?? (kind === 'error' ? 5000 : 3500);
           const newToast: Toast = {
             id,
             message,
             kind,
-            duration
+            duration,
           };
 
           setTimeout(() => {
-            setToasts(prev => prev.filter(toast => toast.id !== id));
+            setToasts((prev) => prev.filter((toast) => toast.id !== id));
           }, duration);
 
           return [...current, newToast];
         });
       },
-      removeToast
+      removeToast,
     }),
     []
   );
@@ -66,18 +67,21 @@ export function ToastProvider({ children }: Props) {
             className="pointer-events-auto animate-toast-enter"
           >
             <div
-              className={`w-full rounded-lg border px-4 py-3 text-sm shadow-xl backdrop-blur-md smooth-transition ${toast.kind === "error"
-                ? "border-red-500/50 bg-red-900/90 text-red-50"
-                : toast.kind === "success"
-                  ? "border-emerald-500/50 bg-emerald-900/90 text-emerald-50"
-                  : toast.kind === "warning"
-                    ? "border-yellow-400/50 bg-yellow-900/90 text-yellow-50"
-                    : "border-blue-400/50 bg-blue-900/90 text-blue-50"
-                }`}
+              className={`w-full rounded-lg border px-4 py-3 text-sm shadow-xl backdrop-blur-md smooth-transition ${
+                toast.kind === 'error'
+                  ? 'border-red-500/50 bg-red-900/90 text-red-50'
+                  : toast.kind === 'success'
+                    ? 'border-emerald-500/50 bg-emerald-900/90 text-emerald-50'
+                    : toast.kind === 'warning'
+                      ? 'border-yellow-400/50 bg-yellow-900/90 text-yellow-50'
+                      : 'border-blue-400/50 bg-blue-900/90 text-blue-50'
+              }`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-2 flex-1 min-w-0">
-                  <span className="flex-1 break-words leading-relaxed">{toast.message}</span>
+                  <span className="flex-1 break-words leading-relaxed">
+                    {toast.message}
+                  </span>
                 </div>
                 <button
                   onClick={() => removeToast(toast.id)}
@@ -105,12 +109,4 @@ export function ToastProvider({ children }: Props) {
       </div>
     </ToastContext.Provider>
   );
-}
-
-export function useToast() {
-  const ctx = useContext(ToastContext);
-  if (!ctx) {
-    throw new Error("useToast must be used within ToastProvider");
-  }
-  return ctx;
 }

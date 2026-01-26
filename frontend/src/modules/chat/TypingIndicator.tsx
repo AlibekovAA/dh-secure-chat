@@ -30,7 +30,9 @@ function TypingIndicatorComponent({ isVisible }: Props) {
               style={{ animationDelay: '300ms', willChange: 'transform' }}
             />
           </div>
-          <span className="text-xs text-emerald-300/90 italic leading-relaxed font-medium">печатает...</span>
+          <span className="text-xs text-emerald-300/90 italic leading-relaxed font-medium">
+            печатает...
+          </span>
         </div>
       </div>
     </div>

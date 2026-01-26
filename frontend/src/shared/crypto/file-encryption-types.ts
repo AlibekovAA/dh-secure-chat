@@ -1,4 +1,4 @@
-import type { EncryptedChunk } from './file-encryption';
+import type { EncryptedChunk } from '@/shared/crypto/file-encryption';
 
 export type WorkerMessage =
   | {

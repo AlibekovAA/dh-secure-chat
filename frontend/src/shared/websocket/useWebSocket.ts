@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { WebSocketClient } from './client';
-import type { WSMessage, ConnectionState } from './types';
+import { WebSocketClient } from '@/shared/websocket/client';
+import type { WSMessage, ConnectionState } from '@/shared/websocket/types';
 
 type UseWebSocketOptions = {
   token: string | null;
@@ -66,7 +66,7 @@ export function useWebSocket({
       client.disconnect();
       clientRef.current = null;
     };
-  }, [token, enabled]);
+  }, [token, enabled, onTokenExpired]);
 
   const send = useCallback((message: WSMessage) => {
     clientRef.current?.send(message);

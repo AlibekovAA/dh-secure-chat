@@ -1,13 +1,10 @@
 import { useCallback } from 'react';
-import type {
-  WSMessage,
-  EphemeralKeyPayload,
-} from '../../../shared/websocket/types';
+import type { WSMessage, EphemeralKeyPayload } from '@/shared/websocket/types';
 import {
   ACK_TIMEOUT_MS,
   ACK_MAX_RETRIES,
   ACK_RETRY_DELAY_MS,
-} from '../../../shared/constants';
+} from '@/shared/constants';
 
 type PendingAck = {
   message: WSMessage;
@@ -27,13 +24,16 @@ export function useAckManager({
   pendingAcksRef,
   onMaxRetries,
 }: UseAckManagerOptions) {
-  const handleAck = useCallback((messageId: string) => {
-    const pending = pendingAcksRef.current.get(messageId);
-    if (pending) {
-      clearTimeout(pending.timeout);
-      pendingAcksRef.current.delete(messageId);
-    }
-  }, []);
+  const handleAck = useCallback(
+    (messageId: string) => {
+      const pending = pendingAcksRef.current.get(messageId);
+      if (pending) {
+        clearTimeout(pending.timeout);
+        pendingAcksRef.current.delete(messageId);
+      }
+    },
+    [pendingAcksRef]
+  );
 
   const scheduleRetry = useCallback(
     (messageId: string) => {
@@ -57,7 +57,7 @@ export function useAckManager({
 
       pending.timeout = retryTimeout;
     },
-    [sendRef, onMaxRetries],
+    [sendRef, onMaxRetries, pendingAcksRef]
   );
 
   const sendWithAck = useCallback(
@@ -83,7 +83,7 @@ export function useAckManager({
 
       sendRef.current?.(message);
     },
-    [sendRef, scheduleRetry],
+    [sendRef, scheduleRetry, pendingAcksRef]
   );
 
   const clearPendingAcks = useCallback(() => {
@@ -91,7 +91,7 @@ export function useAckManager({
       clearTimeout(pending.timeout);
     }
     pendingAcksRef.current.clear();
-  }, []);
+  }, [pendingAcksRef]);
 
   return {
     handleAck,

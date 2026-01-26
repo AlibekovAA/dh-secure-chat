@@ -1,5 +1,5 @@
-import { apiClient } from '../../shared/api/client';
-import type { ApiErrorResponse } from '../../shared/api/error-handler';
+import { apiClient } from '@/shared/api/client';
+import type { ApiErrorResponse } from '@/shared/api/error-handler';
 
 const API_BASE = '/api/auth';
 
@@ -14,7 +14,7 @@ export type AuthErrorResponse = ApiErrorResponse;
 export async function register(
   username: string,
   password: string,
-  identityPubKey?: string,
+  identityPubKey?: string
 ): Promise<AuthResponse> {
   const body: {
     username: string;
@@ -35,11 +35,11 @@ export async function register(
 
 export async function login(
   username: string,
-  password: string,
+  password: string
 ): Promise<AuthResponse> {
   return apiClient.post<AuthResponse>(
     `${API_BASE}/login`,
     { username, password },
-    { credentials: 'include' },
+    { credentials: 'include' }
   );
 }

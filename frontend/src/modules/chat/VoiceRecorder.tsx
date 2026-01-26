@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { AudioRecorder } from '../../shared/audio/audio-recorder';
-import { checkMediaRecorderSupport } from '../../shared/browser-support';
-import { MAX_VOICE_DURATION_SECONDS } from '../../shared/constants';
+import { AudioRecorder } from '@/shared/audio/audio-recorder';
+import { checkMediaRecorderSupport } from '@/shared/browser-support';
+import { MAX_VOICE_DURATION_SECONDS } from '@/shared/constants';
 
 type Props = {
   onRecorded: (file: File, duration: number) => void;
@@ -22,7 +22,10 @@ export function VoiceRecorder({ onRecorded, onError, disabled }: Props) {
       setIsSupported(true);
     } catch (error) {
       setIsSupported(false);
-      const message = error instanceof Error ? error.message : 'Запись аудио не поддерживается';
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Запись аудио не поддерживается';
       onError(message);
     }
 
@@ -35,6 +38,40 @@ export function VoiceRecorder({ onRecorded, onError, disabled }: Props) {
       }
     };
   }, [onError]);
+
+  const stopRecording = useCallback(async () => {
+    if (!recorderRef.current || !isRecording) return;
+
+    try {
+      const recorder = recorderRef.current;
+      const blob = await recorder.stop();
+      const finalDuration = recorder.getDuration();
+
+      if (durationTimerRef.current) {
+        clearInterval(durationTimerRef.current);
+        durationTimerRef.current = null;
+      }
+
+      setIsRecording(false);
+      setDuration(0);
+
+      if (blob) {
+        const blobClone = blob.slice(0, blob.size, blob.type);
+        const file = new File([blobClone], `voice-${finalDuration}s.webm`, {
+          type: blob.type || 'audio/webm',
+        });
+        onRecorded(file, finalDuration);
+      }
+
+      recorder.cleanup();
+      recorderRef.current = null;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Ошибка при остановке записи';
+      onError(message);
+      setIsRecording(false);
+    }
+  }, [isRecording, onRecorded, onError]);
 
   const startRecording = useCallback(async () => {
     if (!isSupported || disabled || isRecording) return;
@@ -66,40 +103,7 @@ export function VoiceRecorder({ onRecorded, onError, disabled }: Props) {
       onError(message);
       setIsRecording(false);
     }
-  }, [isSupported, disabled, isRecording, onError]);
-
-  const stopRecording = useCallback(async () => {
-    if (!recorderRef.current || !isRecording) return;
-
-    try {
-      const recorder = recorderRef.current;
-      const blob = await recorder.stop();
-      const finalDuration = recorder.getDuration();
-
-      if (durationTimerRef.current) {
-        clearInterval(durationTimerRef.current);
-        durationTimerRef.current = null;
-      }
-
-      setIsRecording(false);
-      setDuration(0);
-
-      if (blob) {
-        const blobClone = blob.slice(0, blob.size, blob.type);
-        const file = new File([blobClone], `voice-${finalDuration}s.webm`, {
-          type: blob.type || 'audio/webm',
-        });
-        onRecorded(file, finalDuration);
-      }
-
-      recorder.cleanup();
-      recorderRef.current = null;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Ошибка при остановке записи';
-      onError(message);
-      setIsRecording(false);
-    }
-  }, [isRecording, onRecorded, onError]);
+  }, [isSupported, disabled, isRecording, onError, stopRecording]);
 
   const cancelRecording = useCallback(() => {
     if (recorderRef.current) {
@@ -159,11 +163,7 @@ export function VoiceRecorder({ onRecorded, onError, disabled }: Props) {
           className="flex-shrink-0 w-10 h-10 rounded-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-900/40 disabled:cursor-not-allowed text-white flex items-center justify-center transition-colors"
           title="Записать голосовое сообщение"
         >
-          <svg
-            className="w-5 h-5"
-            fill="currentColor"
-            viewBox="0 0 24 24"
-          >
+          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
             <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
             <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
           </svg>

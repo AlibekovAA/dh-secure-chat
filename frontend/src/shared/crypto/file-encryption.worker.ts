@@ -1,10 +1,13 @@
-import { FILE_CHUNK_SIZE } from '../constants';
+import { FILE_CHUNK_SIZE } from '@/shared/constants';
 import {
   encryptBinaryWithKey,
   decryptBinaryWithKey,
-} from './binary-encryption';
-import type { EncryptedChunk } from './file-encryption';
-import type { WorkerMessage, WorkerResponse } from './file-encryption-types';
+} from '@/shared/crypto/binary-encryption';
+import type { EncryptedChunk } from '@/shared/crypto/file-encryption';
+import type {
+  WorkerMessage,
+  WorkerResponse,
+} from '@/shared/crypto/file-encryption-types';
 
 async function importKey(keyData: ArrayBuffer): Promise<CryptoKey> {
   return await crypto.subtle.importKey(
@@ -12,14 +15,14 @@ async function importKey(keyData: ArrayBuffer): Promise<CryptoKey> {
     keyData,
     { name: 'AES-GCM' },
     false,
-    ['encrypt', 'decrypt'],
+    ['encrypt', 'decrypt']
   );
 }
 
 async function handleEncrypt(
   fileData: ArrayBuffer,
   keyData: ArrayBuffer,
-  requestId: string,
+  requestId: string
 ): Promise<void> {
   try {
     const sessionKey = await importKey(keyData);
@@ -60,7 +63,7 @@ async function handleEncrypt(
 async function handleDecrypt(
   chunks: EncryptedChunk[],
   keyData: ArrayBuffer,
-  requestId: string,
+  requestId: string
 ): Promise<void> {
   try {
     const sessionKey = await importKey(keyData);
@@ -72,7 +75,7 @@ async function handleDecrypt(
       const decrypted = await decryptBinaryWithKey(
         sessionKey,
         chunk.ciphertext,
-        chunk.nonce,
+        chunk.nonce
       );
       decryptedChunks.push(decrypted);
 
@@ -86,7 +89,7 @@ async function handleDecrypt(
 
     const totalLength = decryptedChunks.reduce(
       (sum, chunk) => sum + chunk.length,
-      0,
+      0
     );
     const result = new Uint8Array(totalLength);
     let offset = 0;

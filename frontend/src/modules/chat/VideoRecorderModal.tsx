@@ -1,12 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { checkMediaRecorderSupport } from '../../shared/browser-support';
+import { checkMediaRecorderSupport } from '@/shared/browser-support';
 import {
   MAX_FILE_SIZE,
   VIDEO_RECORDER_CHECK_INTERVAL_MS,
   VIDEO_RECORDER_DURATION_UPDATE_DELAY_MS,
   VIDEO_RECORDER_DURATION_UPDATE_INTERVAL_MS,
   VIDEO_RECORDER_TIMESLICE_MS,
-} from '../../shared/constants';
+  MS_PER_SECOND,
+  BYTES_PER_MB,
+} from '@/shared/constants';
 
 type Props = {
   onRecorded: (file: File, duration: number) => void;
@@ -43,10 +45,14 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
 
   const cleanup = useCallback(() => {
     stopDurationTimer();
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+    if (
+      mediaRecorderRef.current &&
+      mediaRecorderRef.current.state !== 'inactive'
+    ) {
       try {
         mediaRecorderRef.current.stop();
       } catch {
+        void 0;
       }
     }
     mediaRecorderRef.current = null;
@@ -75,12 +81,13 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
           videoRef.current.playsInline = true;
           try {
             await videoRef.current.play();
-          } catch (playError) {
+          } catch (_playError) {
             setTimeout(async () => {
               if (videoRef.current && videoRef.current.paused) {
                 try {
                   await videoRef.current.play();
                 } catch {
+                  void 0;
                 }
               }
             }, VIDEO_RECORDER_DURATION_UPDATE_DELAY_MS);
@@ -92,7 +99,7 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
         const message =
           err instanceof Error
             ? err.message
-            : 'Не удалось получить доступ к камере. Проверьте разрешения.';
+            : 'Не удалось получить доступ к камере';
         setError(message);
         onError(message);
         setIsInitializing(false);
@@ -185,7 +192,9 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
         }
 
         const blob = new Blob(chunksRef.current, { type: selectedMimeType });
-        const finalDuration = Math.floor((Date.now() - startTimeRef.current) / 1000);
+        const finalDuration = Math.floor(
+          (Date.now() - startTimeRef.current) / MS_PER_SECOND
+        );
 
         if (blob.size === 0 || finalDuration === 0) {
           cleanup();
@@ -194,7 +203,7 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
         }
 
         if (blob.size > MAX_FILE_SIZE) {
-          const message = `Видео слишком большое (${(blob.size / (1024 * 1024)).toFixed(1)} MB). Максимальный размер: ${(MAX_FILE_SIZE / (1024 * 1024)).toFixed(0)} MB`;
+          const message = `Видео слишком большое (${(blob.size / BYTES_PER_MB).toFixed(1)} MB). Максимальный размер: ${(MAX_FILE_SIZE / BYTES_PER_MB).toFixed(0)} MB`;
           setError(message);
           onError(message);
           cleanup();
@@ -228,7 +237,9 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
       }
 
       durationTimerRef.current = window.setInterval(() => {
-        const currentDuration = Math.floor((Date.now() - startTimeRef.current) / 1000);
+        const currentDuration = Math.floor(
+          (Date.now() - startTimeRef.current) / MS_PER_SECOND
+        );
         setDuration(currentDuration);
       }, VIDEO_RECORDER_DURATION_UPDATE_INTERVAL_MS);
     } catch (err) {
@@ -241,7 +252,10 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
   }, [isRecording, onError, onRecorded, cleanup, stopDurationTimer]);
 
   const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+    if (
+      mediaRecorderRef.current &&
+      mediaRecorderRef.current.state === 'recording'
+    ) {
       mediaRecorderRef.current.stop();
     }
   }, []);
@@ -267,14 +281,22 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]" style={{ willChange: 'opacity' }}>
-      <div className="relative w-full max-w-2xl mx-4 bg-emerald-950/95 border border-emerald-700/50 rounded-lg shadow-2xl overflow-hidden animate-[scaleIn_0.2s_ease-out]" style={{ willChange: 'transform, opacity' }}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]"
+      style={{ willChange: 'opacity' }}
+    >
+      <div
+        className="relative w-full max-w-2xl mx-4 bg-emerald-950/95 border border-emerald-700/50 rounded-lg shadow-2xl overflow-hidden animate-[scaleIn_0.2s_ease-out]"
+        style={{ willChange: 'transform, opacity' }}
+      >
         <div className="relative aspect-video bg-black">
           {isInitializing ? (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center">
                 <div className="w-12 h-12 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                <p className="text-emerald-400 text-sm">Инициализация камеры...</p>
+                <p className="text-emerald-400 text-sm">
+                  Инициализация камеры...
+                </p>
               </div>
             </div>
           ) : error ? (
@@ -328,7 +350,9 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
               {isRecording && (
                 <div className="absolute top-4 left-4 flex items-center gap-2 bg-black/60 px-3 py-1.5 rounded-lg">
                   <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                  <span className="text-white text-sm font-mono">{formatDuration(duration)}</span>
+                  <span className="text-white text-sm font-mono">
+                    {formatDuration(duration)}
+                  </span>
                 </div>
               )}
             </>

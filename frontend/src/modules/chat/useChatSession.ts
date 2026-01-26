@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useWebSocket } from '../../shared/websocket';
+import { useWebSocket } from '@/shared/websocket';
 import type {
   WSMessage,
   EphemeralKeyPayload,
@@ -7,37 +7,43 @@ import type {
   PeerOfflinePayload,
   PeerDisconnectedPayload,
   FileStartPayload,
-} from '../../shared/websocket/types';
-import { generateEphemeralKeyPair } from '../../shared/crypto/ephemeral';
+} from '@/shared/websocket/types';
+import { generateEphemeralKeyPair } from '@/shared/crypto/ephemeral';
 import {
   exportPublicKey,
   importPublicKey,
   loadIdentityPrivateKey,
-} from '../../shared/crypto/identity';
+} from '@/shared/crypto/identity';
 import {
   signEphemeralKey,
   verifyEphemeralKeySignature,
-} from '../../shared/crypto/signature';
-import { deriveSessionKey } from '../../shared/crypto/session';
-import { encrypt } from '../../shared/crypto/encryption';
+} from '@/shared/crypto/signature';
+import { deriveSessionKey } from '@/shared/crypto/session';
+import { encrypt } from '@/shared/crypto/encryption';
 import {
   encryptFile,
   calculateChunks,
   getChunkSize,
-} from '../../shared/crypto/file-encryption';
-import { getIdentityKey } from './api';
-import type { SessionKey } from '../../shared/crypto/session';
+} from '@/shared/crypto/file-encryption';
+import { getFriendlyErrorMessage } from '@/shared/api/error-handler';
+import { validateMessage } from '@/shared/validation';
+import { getIdentityKey } from '@/modules/chat/api';
+import type { SessionKey } from '@/shared/crypto/session';
 import {
   MAX_FILE_SIZE,
-  MAX_MESSAGE_LENGTH,
   MAX_VOICE_SIZE,
   EDIT_TIMEOUT_MS,
-} from '../../shared/constants';
-import { useAckManager } from './hooks/useAckManager';
-import { useFileTransfer } from './hooks/useFileTransfer';
-import { useMessageHandler } from './hooks/useMessageHandlers';
-import { useIncomingMessageHandlers } from './hooks/useIncomingMessageHandlers';
-import { isVoiceFile, isVideoFile, extractDurationFromFilename } from './utils';
+  BYTES_PER_MB,
+} from '@/shared/constants';
+import { useAckManager } from '@/modules/chat/hooks/useAckManager';
+import { useFileTransfer } from '@/modules/chat/hooks/useFileTransfer';
+import { useMessageHandler } from '@/modules/chat/hooks/useMessageHandlers';
+import { useIncomingMessageHandlers } from '@/modules/chat/hooks/useIncomingMessageHandlers';
+import {
+  isVoiceFile,
+  isVideoFile,
+  extractDurationFromFilename,
+} from '@/modules/chat/utils';
 
 export type ChatSessionState =
   | 'idle'
@@ -147,9 +153,7 @@ export function useChatSession({
     sendRef,
     pendingAcksRef,
     onMaxRetries: () => {
-      setError(
-        'Не удалось доставить ключ шифрования. Попробуйте переподключиться к чату.',
-      );
+      setError('Не удалось установить сессию. Переподключитесь');
       setState('error');
     },
   });
@@ -217,13 +221,11 @@ export function useChatSession({
         const isValid = await verifyEphemeralKeySignature(
           payload.public_key,
           payload.signature,
-          peerIdentityPublicKeyRef.current,
+          peerIdentityPublicKeyRef.current
         );
 
         if (!isValid) {
-          setError(
-            'Ошибка проверки подписи ключа. Возможна попытка атаки. Переподключитесь.',
-          );
+          setError('Ошибка проверки подписи. Переподключитесь');
           setState('error');
           return;
         }
@@ -244,7 +246,7 @@ export function useChatSession({
         if (myEphemeralKeyRef.current) {
           const sessionKey = await deriveSessionKey(
             myEphemeralKeyRef.current.privateKey,
-            peerPublicKey,
+            peerPublicKey
           );
 
           sessionKeyRef.current = sessionKey;
@@ -267,24 +269,24 @@ export function useChatSession({
         }
       } catch (err) {
         setError(
-          'Не удалось установить защищенную сессию. Попробуйте переподключиться.',
+          'Не удалось установить защищенную сессию. Попробуйте переподключиться.'
         );
         setState('error');
       }
     },
-    [peerId, token],
+    [peerId, token]
   );
 
   const handlePeerOffline = useCallback((_payload: PeerOfflinePayload) => {
     setState('peer_offline');
-    setError('Собеседник не в сети. Сообщение не может быть доставлено.');
+    setError('Собеседник не в сети');
   }, []);
 
   const handlePeerDisconnected = useCallback(
     (_payload: PeerDisconnectedPayload) => {
       setState('peer_disconnected');
     },
-    [],
+    []
   );
 
   const handleSessionEstablished = useCallback(
@@ -294,7 +296,7 @@ export function useChatSession({
         setError(null);
       }
     },
-    [peerId],
+    [peerId]
   );
 
   const messageHandler = useMessageHandler({
@@ -336,7 +338,8 @@ export function useChatSession({
     enabled: enabled && !!token,
     onMessage: messageHandler,
     onError: useCallback((err: Error) => {
-      setError(err.message);
+      const friendlyMessage = getFriendlyErrorMessage(err, 'Ошибка соединения');
+      setError(friendlyMessage);
       setState('error');
     }, []),
     onTokenExpired,
@@ -363,9 +366,7 @@ export function useChatSession({
       if (!myIdentityPrivateKeyRef.current) {
         const identityKey = await loadIdentityPrivateKey();
         if (!identityKey) {
-          setError(
-            'Не найден приватный ключ. Пожалуйста, перезайдите в систему.',
-          );
+          setError('Ключ идентификации не найден. Перезайдите в систему');
           setState('error');
           return;
         }
@@ -376,12 +377,12 @@ export function useChatSession({
       myEphemeralKeyRef.current = myEphemeral;
 
       const myEphemeralPublicKeyBase64 = await exportPublicKey(
-        myEphemeral.publicKey,
+        myEphemeral.publicKey
       );
 
       const signature = await signEphemeralKey(
         myEphemeralPublicKeyBase64,
-        myIdentityPrivateKeyRef.current,
+        myIdentityPrivateKeyRef.current
       );
 
       const messageId = `ephemeral-${Date.now()}-${Math.random()
@@ -399,13 +400,13 @@ export function useChatSession({
             requires_ack: true,
           },
         },
-        true,
+        true
       );
 
       if (peerEphemeralKeyRef.current) {
         const sessionKey = await deriveSessionKey(
           myEphemeral.privateKey,
-          peerEphemeralKeyRef.current,
+          peerEphemeralKeyRef.current
         );
 
         sessionKeyRef.current = sessionKey;
@@ -422,14 +423,14 @@ export function useChatSession({
         setError(null);
       }
     } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : 'Ошибка установки сессии';
-      setError(
-        `Ошибка установки защищенной сессии: ${errorMessage}. Попробуйте переподключиться.`,
+      const errorMessage = getFriendlyErrorMessage(
+        err,
+        'Ошибка установки сессии'
       );
+      setError(errorMessage);
       setState('error');
     }
-  }, [token, peerId, isConnected, send, sendWithAck]);
+  }, [token, peerId, isConnected, send, sendWithAck, clearPendingAcks]);
 
   const sendMessage = useCallback(
     async (text: string, replyToMessageId?: string) => {
@@ -447,17 +448,16 @@ export function useChatSession({
         return;
       }
 
-      if (trimmed.length > MAX_MESSAGE_LENGTH) {
-        setError(
-          `Сообщение слишком длинное (максимум ${MAX_MESSAGE_LENGTH} символов)`,
-        );
+      const validationError = validateMessage(trimmed);
+      if (validationError) {
+        setError(validationError.message);
         return;
       }
 
       try {
         const { ciphertext, nonce } = await encrypt(
           sessionKeyRef.current,
-          trimmed,
+          trimmed
         );
 
         const messageId = `msg-${Date.now()}-${messageIdCounterRef.current++}`;
@@ -503,12 +503,10 @@ export function useChatSession({
           return [...prev, newMessage];
         });
       } catch (err) {
-        setError(
-          'Не удалось отправить сообщение. Проверьте соединение и попробуйте снова.',
-        );
+        setError('Не удалось отправить сообщение');
       }
     },
-    [peerId, isConnected, state, send],
+    [peerId, isConnected, state, send]
   );
 
   const sendFile = useCallback(
@@ -516,7 +514,7 @@ export function useChatSession({
       file: File,
       accessMode: 'download_only' | 'view_only' | 'both' = 'both',
       voiceDuration?: number,
-      videoDuration?: number,
+      videoDuration?: number
     ) => {
       if (
         !sessionKeyRef.current ||
@@ -524,21 +522,17 @@ export function useChatSession({
         !isConnected ||
         state !== 'active'
       ) {
-        setError(
-          'Не удалось отправить файл: защищенная сессия не активна. Дождитесь установки соединения.',
-        );
+        setError('Сессия не активна. Подождите подключения');
         return;
       }
 
       if (file.size > MAX_FILE_SIZE) {
-        setError(
-          'Файл слишком большой. Максимальный размер: 50MB. Выберите файл меньшего размера.',
-        );
+        setError('Файл слишком большой. Максимальный размер: 50MB');
         return;
       }
 
       if (file.size === 0) {
-        throw new Error('Файл пустой. Выберите файл с содержимым.');
+        throw new Error('Файл пустой. Выберите файл с содержимым');
       }
 
       try {
@@ -560,7 +554,7 @@ export function useChatSession({
               encryptError instanceof Error
                 ? encryptError.message
                 : 'неизвестная ошибка'
-            }. Попробуйте выбрать другой файл.`,
+            }. Попробуйте выбрать другой файл.`
           );
           return;
         }
@@ -572,8 +566,8 @@ export function useChatSession({
           (isVoice
             ? 'audio/webm'
             : isVideo
-            ? 'video/webm'
-            : 'application/octet-stream');
+              ? 'video/webm'
+              : 'application/octet-stream');
 
         if ((isVoice || isVideo) && mimeType.includes(';')) {
           mimeType = mimeType.split(';')[0].trim();
@@ -627,8 +621,8 @@ export function useChatSession({
           voiceDuration !== undefined
             ? voiceDuration
             : videoDuration !== undefined
-            ? videoDuration
-            : extractedDuration;
+              ? videoDuration
+              : extractedDuration;
 
         const newMessage: ChatMessage = {
           id: fileId,
@@ -643,24 +637,24 @@ export function useChatSession({
                 },
               }
             : isVideo
-            ? {
-                video: {
-                  filename: file.name,
-                  mimeType,
-                  size: file.size,
-                  duration: finalDuration,
-                  blob: blobClone,
-                },
-              }
-            : {
-                file: {
-                  filename: file.name,
-                  mimeType,
-                  size: file.size,
-                  blob: blobClone,
-                  accessMode,
-                },
-              }),
+              ? {
+                  video: {
+                    filename: file.name,
+                    mimeType,
+                    size: file.size,
+                    duration: finalDuration,
+                    blob: blobClone,
+                  },
+                }
+              : {
+                  file: {
+                    filename: file.name,
+                    mimeType,
+                    size: file.size,
+                    blob: blobClone,
+                    accessMode,
+                  },
+                }),
           timestamp: Date.now(),
           isOwn: true,
           deliveryStatus: 'sending',
@@ -670,15 +664,12 @@ export function useChatSession({
 
         setMessages((prev) => [...prev, newMessage]);
       } catch (err) {
-        const errorMsg =
-          err instanceof Error ? err.message : 'Ошибка отправки файла';
-        setError(
-          `Не удалось отправить файл: ${errorMsg}. Проверьте соединение и попробуйте снова.`,
-        );
+        const errorMsg = getFriendlyErrorMessage(err, 'Ошибка отправки файла');
+        setError(errorMsg);
         throw err;
       }
     },
-    [peerId, isConnected, state, send],
+    [peerId, isConnected, state, send]
   );
 
   useEffect(() => {
@@ -703,7 +694,7 @@ export function useChatSession({
 
       clearPendingAcks();
     }
-  }, [enabled, peerId, isConnected, state, startSession]);
+  }, [enabled, peerId, isConnected, state, startSession, clearPendingAcks]);
 
   useEffect(() => {
     return () => {
@@ -718,17 +709,17 @@ export function useChatSession({
     async (file: File, duration: number) => {
       if (file.size === 0) {
         throw new Error(
-          'Голосовое сообщение пустое. Запишите сообщение с звуком.',
+          'Голосовое сообщение пустое. Запишите сообщение с звуком.'
         );
       }
       if (file.size > MAX_VOICE_SIZE) {
         throw new Error(
-          'Голосовое сообщение слишком большое. Максимальный размер: 10MB. Запишите более короткое сообщение.',
+          `Голосовое сообщение слишком большое. Максимальный размер: ${(MAX_VOICE_SIZE / BYTES_PER_MB).toFixed(0)}MB. Запишите более короткое сообщение.`
         );
       }
       await sendFile(file, 'both', duration);
     },
-    [sendFile],
+    [sendFile]
   );
 
   const sendTyping = useCallback(
@@ -742,13 +733,14 @@ export function useChatSession({
         },
       });
     },
-    [peerId, isConnected, send],
+    [peerId, isConnected, send]
   );
 
   useEffect(() => {
+    const timeoutRef = typingTimeoutRef.current;
     return () => {
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
+      if (timeoutRef) {
+        clearTimeout(timeoutRef);
       }
     };
   }, []);
@@ -796,17 +788,17 @@ export function useChatSession({
                 reactions: {
                   ...currentReactions,
                   [emoji]: currentEmojiReactions.filter(
-                    (id) => id !== myUserId,
+                    (id) => id !== myUserId
                   ),
                 },
               };
             }
           }
           return msg;
-        }),
+        })
       );
     },
-    [peerId, isConnected, send, state, messages],
+    [peerId, isConnected, send, state, messages]
   );
 
   const deleteMessage = useCallback(
@@ -847,10 +839,10 @@ export function useChatSession({
           }
 
           return msg;
-        }),
+        })
       );
     },
-    [peerId, isConnected, send, state, messages],
+    [peerId, isConnected, send, state, messages]
   );
 
   const editMessage = useCallback(
@@ -871,26 +863,23 @@ export function useChatSession({
       const timeSinceSent = Date.now() - message.timestamp;
       const EDIT_TIMEOUT = EDIT_TIMEOUT_MS;
       if (timeSinceSent > EDIT_TIMEOUT) {
-        setError(
-          'Редактирование доступно только в течение 15 минут после отправки.',
-        );
+        setError('Редактирование доступно только 15 минут после отправки');
         return;
       }
 
       const trimmed = newText.trim();
       if (!trimmed || trimmed === message.text) return;
 
-      if (trimmed.length > MAX_MESSAGE_LENGTH) {
-        setError(
-          `Сообщение слишком длинное (максимум ${MAX_MESSAGE_LENGTH} символов)`,
-        );
+      const validationError = validateMessage(trimmed);
+      if (validationError) {
+        setError(validationError.message);
         return;
       }
 
       try {
         const { ciphertext, nonce } = await encrypt(
           sessionKeyRef.current,
-          trimmed,
+          trimmed
         );
 
         send({
@@ -924,13 +913,13 @@ export function useChatSession({
             }
 
             return msg;
-          }),
+          })
         );
       } catch (err) {
-        setError('Не удалось отредактировать сообщение. Попробуйте снова.');
+        setError('Не удалось отредактировать сообщение');
       }
     },
-    [peerId, isConnected, send, state, messages, sessionKeyRef],
+    [peerId, isConnected, send, state, messages, sessionKeyRef]
   );
 
   const markMessageAsRead = useCallback(
@@ -948,7 +937,7 @@ export function useChatSession({
         },
       });
     },
-    [peerId, isConnected, send, state, messages],
+    [peerId, isConnected, send, state, messages]
   );
 
   return {

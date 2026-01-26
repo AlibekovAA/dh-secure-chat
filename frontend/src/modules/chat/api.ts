@@ -1,5 +1,5 @@
-import { apiClient } from '../../shared/api/client';
-import type { ApiErrorResponse } from '../../shared/api/error-handler';
+import { apiClient } from '@/shared/api/client';
+import type { ApiErrorResponse } from '@/shared/api/error-handler';
 
 const API_BASE = '/api/chat';
 
@@ -18,7 +18,7 @@ export type ChatErrorResponse = ApiErrorResponse;
 export {
   UNAUTHORIZED_MESSAGE,
   SESSION_EXPIRED_ERROR,
-} from '../../shared/constants';
+} from '@/shared/constants';
 
 export async function fetchMe(): Promise<MeResponse> {
   return apiClient.get<MeResponse>(`${API_BASE}/me`);
@@ -34,10 +34,10 @@ export type IdentityKeyResponse = {
 };
 
 export async function getIdentityKey(
-  userId: string,
+  userId: string
 ): Promise<IdentityKeyResponse> {
   return apiClient.get<IdentityKeyResponse>(
-    `${API_BASE}/users/${userId}/identity-key`,
+    `${API_BASE}/users/${userId}/identity-key`
   );
 }
 
@@ -46,9 +46,9 @@ export type FingerprintResponse = {
 };
 
 export async function getFingerprint(
-  userId: string,
+  userId: string
 ): Promise<FingerprintResponse> {
   return apiClient.get<FingerprintResponse>(
-    `/api/identity/users/${userId}/fingerprint`,
+    `/api/identity/users/${userId}/fingerprint`
   );
 }

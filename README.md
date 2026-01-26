@@ -238,10 +238,13 @@ sequenceDiagram
 ### Frontend
 
 - **React 18** + **TypeScript** — современный SPA
+- **Vite** — сборщик и dev-сервер
 - **Tailwind CSS** — стилизация
 - **Web Crypto API** — криптография на клиенте
 - **WebSocket** — real-time коммуникация
 - **MediaRecorder API** — запись аудио/видео
+- **ESLint** + **Prettier** — линтинг и форматирование кода
+- **Path Aliases** (`@/`) — удобные импорты
 
 ### Backend
 
@@ -383,7 +386,7 @@ make help                      # Список всех команд
 make clean                     # Полная очистка Docker
 make backend                   # Запуск backend локально
 make frontend                  # Запуск frontend локально
-make format                    # Форматирование Go кода
+make format                    # Форматирование и линтинг (Go + TypeScript/React)
 make go-test-auth              # Тесты auth-service
 make go-test-auth-coverage     # Тесты с покрытием
 ```

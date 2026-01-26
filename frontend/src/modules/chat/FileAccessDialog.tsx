@@ -48,7 +48,9 @@ export function FileAccessDialog({ filename, onSelect, onCancel }: Props) {
           <h3 className="text-lg font-semibold bg-gradient-to-r from-emerald-300 to-emerald-400 bg-clip-text text-transparent">
             Выберите режим доступа
           </h3>
-          <p className="text-sm text-emerald-400/90 mt-1 truncate font-medium">{filename}</p>
+          <p className="text-sm text-emerald-400/90 mt-1 truncate font-medium">
+            {filename}
+          </p>
         </div>
 
         <div className="px-6 py-4 space-y-3">
@@ -60,12 +62,15 @@ export function FileAccessDialog({ filename, onSelect, onCancel }: Props) {
                 className={`
                   flex items-start gap-3 p-3.5 rounded-lg border cursor-pointer
                   transition-all duration-200 ease-out
-                  ${isSelected
-                    ? 'border-emerald-500/80 bg-gradient-to-r from-emerald-500/20 via-emerald-500/15 to-emerald-500/20 shadow-lg shadow-emerald-500/20 scale-[1.02]'
-                    : 'border-emerald-700/40 bg-emerald-900/10 hover:bg-emerald-900/20 hover:border-emerald-700/60 hover:scale-[1.01]'
+                  ${
+                    isSelected
+                      ? 'border-emerald-500/80 bg-gradient-to-r from-emerald-500/20 via-emerald-500/15 to-emerald-500/20 shadow-lg shadow-emerald-500/20 scale-[1.02]'
+                      : 'border-emerald-700/40 bg-emerald-900/10 hover:bg-emerald-900/20 hover:border-emerald-700/60 hover:scale-[1.01]'
                   }
                 `}
-                style={{ willChange: 'transform, background-color, border-color' }}
+                style={{
+                  willChange: 'transform, background-color, border-color',
+                }}
               >
                 <div className="relative flex-shrink-0 mt-0.5">
                   <input
@@ -80,9 +85,10 @@ export function FileAccessDialog({ filename, onSelect, onCancel }: Props) {
                     className={`
                       w-5 h-5 rounded-full border-2 flex items-center justify-center
                       transition-all duration-200 ease-out
-                      ${isSelected
-                        ? 'border-emerald-400 bg-emerald-500/20'
-                        : 'border-emerald-600 bg-transparent'
+                      ${
+                        isSelected
+                          ? 'border-emerald-400 bg-emerald-500/20'
+                          : 'border-emerald-600 bg-transparent'
                       }
                     `}
                   >
@@ -91,18 +97,25 @@ export function FileAccessDialog({ filename, onSelect, onCancel }: Props) {
                     )}
                   </div>
                   {isSelected && (
-                    <div className="absolute inset-0 rounded-full border-2 border-emerald-400/50 animate-ping" style={{ animationDuration: '1.5s' }} />
+                    <div
+                      className="absolute inset-0 rounded-full border-2 border-emerald-400/50 animate-ping"
+                      style={{ animationDuration: '1.5s' }}
+                    />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className={`text-sm font-semibold transition-colors duration-200 mb-0.5 ${
-                    isSelected ? 'text-emerald-200' : 'text-emerald-100'
-                  }`}>
+                  <div
+                    className={`text-sm font-semibold transition-colors duration-200 mb-0.5 ${
+                      isSelected ? 'text-emerald-200' : 'text-emerald-100'
+                    }`}
+                  >
                     {option.title}
                   </div>
-                  <div className={`text-xs transition-colors duration-200 ${
-                    isSelected ? 'text-emerald-400/90' : 'text-emerald-500/70'
-                  }`}>
+                  <div
+                    className={`text-xs transition-colors duration-200 ${
+                      isSelected ? 'text-emerald-400/90' : 'text-emerald-500/70'
+                    }`}
+                  >
                     {option.description}
                   </div>
                 </div>

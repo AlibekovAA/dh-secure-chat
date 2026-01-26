@@ -1,10 +1,13 @@
-import { encryptBinary, decryptBinary } from './binary-encryption';
-import type { SessionKey } from './session';
+import {
+  encryptBinary,
+  decryptBinary,
+} from '@/shared/crypto/binary-encryption';
+import type { SessionKey } from '@/shared/crypto/session';
 import {
   encryptFileWithWorker,
   decryptFileWithWorker,
-} from './file-encryption-worker';
-import { FILE_CHUNK_SIZE, WORKER_THRESHOLD } from '../constants';
+} from '@/shared/crypto/file-encryption-worker';
+import { FILE_CHUNK_SIZE, WORKER_THRESHOLD } from '@/shared/constants';
 
 export interface EncryptedChunk {
   ciphertext: string;
@@ -36,7 +39,7 @@ async function exportKeyForWorker(key: SessionKey): Promise<CryptoKey> {
       keyData,
       { name: 'AES-GCM' },
       true,
-      ['encrypt', 'decrypt'],
+      ['encrypt', 'decrypt']
     );
   } catch {
     return key;
@@ -46,7 +49,7 @@ async function exportKeyForWorker(key: SessionKey): Promise<CryptoKey> {
 export async function encryptFile(
   sessionKey: SessionKey,
   file: File,
-  onProgress?: (progress: number) => void,
+  onProgress?: (progress: number) => void
 ): Promise<{ chunks: EncryptedChunk[]; totalSize: number }> {
   const useWorker = checkWorkerSupport() && file.size >= WORKER_THRESHOLD;
 
@@ -57,7 +60,7 @@ export async function encryptFile(
     } catch (error) {
       console.warn(
         'Worker encryption failed, falling back to main thread:',
-        error,
+        error
       );
     }
   }
@@ -87,11 +90,11 @@ export async function encryptFile(
 export async function decryptFile(
   sessionKey: SessionKey,
   chunks: EncryptedChunk[],
-  onProgress?: (progress: number) => void,
+  onProgress?: (progress: number) => void
 ): Promise<Blob> {
   const totalSize = chunks.reduce(
     (sum, chunk) => sum + (chunk.ciphertext?.length || 0),
-    0,
+    0
   );
   const useWorker = checkWorkerSupport() && totalSize >= WORKER_THRESHOLD;
 
@@ -102,7 +105,7 @@ export async function decryptFile(
     } catch (error) {
       console.warn(
         'Worker decryption failed, falling back to main thread:',
-        error,
+        error
       );
     }
   }
@@ -115,7 +118,7 @@ export async function decryptFile(
     const decrypted = await decryptBinary(
       sessionKey,
       chunk.ciphertext,
-      chunk.nonce,
+      chunk.nonce
     );
     decryptedChunks.push(decrypted);
 
@@ -127,7 +130,7 @@ export async function decryptFile(
 
   const totalLength = decryptedChunks.reduce(
     (sum, chunk) => sum + chunk.length,
-    0,
+    0
   );
   const result = new Uint8Array(totalLength);
   let offset = 0;

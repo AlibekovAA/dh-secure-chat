@@ -118,3 +118,27 @@ export const WEBSOCKET_BASE_DELAY_MS = 1000;
 
 export const UNAUTHORIZED_MESSAGE = 'unauthorized';
 export const SESSION_EXPIRED_ERROR = 'session_expired';
+
+export const MS_PER_SECOND = 1000;
+export const BYTES_PER_MB = 1024 * 1024;
+
+export const SCROLL_DELAY_MS = 50;
+export const SCROLL_DELAY_TYPING_MS = 100;
+export const TYPING_INDICATOR_TIMEOUT_MS = 3000;
+
+export const VIDEO_THUMBNAIL_SEEK_TIME = 0.1;
+export const JPEG_QUALITY = 0.85;
+export const VIDEO_THUMBNAIL_BG_COLOR = '#0a0a0a';
+
+export const INPUT_MIN_HEIGHT_PX = 40;
+export const MODAL_MAX_HEIGHT_VH = 80;
+export const MESSAGE_MAX_WIDTH_PERCENT = 75;
+export const TEXTAREA_MAX_ROWS = 5;
+
+export const USERNAME_MIN_LENGTH = 3;
+export const USERNAME_MAX_LENGTH = 32;
+export const PASSWORD_MIN_LENGTH = 8;
+export const PASSWORD_MAX_LENGTH = 72;
+export const USERNAME_REGEX = /^[a-zA-Z0-9_-]+$/;
+
+export const MAX_SEARCH_QUERY_LENGTH = 100;

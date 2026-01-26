@@ -15,8 +15,11 @@ import type {
   MessageDeletePayload,
   MessageEditPayload,
   MessageReadPayload,
-} from '../../../shared/websocket/types';
-import type { ChatMessage, ChatSessionState } from '../useChatSession';
+} from '@/shared/websocket/types';
+import type {
+  ChatMessage,
+  ChatSessionState,
+} from '@/modules/chat/useChatSession';
 
 type MessageHandlers = {
   onEphemeralKey: (payload: EphemeralKeyPayload) => void;
@@ -224,6 +227,6 @@ export function useMessageHandler({
       fileBuffersRef,
       typingTimeoutRef,
       handleIncomingFile,
-    ],
+    ]
   );
 }

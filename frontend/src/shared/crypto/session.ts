@@ -1,10 +1,10 @@
-import { AES_KEY_SIZE } from '../constants';
+import { AES_KEY_SIZE } from '@/shared/constants';
 
 export type SessionKey = CryptoKey;
 
 export async function deriveSessionKey(
   privateKey: CryptoKey,
-  peerPublicKey: CryptoKey,
+  peerPublicKey: CryptoKey
 ): Promise<SessionKey> {
   const sharedSecret = await crypto.subtle.deriveBits(
     {
@@ -12,7 +12,7 @@ export async function deriveSessionKey(
       public: peerPublicKey,
     },
     privateKey,
-    AES_KEY_SIZE,
+    AES_KEY_SIZE
   );
 
   const baseKey = await crypto.subtle.importKey(
@@ -22,7 +22,7 @@ export async function deriveSessionKey(
       name: 'HKDF',
     },
     false,
-    ['deriveKey'],
+    ['deriveKey']
   );
 
   const sessionKey = await crypto.subtle.deriveKey(
@@ -38,7 +38,7 @@ export async function deriveSessionKey(
       length: AES_KEY_SIZE,
     },
     true,
-    ['encrypt', 'decrypt'],
+    ['encrypt', 'decrypt']
   );
 
   return sessionKey;

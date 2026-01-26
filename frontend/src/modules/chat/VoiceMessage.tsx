@@ -14,7 +14,13 @@ function formatDuration(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-export function VoiceMessage({ duration, blob, isOwn, onPlaybackChange, onMarkAsRead }: Props) {
+export function VoiceMessage({
+  duration,
+  blob,
+  isOwn,
+  onPlaybackChange,
+  onMarkAsRead,
+}: Props) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -24,12 +30,14 @@ export function VoiceMessage({ duration, blob, isOwn, onPlaybackChange, onMarkAs
   const readMarkedRef = useRef(false);
 
   useEffect(() => {
+    const audio = audioRef.current;
+
     if (!blob) {
       if (audioUrl) {
-        if (audioRef.current) {
-          audioRef.current.pause();
-          audioRef.current.src = '';
-          audioRef.current.load();
+        if (audio) {
+          audio.pause();
+          audio.src = '';
+          audio.load();
         }
         URL.revokeObjectURL(audioUrl);
         setAudioUrl(null);
@@ -54,17 +62,22 @@ export function VoiceMessage({ duration, blob, isOwn, onPlaybackChange, onMarkAs
 
     let url: string | null = null;
     try {
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+      }
       url = URL.createObjectURL(blob);
       setAudioUrl(url);
     } catch {
       return;
     }
 
+    const cleanupAudio = audioRef.current;
+
     return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.src = '';
-        audioRef.current.load();
+      if (cleanupAudio) {
+        cleanupAudio.pause();
+        cleanupAudio.src = '';
+        cleanupAudio.load();
       }
       if (url) {
         URL.revokeObjectURL(url);
@@ -107,7 +120,12 @@ export function VoiceMessage({ duration, blob, isOwn, onPlaybackChange, onMarkAs
       if (dur && !isNaN(dur) && dur > 0 && dur !== Infinity) {
         const newDuration = Math.floor(dur);
         setMetadataDuration(newDuration);
-        if (!isOwn && onMarkAsRead && !readMarkedRef.current && current >= dur * 0.5) {
+        if (
+          !isOwn &&
+          onMarkAsRead &&
+          !readMarkedRef.current &&
+          current >= dur * 0.5
+        ) {
           readMarkedRef.current = true;
           onMarkAsRead();
         }
@@ -168,7 +186,7 @@ export function VoiceMessage({ duration, blob, isOwn, onPlaybackChange, onMarkAs
       }
       setIsLoading(false);
     };
-    const handleError = (e: Event) => {
+    const handleError = (_e: Event) => {
       if (loadTimeout) {
         clearTimeout(loadTimeout);
         loadTimeout = null;
@@ -229,7 +247,7 @@ export function VoiceMessage({ duration, blob, isOwn, onPlaybackChange, onMarkAs
       audio.removeEventListener('canplaythrough', handleCanPlay);
       audio.removeEventListener('error', handleError);
     };
-  }, [audioUrl, blob]);
+  }, [audioUrl, blob, isOwn, onMarkAsRead, onPlaybackChange]);
 
   const handlePlayPause = () => {
     const audio = audioRef.current;
@@ -244,8 +262,12 @@ export function VoiceMessage({ duration, blob, isOwn, onPlaybackChange, onMarkAs
     }
   };
 
-  const displayDuration = metadataDuration !== null && metadataDuration > 0 ? metadataDuration : duration;
-  const progress = displayDuration > 0 ? (currentTime / displayDuration) * 100 : 0;
+  const displayDuration =
+    metadataDuration !== null && metadataDuration > 0
+      ? metadataDuration
+      : duration;
+  const progress =
+    displayDuration > 0 ? (currentTime / displayDuration) * 100 : 0;
 
   return (
     <div
@@ -268,11 +290,7 @@ export function VoiceMessage({ duration, blob, isOwn, onPlaybackChange, onMarkAs
         {isLoading ? (
           <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
         ) : isPlaying ? (
-          <svg
-            className="w-5 h-5"
-            fill="currentColor"
-            viewBox="0 0 24 24"
-          >
+          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
             <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
           </svg>
         ) : (
@@ -293,7 +311,8 @@ export function VoiceMessage({ duration, blob, isOwn, onPlaybackChange, onMarkAs
               isOwn ? 'text-emerald-50' : 'text-emerald-100'
             }`}
           >
-            {formatDuration(Math.floor(currentTime || 0))} / {formatDuration(displayDuration)}
+            {formatDuration(Math.floor(currentTime || 0))} /{' '}
+            {formatDuration(displayDuration)}
           </span>
         </div>
 

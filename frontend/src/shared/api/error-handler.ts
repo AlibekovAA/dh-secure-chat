@@ -1,4 +1,7 @@
-import { UNAUTHORIZED_MESSAGE, SESSION_EXPIRED_ERROR } from '../constants';
+import {
+  UNAUTHORIZED_MESSAGE,
+  SESSION_EXPIRED_ERROR,
+} from '@/shared/constants';
 
 export type ApiErrorResponse = {
   error: string;
@@ -28,7 +31,7 @@ export enum ErrorCode {
   UNKNOWN_ERROR = 'UNKNOWN_ERROR',
 }
 
-import { HTTP_SERVER_ERROR_THRESHOLD } from '../constants';
+import { HTTP_SERVER_ERROR_THRESHOLD } from '@/shared/constants';
 
 export type ErrorMapping = {
   pattern: RegExp | string;
@@ -42,7 +45,7 @@ const ERROR_MAPPINGS: ErrorMapping[] = [
   },
   {
     pattern: /username already taken|username already exists/i,
-    message: 'Это имя пользователя уже занято',
+    message: 'Имя пользователя уже занято',
   },
   {
     pattern: /username must be between/i,
@@ -79,11 +82,11 @@ const ERROR_MAPPINGS: ErrorMapping[] = [
   },
   {
     pattern: /service temporarily unavailable|circuit breaker/i,
-    message: 'Сервис временно недоступен. Попробуйте позже',
+    message: 'Сервис временно недоступен',
   },
   {
     pattern: /file size exceeds maximum/i,
-    message: 'Файл слишком большой. Максимальный размер: 50MB',
+    message: 'Файл слишком большой (макс. 50MB)',
   },
   {
     pattern: /user not found/i,
@@ -109,12 +112,40 @@ const ERROR_MAPPINGS: ErrorMapping[] = [
     pattern: /failed to get fingerprint/i,
     message: 'Не удалось получить fingerprint',
   },
+  {
+    pattern: /network error|failed to fetch|networkrequestfailed/i,
+    message: 'Нет соединения с сервером',
+  },
+  {
+    pattern: /timeout|timed out/i,
+    message: 'Превышено время ожидания',
+  },
+  {
+    pattern: /websocket|ws connection/i,
+    message: 'Ошибка подключения',
+  },
+  {
+    pattern: /reconnect|переподключ/i,
+    message: 'Переподключение...',
+  },
+  {
+    pattern: /encryption|decryption|crypto/i,
+    message: 'Ошибка шифрования',
+  },
+  {
+    pattern: /file.*encrypt|encrypt.*file/i,
+    message: 'Не удалось зашифровать файл',
+  },
+  {
+    pattern: /file.*decrypt|decrypt.*file/i,
+    message: 'Не удалось расшифровать файл',
+  },
 ];
 
 export function parseError(error: unknown): AppError {
   if (!error) {
     return {
-      message: 'Произошла ошибка. Попробуйте ещё раз.',
+      message: 'Произошла ошибка',
       code: ErrorCode.UNKNOWN_ERROR,
     };
   }
@@ -130,6 +161,22 @@ export function parseError(error: unknown): AppError {
       appError.statusCode = error.statusCode as number;
     }
 
+    if (
+      error.name === 'TypeError' &&
+      (error.message.includes('fetch') || error.message.includes('network'))
+    ) {
+      appError.code = ErrorCode.NETWORK_ERROR;
+      appError.isRetryable = true;
+    }
+
+    if (
+      error.message.includes('timeout') ||
+      error.message.includes('Timeout')
+    ) {
+      appError.code = ErrorCode.NETWORK_ERROR;
+      appError.isRetryable = true;
+    }
+
     return appError;
   }
 
@@ -143,7 +190,7 @@ export function parseError(error: unknown): AppError {
   if (typeof error === 'object' && error !== null && 'error' in error) {
     const apiError = error as ApiErrorResponse;
     const appError: AppError = {
-      message: apiError.error || 'Произошла ошибка. Попробуйте ещё раз.',
+      message: apiError.error || 'Произошла ошибка',
       code: apiError.code || ErrorCode.UNKNOWN_ERROR,
       originalError: error,
     };
@@ -167,7 +214,7 @@ export function parseError(error: unknown): AppError {
   }
 
   return {
-    message: 'Произошла ошибка. Попробуйте ещё раз.',
+    message: 'Произошла ошибка',
     code: ErrorCode.UNKNOWN_ERROR,
     originalError: error,
   };
@@ -175,10 +222,14 @@ export function parseError(error: unknown): AppError {
 
 export function getFriendlyErrorMessage(
   error: unknown,
-  defaultMessage = 'Произошла ошибка. Попробуйте ещё раз.',
+  defaultMessage = 'Произошла ошибка'
 ): string {
   const appError = parseError(error);
   const errorMessage = appError.message.toLowerCase().trim();
+
+  if (!navigator.onLine && appError.code === ErrorCode.NETWORK_ERROR) {
+    return 'Нет подключения к интернету';
+  }
 
   for (const mapping of ERROR_MAPPINGS) {
     if (typeof mapping.pattern === 'string') {
@@ -192,7 +243,40 @@ export function getFriendlyErrorMessage(
     }
   }
 
-  return appError.message || defaultMessage;
+  if (appError.statusCode) {
+    if (appError.statusCode === 400) {
+      return 'Неверный запрос';
+    }
+    if (appError.statusCode === 401) {
+      if (appError.code === ErrorCode.INVALID_CREDENTIALS) {
+        return 'Неверное имя пользователя или пароль';
+      }
+      return 'Сессия истекла. Войдите снова';
+    }
+    if (appError.statusCode === 403) {
+      return 'Доступ запрещён';
+    }
+    if (appError.statusCode === 404) {
+      return 'Не найдено';
+    }
+    if (appError.statusCode === 429) {
+      return 'Слишком много запросов. Подождите';
+    }
+    if (appError.statusCode >= 500) {
+      return 'Ошибка сервера. Попробуйте позже';
+    }
+  }
+
+  const cleanMessage = appError.message
+    .replace(/^error\s*\d+:\s*/i, '')
+    .replace(/^ошибка\s*\d+:\s*/i, '')
+    .trim();
+
+  if (cleanMessage && cleanMessage.length < 100) {
+    return cleanMessage;
+  }
+
+  return defaultMessage;
 }
 
 export function isUnauthorizedError(error: unknown): boolean {
@@ -217,7 +301,7 @@ export function isSessionExpiredError(error: unknown): boolean {
 
 export async function parseApiError(response: Response): Promise<AppError> {
   const appError: AppError = {
-    message: `Ошибка ${response.status}: ${response.statusText}`,
+    message: response.statusText || `Ошибка ${response.status}`,
     statusCode: response.status,
     code: ErrorCode.UNKNOWN_ERROR,
     isRetryable: response.status >= HTTP_SERVER_ERROR_THRESHOLD,
@@ -235,12 +319,42 @@ export async function parseApiError(response: Response): Promise<AppError> {
         appError.originalError = data.details;
       }
     }
-  } catch {}
+  } catch {
+    void 0;
+  }
 
   if (response.status === 401) {
+    const errorMessageLower = appError.message.toLowerCase();
+    const isInvalidCredentials =
+      appError.code === ErrorCode.INVALID_CREDENTIALS ||
+      errorMessageLower.includes('invalid credentials') ||
+      errorMessageLower.includes('invalid username or password');
+
+    if (isInvalidCredentials) {
+      appError.code = ErrorCode.INVALID_CREDENTIALS;
+    } else {
+      appError.code = ErrorCode.UNAUTHORIZED;
+      if (
+        !appError.message ||
+        appError.message === `Ошибка ${response.status}` ||
+        appError.message === response.statusText
+      ) {
+        appError.message = 'Сессия истекла. Войдите снова';
+      }
+    }
+  } else if (response.status === 403) {
     appError.code = ErrorCode.UNAUTHORIZED;
+    appError.message = 'Доступ запрещён';
+  } else if (response.status === 404) {
+    appError.message = 'Не найдено';
+  } else if (response.status === 429) {
+    appError.message = 'Слишком много запросов. Подождите';
   } else if (response.status === 503 || response.status === 502) {
     appError.code = ErrorCode.SERVICE_UNAVAILABLE;
+    appError.message = 'Сервис временно недоступен';
+    appError.isRetryable = true;
+  } else if (response.status >= 500) {
+    appError.message = 'Ошибка сервера. Попробуйте позже';
     appError.isRetryable = true;
   }
 

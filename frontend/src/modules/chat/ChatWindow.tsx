@@ -1,21 +1,35 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useChatSession, type ChatMessage } from './useChatSession';
-import type { UserSummary } from './api';
-import { FingerprintVerificationModal } from './FingerprintVerificationModal';
-import { VoiceRecorder } from './VoiceRecorder';
-import { VideoRecorder } from './VideoRecorder';
-import { MessageBubble } from './MessageBubble';
-import { TypingIndicator } from './TypingIndicator';
-import { FileAccessDialog, type FileAccessMode } from './FileAccessDialog';
-import { FileViewerModal } from './FileViewerModal';
-import { getFingerprint } from './api';
+import {
+  useChatSession,
+  type ChatMessage,
+} from '@/modules/chat/useChatSession';
+import type { UserSummary } from '@/modules/chat/api';
+import { FingerprintVerificationModal } from '@/modules/chat/FingerprintVerificationModal';
+import { VoiceRecorder } from '@/modules/chat/VoiceRecorder';
+import { VideoRecorder } from '@/modules/chat/VideoRecorder';
+import { MessageBubble } from '@/modules/chat/MessageBubble';
+import { TypingIndicator } from '@/modules/chat/TypingIndicator';
+import {
+  FileAccessDialog,
+  type FileAccessMode,
+} from '@/modules/chat/FileAccessDialog';
+import { FileViewerModal } from '@/modules/chat/FileViewerModal';
+import { getFingerprint } from '@/modules/chat/api';
 import {
   getVerifiedPeerFingerprint,
   isPeerVerified,
   normalizeFingerprint,
-} from '../../shared/crypto/fingerprint';
-import { useToast } from '../../shared/ui/ToastProvider';
-import { MAX_FILE_SIZE, MAX_MESSAGE_LENGTH } from '../../shared/constants';
+} from '@/shared/crypto/fingerprint';
+import { useToast } from '@/shared/ui/useToast';
+import {
+  MAX_FILE_SIZE,
+  MAX_MESSAGE_LENGTH,
+  SCROLL_DELAY_MS,
+  SCROLL_DELAY_TYPING_MS,
+  TYPING_INDICATOR_TIMEOUT_MS,
+  INPUT_MIN_HEIGHT_PX,
+  MODAL_MAX_HEIGHT_VH,
+} from '@/shared/constants';
 
 type Props = {
   token: string;
@@ -25,7 +39,13 @@ type Props = {
   onTokenExpired?: () => Promise<string | null>;
 };
 
-export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: Props) {
+export function ChatWindow({
+  token,
+  peer,
+  myUserId,
+  onClose,
+  onTokenExpired,
+}: Props) {
   const [messageText, setMessageText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isSendingFile, setIsSendingFile] = useState(false);
@@ -47,12 +67,17 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
   const isMediaActive = activeMediaCount > 0;
   const [hasShownMaxLengthToast, setHasShownMaxLengthToast] = useState(false);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
-  const [viewerFile, setViewerFile] = useState<{ filename: string; mimeType: string; blob: Blob; isProtected: boolean } | null>(null);
+  const [viewerFile, setViewerFile] = useState<{
+    filename: string;
+    mimeType: string;
+    blob: Blob;
+    isProtected: boolean;
+  } | null>(null);
   const [isEditingMessage, setIsEditingMessage] = useState(false);
 
   useEffect(() => {
     if (token) {
-      import('../../shared/api/client').then(({ apiClient }) => {
+      import('@/shared/api/client').then(({ apiClient }) => {
         apiClient.setToken(token);
       });
     }
@@ -85,14 +110,14 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
 
   useEffect(() => {
     if (messages.length > 0) {
-      const timer = setTimeout(scrollToBottom, 50);
+      const timer = setTimeout(scrollToBottom, SCROLL_DELAY_MS);
       return () => clearTimeout(timer);
     }
   }, [messages.length, scrollToBottom]);
 
   useEffect(() => {
     if (isPeerTyping && isSessionActive && !isChatBlocked) {
-      const timer = setTimeout(scrollToBottom, 100);
+      const timer = setTimeout(scrollToBottom, SCROLL_DELAY_TYPING_MS);
       return () => clearTimeout(timer);
     }
   }, [isPeerTyping, isSessionActive, isChatBlocked, scrollToBottom]);
@@ -110,14 +135,27 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
     ) {
       const timer = setTimeout(() => {
         const activeElement = document.activeElement;
-        const isEditing = document.querySelector('textarea[data-edit-input]') !== null;
-        if (!isEditing && activeElement?.tagName !== 'TEXTAREA' && activeElement?.tagName !== 'INPUT') {
+        const isEditing =
+          document.querySelector('textarea[data-edit-input]') !== null;
+        if (
+          !isEditing &&
+          activeElement?.tagName !== 'TEXTAREA' &&
+          activeElement?.tagName !== 'INPUT'
+        ) {
           inputRef.current?.focus();
         }
       }, 100);
       return () => clearTimeout(timer);
     }
-  }, [isChatBlocked, isSessionActive, isSending, isMediaActive, showAccessDialog, viewerFile, isEditingMessage]);
+  }, [
+    isChatBlocked,
+    isSessionActive,
+    isSending,
+    isMediaActive,
+    showAccessDialog,
+    viewerFile,
+    isEditingMessage,
+  ]);
 
   useEffect(() => {
     const loadFingerprints = async () => {
@@ -149,7 +187,10 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
             setIsChatBlocked(true);
             setShowFingerprintModal(true);
             setIsFingerprintVerified(false);
-            showToast('Коды безопасности изменились. Пожалуйста, верифицируйте identity снова для безопасного общения.', 'error');
+            showToast(
+              'Коды безопасности изменились. Пожалуйста, верифицируйте identity снова для безопасного общения.',
+              'error'
+            );
           } else if (!hasChanged && isVerified) {
             setIsFingerprintVerified(true);
             setIsChatBlocked(false);
@@ -162,7 +203,10 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
       } catch (err) {
         setIsFingerprintVerified(false);
         setIsChatBlocked(true);
-        showToast('Не удалось загрузить fingerprint. Попробуйте перезагрузить страницу.', 'error');
+        showToast(
+          'Не удалось загрузить fingerprint. Попробуйте перезагрузить страницу.',
+          'error'
+        );
       } finally {
         setIsLoadingFingerprint(false);
       }
@@ -171,12 +215,11 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
     void loadFingerprints();
   }, [token, myUserId, peer.id, showToast]);
 
-
-
   const handleSend = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
-      if (!messageText.trim() || isSending || !isSessionActive || isChatBlocked) return;
+      if (!messageText.trim() || isSending || !isSessionActive || isChatBlocked)
+        return;
 
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
@@ -195,19 +238,35 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
           setReplyTo(null);
         }
         if (inputRef.current) {
-          inputRef.current.style.height = '40px';
+          inputRef.current.style.height = `${INPUT_MIN_HEIGHT_PX}px`;
           if (!showAccessDialog && !viewerFile && !isEditingMessage) {
             inputRef.current.focus();
           }
         }
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Не удалось отправить сообщение. Проверьте соединение и попробуйте снова.';
+        const errorMessage =
+          err instanceof Error
+            ? err.message
+            : 'Не удалось отправить сообщение. Проверьте соединение и попробуйте снова.';
         showToast(errorMessage, 'error');
       } finally {
         setIsSending(false);
       }
     },
-    [messageText, isSending, isSessionActive, isChatBlocked, sendMessage, sendTyping, showToast, replyTo],
+    [
+      messageText,
+      isSending,
+      isSessionActive,
+      isChatBlocked,
+      sendMessage,
+      sendTyping,
+      showToast,
+      replyTo,
+      hasShownMaxLengthToast,
+      showAccessDialog,
+      viewerFile,
+      isEditingMessage,
+    ]
   );
 
   const handleKeyDown = useCallback(
@@ -217,7 +276,7 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
         handleSend(e);
       }
     },
-    [handleSend],
+    [handleSend]
   );
 
   const handleTyping = useCallback(
@@ -232,12 +291,12 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
         sendTyping(true);
         typingTimeoutRef.current = setTimeout(() => {
           sendTyping(false);
-        }, 3000) as unknown as number;
+        }, TYPING_INDICATOR_TIMEOUT_MS) as unknown as number;
       } else {
         sendTyping(false);
       }
     },
-    [isSessionActive, isChatBlocked, sendTyping],
+    [isSessionActive, isChatBlocked, sendTyping]
   );
 
   const handleMessageTextChange = useCallback(
@@ -247,7 +306,7 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
         if (!hasShownMaxLengthToast) {
           showToast(
             `Сообщение слишком длинное (максимум ${MAX_MESSAGE_LENGTH} символов)`,
-            "warning",
+            'warning'
           );
           setHasShownMaxLengthToast(true);
         }
@@ -256,7 +315,7 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
       setMessageText(newText);
       handleTyping(newText);
     },
-    [handleTyping, hasShownMaxLengthToast, showToast],
+    [handleTyping, hasShownMaxLengthToast, showToast]
   );
 
   const handleInputBlur = useCallback(() => {
@@ -266,15 +325,40 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
     }
     sendTyping(false);
 
-    if (!isChatBlocked && isSessionActive && !isSending && inputRef.current && !isMediaActive && !showAccessDialog && !viewerFile && !isEditingMessage) {
+    if (
+      !isChatBlocked &&
+      isSessionActive &&
+      !isSending &&
+      inputRef.current &&
+      !isMediaActive &&
+      !showAccessDialog &&
+      !viewerFile &&
+      !isEditingMessage
+    ) {
       setTimeout(() => {
-        const isEditing = document.querySelector('textarea[data-edit-input]') !== null;
-        if (inputRef.current && !isEditing && document.activeElement !== inputRef.current && document.activeElement?.tagName !== 'TEXTAREA' && document.activeElement?.tagName !== 'INPUT') {
+        const isEditing =
+          document.querySelector('textarea[data-edit-input]') !== null;
+        if (
+          inputRef.current &&
+          !isEditing &&
+          document.activeElement !== inputRef.current &&
+          document.activeElement?.tagName !== 'TEXTAREA' &&
+          document.activeElement?.tagName !== 'INPUT'
+        ) {
           inputRef.current.focus();
         }
       }, 100);
     }
-  }, [isChatBlocked, isSessionActive, isSending, isMediaActive, sendTyping, showAccessDialog, viewerFile, isEditingMessage]);
+  }, [
+    isChatBlocked,
+    isSessionActive,
+    isSending,
+    isMediaActive,
+    sendTyping,
+    showAccessDialog,
+    viewerFile,
+    isEditingMessage,
+  ]);
 
   const handleFileSelect = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -287,7 +371,10 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
       }
 
       if (file.size > MAX_FILE_SIZE) {
-        showToast('Файл слишком большой. Максимальный размер: 50MB. Выберите файл меньшего размера.', 'error');
+        showToast(
+          'Файл слишком большой. Максимальный размер: 50MB. Выберите файл меньшего размера.',
+          'error'
+        );
         return;
       }
 
@@ -298,7 +385,7 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
       }
       setShowAccessDialog(true);
     },
-    [isSendingFile, isSessionActive, isChatBlocked, sendFile, showToast],
+    [isSendingFile, isSessionActive, isChatBlocked, showToast]
   );
 
   const handlePaste = useCallback(
@@ -319,7 +406,10 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
           }
 
           if (file.size > MAX_FILE_SIZE) {
-            showToast('Изображение слишком большое. Максимальный размер: 50MB. Выберите изображение меньшего размера.', 'error');
+            showToast(
+              'Изображение слишком большое. Максимальный размер: 50MB. Выберите изображение меньшего размера.',
+              'error'
+            );
             continue;
           }
 
@@ -332,9 +422,8 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
         }
       }
     },
-    [isSendingFile, isSessionActive, isChatBlocked, showToast],
+    [isSendingFile, isSessionActive, isChatBlocked, showToast]
   );
-
 
   const handleFileButtonClick = useCallback(() => {
     if (!isSessionActive || isChatBlocked) return;
@@ -379,8 +468,17 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
   }, [onClose, showFingerprintModal]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-[backdropEnter_0.2s_ease-out]" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="w-full max-w-2xl h-[80vh] flex flex-col bg-black border border-emerald-700 rounded-xl overflow-hidden animate-[modalEnter_0.3s_cubic-bezier(0.4,0,0.2,1)] glow-emerald" style={{ willChange: 'transform, opacity' }}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-[backdropEnter_0.2s_ease-out]"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div
+        className="w-full max-w-2xl flex flex-col bg-black border border-emerald-700 rounded-xl overflow-hidden animate-[modalEnter_0.3s_cubic-bezier(0.4,0,0.2,1)] glow-emerald"
+        style={{
+          willChange: 'transform, opacity',
+          height: `${MODAL_MAX_HEIGHT_VH}vh`,
+        }}
+      >
         <div className="flex items-center justify-between px-4 py-3 border-b border-emerald-700/60 bg-black/80">
           <div className="flex items-center gap-3">
             <button
@@ -404,14 +502,20 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
               </svg>
             </button>
             <div>
-              <h2 className="text-sm font-semibold text-emerald-300 tracking-tight">{peer.username}</h2>
+              <h2 className="text-sm font-semibold text-emerald-300 tracking-tight">
+                {peer.username}
+              </h2>
               <div className="flex items-center gap-2 mt-0.5">
                 {isLoadingFingerprint ? (
-                  <span className="text-[10px] text-emerald-500/60">Проверка безопасности...</span>
+                  <span className="text-[10px] text-emerald-500/60">
+                    Проверка безопасности...
+                  </span>
                 ) : isSessionActive ? (
                   <>
                     <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <span className="text-[10px] text-emerald-500/80">Защищённая сессия</span>
+                    <span className="text-[10px] text-emerald-500/80">
+                      Защищённая сессия
+                    </span>
                   </>
                 ) : (
                   <span className="text-[10px] text-emerald-500/60">
@@ -434,7 +538,12 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
             >
               {fingerprintWarning ? (
                 <span className="flex items-center gap-1.5">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg
+                    className="w-3.5 h-3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -446,7 +555,12 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
                 </span>
               ) : isPeerVerified(peer.id, peerFingerprint || '') ? (
                 <span className="flex items-center gap-1.5">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg
+                    className="w-3.5 h-3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -468,7 +582,9 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
             <div className="flex items-center justify-center py-8">
               <div className="flex flex-col items-center gap-3">
                 <div className="w-8 h-8 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
-                <p className="text-xs text-emerald-500/80">Проверка безопасности...</p>
+                <p className="text-xs text-emerald-500/80">
+                  Проверка безопасности...
+                </p>
               </div>
             </div>
           )}
@@ -499,7 +615,9 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
                   />
                 </svg>
               </div>
-              <p className="text-sm font-medium text-emerald-300 mb-1">Начните переписку</p>
+              <p className="text-sm font-medium text-emerald-300 mb-1">
+                Начните переписку
+              </p>
               <p className="text-xs text-emerald-500/70 text-center max-w-xs">
                 Все сообщения защищены сквозным шифрованием
               </p>
@@ -528,7 +646,9 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
             />
           ))}
 
-          <TypingIndicator isVisible={isPeerTyping && isSessionActive && !isChatBlocked} />
+          <TypingIndicator
+            isVisible={isPeerTyping && isSessionActive && !isChatBlocked}
+          />
 
           {isChatBlocked && (
             <div className="flex items-center justify-center py-4">
@@ -552,7 +672,8 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
                       Чат заблокирован: Security codes изменились!
                     </p>
                     <p className="text-xs text-yellow-500/80 mt-1">
-                      Верифицируйте identity собеседника, чтобы продолжить общение.
+                      Верифицируйте identity собеседника, чтобы продолжить
+                      общение.
                     </p>
                   </div>
                 </div>
@@ -562,26 +683,8 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
 
           {error && state === 'error' && (
             <div className="flex items-center justify-center py-4 animate-[fadeIn_0.3s_ease-out]">
-              <div className="bg-red-900/30 border-2 border-red-600/60 rounded-lg px-4 py-3 max-w-md shadow-lg shadow-red-900/20">
-                <div className="flex items-start gap-3">
-                  <svg
-                    className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-red-300 mb-1">Ошибка соединения</p>
-                    <p className="text-xs text-red-400/90 leading-relaxed">{error}</p>
-                  </div>
-                </div>
+              <div className="bg-red-900/30 border border-red-600/60 rounded-lg px-4 py-2.5 max-w-md">
+                <p className="text-sm text-red-300 text-center">{error}</p>
               </div>
             </div>
           )}
@@ -596,7 +699,9 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
           {replyTo && (
             <div className="mb-2 rounded-lg border border-emerald-700/60 bg-black/70 px-3 py-2 flex items-start justify-between gap-2">
               <div className="flex-1 min-w-0">
-                <p className="text-[11px] text-emerald-400/80">Ответ на сообщение</p>
+                <p className="text-[11px] text-emerald-400/80">
+                  Ответ на сообщение
+                </p>
                 <p className="text-xs text-emerald-50 truncate">
                   {replyTo.text
                     ? replyTo.text
@@ -633,7 +738,10 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
                   await sendVoice(file, duration);
                   showToast('Голосовое сообщение отправлено', 'success');
                 } catch (err) {
-                  const errorMessage = err instanceof Error ? err.message : 'Не удалось отправить голосовое сообщение. Проверьте микрофон и попробуйте снова.';
+                  const errorMessage =
+                    err instanceof Error
+                      ? err.message
+                      : 'Не удалось отправить голосовое сообщение. Проверьте микрофон и попробуйте снова.';
                   showToast(errorMessage, 'error');
                 }
               }}
@@ -647,7 +755,10 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
                   await sendFile(file, 'both', undefined, duration);
                   showToast('Видео сообщение отправлено', 'success');
                 } catch (err) {
-                  const errorMessage = err instanceof Error ? err.message : 'Не удалось отправить видео сообщение. Проверьте камеру и попробуйте снова.';
+                  const errorMessage =
+                    err instanceof Error
+                      ? err.message
+                      : 'Не удалось отправить видео сообщение. Проверьте камеру и попробуйте снова.';
                   showToast(errorMessage, 'error');
                 }
               }}
@@ -674,8 +785,8 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
                 className="w-full resize-none rounded-md bg-black border border-emerald-700 px-3 pr-10 py-2.5 text-sm text-emerald-50 placeholder-emerald-500/50 outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all scrollbar-custom"
                 style={{
                   maxHeight: '120px',
-                  minHeight: '40px',
-                  height: '40px',
+                  minHeight: `${INPUT_MIN_HEIGHT_PX}px`,
+                  height: `${INPUT_MIN_HEIGHT_PX}px`,
                 }}
                 onInput={(e) => {
                   const target = e.currentTarget;
@@ -748,7 +859,10 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
             setFingerprintWarning(false);
             setIsChatBlocked(false);
             setIsFingerprintVerified(true);
-            showToast('Identity подтверждён. Безопасное общение установлено.', 'success');
+            showToast(
+              'Identity подтверждён. Безопасное общение установлено.',
+              'success'
+            );
           }}
         />
       )}
@@ -775,7 +889,10 @@ export function ChatWindow({ token, peer, myUserId, onClose, onTokenExpired }: P
               await sendFile(pendingFile, mode);
               showToast('Файл отправлен', 'success');
             } catch (err) {
-              const errorMessage = err instanceof Error ? err.message : 'Не удалось отправить файл. Проверьте соединение и попробуйте снова.';
+              const errorMessage =
+                err instanceof Error
+                  ? err.message
+                  : 'Не удалось отправить файл. Проверьте соединение и попробуйте снова.';
               showToast(errorMessage, 'error');
             } finally {
               setIsSendingFile(false);

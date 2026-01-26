@@ -5,7 +5,7 @@ import {
   EMOJI_PICKER_ESTIMATED_WIDTH,
   EMOJI_PICKER_PADDING,
   EMOJI_PICKER_PAGE_SIZE,
-} from '../../shared/constants';
+} from '@/shared/constants';
 
 type Props = {
   x: number;
@@ -18,7 +18,9 @@ export function EmojiPicker({ x, y, onSelect, onClose }: Props) {
   const pickerRef = useRef<HTMLDivElement>(null);
 
   const initialPosition = useMemo(() => {
-    const chatContainer = document.querySelector('.chat-scroll-area') as HTMLElement | null;
+    const chatContainer = document.querySelector(
+      '.chat-scroll-area'
+    ) as HTMLElement | null;
     const padding = EMOJI_PICKER_PADDING;
 
     let adjustedX = x;
@@ -50,7 +52,7 @@ export function EmojiPicker({ x, y, onSelect, onClose }: Props) {
 
   const visibleEmojis = useMemo(
     () => EMOJI_LIST.slice(startIndex, startIndex + EMOJI_PICKER_PAGE_SIZE),
-    [startIndex],
+    [startIndex]
   );
 
   const canPrev = startIndex > 0;
@@ -74,7 +76,9 @@ export function EmojiPicker({ x, y, onSelect, onClose }: Props) {
     if (!pickerRef.current) return;
 
     const pickerRect = pickerRef.current.getBoundingClientRect();
-    const chatContainer = document.querySelector('.chat-scroll-area') as HTMLElement | null;
+    const chatContainer = document.querySelector(
+      '.chat-scroll-area'
+    ) as HTMLElement | null;
     const padding = EMOJI_PICKER_PADDING;
 
     let adjustedX = x;
@@ -134,7 +138,7 @@ export function EmojiPicker({ x, y, onSelect, onClose }: Props) {
       className="z-[140] bg-black/95 border border-emerald-600/50 rounded-lg shadow-xl px-2 py-2 absolute"
       style={{
         left: `${position.x}px`,
-        top: `${position.y}px`
+        top: `${position.y}px`,
       }}
       onClick={(e) => e.stopPropagation()}
     >

@@ -1,9 +1,9 @@
-import type { SessionKey } from './session';
-import { BASE64_CHUNK_SIZE } from '../constants';
+import type { SessionKey } from '@/shared/crypto/session';
+import { BASE64_CHUNK_SIZE } from '@/shared/constants';
 
 async function encryptBinaryInternal(
   sessionKey: CryptoKey,
-  data: Uint8Array,
+  data: Uint8Array
 ): Promise<{ ciphertext: string; nonce: string }> {
   const nonce = crypto.getRandomValues(new Uint8Array(12));
   const buffer = new Uint8Array(data).buffer;
@@ -14,7 +14,7 @@ async function encryptBinaryInternal(
       iv: nonce,
     },
     sessionKey,
-    buffer,
+    buffer
   );
 
   const ciphertextArray = new Uint8Array(ciphertext);
@@ -36,10 +36,10 @@ async function encryptBinaryInternal(
 async function decryptBinaryInternal(
   sessionKey: CryptoKey,
   ciphertext: string,
-  nonce: string,
+  nonce: string
 ): Promise<Uint8Array> {
   const ciphertextBinary = Uint8Array.from(atob(ciphertext), (c) =>
-    c.charCodeAt(0),
+    c.charCodeAt(0)
   );
   const nonceBinary = Uint8Array.from(atob(nonce), (c) => c.charCodeAt(0));
 
@@ -49,7 +49,7 @@ async function decryptBinaryInternal(
       iv: nonceBinary,
     },
     sessionKey,
-    ciphertextBinary,
+    ciphertextBinary
   );
 
   return new Uint8Array(plaintext);
@@ -57,7 +57,7 @@ async function decryptBinaryInternal(
 
 export async function encryptBinary(
   sessionKey: SessionKey,
-  data: Uint8Array,
+  data: Uint8Array
 ): Promise<{ ciphertext: string; nonce: string }> {
   return encryptBinaryInternal(sessionKey as CryptoKey, data);
 }
@@ -65,7 +65,7 @@ export async function encryptBinary(
 export async function decryptBinary(
   sessionKey: SessionKey,
   ciphertext: string,
-  nonce: string,
+  nonce: string
 ): Promise<Uint8Array> {
   return decryptBinaryInternal(sessionKey as CryptoKey, ciphertext, nonce);
 }

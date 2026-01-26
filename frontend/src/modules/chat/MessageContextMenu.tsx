@@ -3,7 +3,7 @@ import {
   MENU_ESTIMATED_WIDTH,
   MENU_ESTIMATED_HEIGHT,
   MENU_PADDING,
-} from '../../shared/constants';
+} from '@/shared/constants';
 
 type Props = {
   x: number;
@@ -35,7 +35,9 @@ export function MessageContextMenu({
   const menuRef = useRef<HTMLDivElement>(null);
 
   const initialPosition = useMemo(() => {
-    const chatContainer = document.querySelector('.chat-scroll-area') as HTMLElement | null;
+    const chatContainer = document.querySelector(
+      '.chat-scroll-area'
+    ) as HTMLElement | null;
     const padding = MENU_PADDING;
 
     let adjustedX = x;
@@ -62,7 +64,10 @@ export function MessageContextMenu({
     return { x: adjustedX, y: adjustedY };
   }, [x, y]);
 
-  const [position, setPosition] = useState(() => ({ x: initialPosition.x, y: initialPosition.y }));
+  const [position, setPosition] = useState(() => ({
+    x: initialPosition.x,
+    y: initialPosition.y,
+  }));
 
   useLayoutEffect(() => {
     if (!menuRef.current) {
@@ -70,7 +75,9 @@ export function MessageContextMenu({
     }
 
     const menuRect = menuRef.current.getBoundingClientRect();
-    const chatContainer = document.querySelector('.chat-scroll-area') as HTMLElement | null;
+    const chatContainer = document.querySelector(
+      '.chat-scroll-area'
+    ) as HTMLElement | null;
     const padding = MENU_PADDING;
 
     let adjustedX = x;
@@ -94,7 +101,7 @@ export function MessageContextMenu({
       }
     }
 
-    setPosition(current => {
+    setPosition((current) => {
       if (current.x === adjustedX && current.y === adjustedY) {
         return current;
       }
@@ -130,7 +137,7 @@ export function MessageContextMenu({
       className="z-[130] bg-black/95 border border-emerald-600/50 rounded-xl shadow-2xl py-2 px-3 min-w-[200px] absolute"
       style={{
         left: `${position.x}px`,
-        top: `${position.y}px`
+        top: `${position.y}px`,
       }}
       onClick={(e) => e.stopPropagation()}
     >
@@ -181,24 +188,24 @@ export function MessageContextMenu({
       {isOwn && onDeleteForMe && (
         <button
           onClick={() => {
-          onDeleteForMe();
+            onDeleteForMe();
             onClose();
           }}
           className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-500/20 transition-colors"
         >
-        <span>Удалить только у себя</span>
-      </button>
+          <span>Удалить только у себя</span>
+        </button>
       )}
 
       {isOwn && onDeleteForAll && (
-      <button
-        onClick={() => {
-          onDeleteForAll();
-          onClose();
-        }}
-        className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-500/20 transition-colors"
-      >
-        <span>Удалить у всех</span>
+        <button
+          onClick={() => {
+            onDeleteForAll();
+            onClose();
+          }}
+          className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-500/20 transition-colors"
+        >
+          <span>Удалить у всех</span>
         </button>
       )}
     </div>

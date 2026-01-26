@@ -10,7 +10,7 @@ export async function generateEphemeralKeyPair(): Promise<EphemeralKeyPair> {
       namedCurve: 'P-256',
     },
     true,
-    ['deriveKey', 'deriveBits'],
+    ['deriveKey', 'deriveBits']
   );
 
   return {

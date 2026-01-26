@@ -5,10 +5,11 @@ import type {
   MessageDeletePayload,
   MessageEditPayload,
   MessageReadPayload,
-} from '../../../shared/websocket/types';
-import { decrypt } from '../../../shared/crypto/encryption';
-import type { SessionKey } from '../../../shared/crypto/session';
-import type { ChatMessage } from '../useChatSession';
+  WSMessage,
+} from '@/shared/websocket/types';
+import { decrypt } from '@/shared/crypto/encryption';
+import type { SessionKey } from '@/shared/crypto/session';
+import type { ChatMessage } from '@/modules/chat/useChatSession';
 
 type UseIncomingMessageHandlersOptions = {
   sessionKeyRef: React.MutableRefObject<SessionKey | null>;
@@ -16,7 +17,7 @@ type UseIncomingMessageHandlersOptions = {
   messageIdCounterRef: React.MutableRefObject<number>;
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   setError: (error: string | null) => void;
-  sendRef: React.MutableRefObject<((message: any) => void) | null>;
+  sendRef: React.MutableRefObject<((message: WSMessage) => void) | null>;
 };
 
 export function useIncomingMessageHandlers({
@@ -35,7 +36,7 @@ export function useIncomingMessageHandlers({
         const decrypted = await decrypt(
           sessionKeyRef.current,
           payload.ciphertext,
-          payload.nonce,
+          payload.nonce
         );
 
         setMessages((prev) => {
@@ -43,7 +44,7 @@ export function useIncomingMessageHandlers({
 
           if (payload.reply_to_message_id) {
             const target = prev.find(
-              (m) => m.id === payload.reply_to_message_id,
+              (m) => m.id === payload.reply_to_message_id
             );
             if (target) {
               replyTo = {
@@ -79,18 +80,11 @@ export function useIncomingMessageHandlers({
         });
       } catch (err) {
         setError(
-          'Не удалось расшифровать сообщение. Возможно, сессия была прервана.',
+          'Не удалось расшифровать сообщение. Возможно, сессия была прервана.'
         );
       }
     },
-    [
-      peerId,
-      sessionKeyRef,
-      messageIdCounterRef,
-      setMessages,
-      setError,
-      sendRef,
-    ],
+    [peerId, sessionKeyRef, messageIdCounterRef, setMessages, setError, sendRef]
   );
 
   const handleReaction = useCallback(
@@ -119,18 +113,18 @@ export function useIncomingMessageHandlers({
                   reactions: {
                     ...reactions,
                     [payload.emoji]: emojiReactions.filter(
-                      (id) => id !== fromUserId,
+                      (id) => id !== fromUserId
                     ),
                   },
                 };
               }
             }
             return msg;
-          }),
+          })
         );
       }
     },
-    [setMessages],
+    [setMessages]
   );
 
   const handleMessageDelete = useCallback(
@@ -158,12 +152,12 @@ export function useIncomingMessageHandlers({
               }
 
               return msg;
-            }),
+            })
           );
         }
       }
     },
-    [peerId, setMessages],
+    [peerId, setMessages]
   );
 
   const handleMessageEdit = useCallback(
@@ -174,7 +168,7 @@ export function useIncomingMessageHandlers({
         const decrypted = await decrypt(
           sessionKeyRef.current,
           payload.ciphertext,
-          payload.nonce,
+          payload.nonce
         );
 
         setMessages((prev) =>
@@ -198,13 +192,13 @@ export function useIncomingMessageHandlers({
             }
 
             return msg;
-          }),
+          })
         );
       } catch (err) {
         setError('Не удалось расшифровать отредактированное сообщение.');
       }
     },
-    [peerId, sessionKeyRef, setMessages, setError],
+    [peerId, sessionKeyRef, setMessages, setError]
   );
 
   const handleMessageRead = useCallback(
@@ -216,11 +210,11 @@ export function useIncomingMessageHandlers({
               return { ...msg, deliveryStatus: 'read' as const };
             }
             return msg;
-          }),
+          })
         );
       }
     },
-    [peerId, setMessages],
+    [peerId, setMessages]
   );
 
   return {

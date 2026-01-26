@@ -1,4 +1,4 @@
-import { MAX_SEQUENCES_TO_KEEP } from '../constants';
+import { MAX_SEQUENCES_TO_KEEP } from '@/shared/constants';
 
 type MessageWithSequence = {
   sequence: number;
@@ -35,7 +35,7 @@ export class SequenceManager {
 
   addMessage(
     sequence: number,
-    message: unknown,
+    message: unknown
   ): { messages: unknown[]; hasGap: boolean } {
     const now = Date.now();
     const msg: MessageWithSequence = {
@@ -75,7 +75,7 @@ export class SequenceManager {
     let hasGap = false;
     let expected = this.lastDeliveredSequence + 1;
 
-    while (true) {
+    for (;;) {
       const msg = this.buffer.get(expected);
       if (!msg) {
         if (this.buffer.size > 0) {
