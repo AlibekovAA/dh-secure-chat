@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-
+import { Spinner } from '@/shared/ui/Spinner';
 type Props = {
   duration: number;
   blob?: Blob;
@@ -288,7 +288,7 @@ export function VoiceMessage({
         } disabled:opacity-50 disabled:cursor-not-allowed`}
       >
         {isLoading ? (
-          <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+          <Spinner size="xs" borderColorClass="border-current" />
         ) : isPlaying ? (
           <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
             <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />

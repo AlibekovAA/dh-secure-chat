@@ -26,7 +26,6 @@ export class ErrorBoundary extends Component<
 
   componentDidCatch(error: Error, errorInfo: { componentStack: string }): void {
     this.props.onError?.(error, errorInfo);
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
 
     if (
       error.message?.includes('Failed to fetch dynamically imported module') ||

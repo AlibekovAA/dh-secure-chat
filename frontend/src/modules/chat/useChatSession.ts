@@ -30,11 +30,11 @@ import { validateMessage } from '@/shared/validation';
 import { getIdentityKey } from '@/modules/chat/api';
 import type { SessionKey } from '@/shared/crypto/session';
 import {
-  MAX_FILE_SIZE,
-  MAX_VOICE_SIZE,
-  EDIT_TIMEOUT_MS,
-  BYTES_PER_MB,
-} from '@/shared/constants';
+  validateFileSize,
+  validateVoiceSize,
+  getFileValidationError,
+} from '@/shared/utils/files';
+import { EDIT_TIMEOUT_MS } from '@/shared/constants';
 import { useAckManager } from '@/modules/chat/hooks/useAckManager';
 import { useFileTransfer } from '@/modules/chat/hooks/useFileTransfer';
 import { useMessageHandler } from '@/modules/chat/hooks/useMessageHandlers';
@@ -526,13 +526,11 @@ export function useChatSession({
         return;
       }
 
-      if (file.size > MAX_FILE_SIZE) {
-        setError('Файл слишком большой. Максимальный размер: 50MB');
+      const validationError = validateFileSize(file, { fileType: 'file' });
+      if (validationError) {
+        const errorMessage = getFileValidationError(validationError);
+        setError(errorMessage || 'Ошибка валидации файла');
         return;
-      }
-
-      if (file.size === 0) {
-        throw new Error('Файл пустой. Выберите файл с содержимым');
       }
 
       try {
@@ -707,14 +705,11 @@ export function useChatSession({
 
   const sendVoice = useCallback(
     async (file: File, duration: number) => {
-      if (file.size === 0) {
+      const validationError = validateVoiceSize(file);
+      if (validationError) {
+        const errorMessage = getFileValidationError(validationError);
         throw new Error(
-          'Голосовое сообщение пустое. Запишите сообщение с звуком.'
-        );
-      }
-      if (file.size > MAX_VOICE_SIZE) {
-        throw new Error(
-          `Голосовое сообщение слишком большое. Максимальный размер: ${(MAX_VOICE_SIZE / BYTES_PER_MB).toFixed(0)}MB. Запишите более короткое сообщение.`
+          errorMessage || 'Ошибка валидации голосового сообщения'
         );
       }
       await sendFile(file, 'both', duration);

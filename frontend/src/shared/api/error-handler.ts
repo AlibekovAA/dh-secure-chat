@@ -58,7 +58,7 @@ const ERROR_MAPPINGS: ErrorMapping[] = [
   {
     pattern: /username may contain only/i,
     message:
-      'Имя пользователя может содержать только буквы, цифры, подчёркивание и дефис',
+      'Имя пользователя может содержать только латинские буквы, цифры, подчёркивание и дефис',
   },
   {
     pattern: /password must contain at least/i,

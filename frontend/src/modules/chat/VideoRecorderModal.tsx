@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { checkMediaRecorderSupport } from '@/shared/browser-support';
+import { Spinner } from '@/shared/ui/Spinner';
 import {
-  MAX_FILE_SIZE,
   VIDEO_RECORDER_CHECK_INTERVAL_MS,
   VIDEO_RECORDER_DURATION_UPDATE_DELAY_MS,
   VIDEO_RECORDER_DURATION_UPDATE_INTERVAL_MS,
@@ -9,6 +9,7 @@ import {
   MS_PER_SECOND,
   BYTES_PER_MB,
 } from '@/shared/constants';
+import { validateFileSize, getFileValidationError } from '@/shared/utils/files';
 
 type Props = {
   onRecorded: (file: File, duration: number) => void;
@@ -21,6 +22,7 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
   const [duration, setDuration] = useState(0);
   const [isInitializing, setIsInitializing] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isVideoReady, setIsVideoReady] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -58,6 +60,7 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
     mediaRecorderRef.current = null;
     chunksRef.current = [];
     stopStream();
+    setIsVideoReady(false);
   }, [stopDurationTimer, stopStream]);
 
   useEffect(() => {
@@ -66,6 +69,7 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
         checkMediaRecorderSupport();
         setIsInitializing(true);
         setError(null);
+        setIsVideoReady(false);
 
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'user' },
@@ -192,18 +196,39 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
         }
 
         const blob = new Blob(chunksRef.current, { type: selectedMimeType });
+
         const finalDuration = Math.floor(
           (Date.now() - startTimeRef.current) / MS_PER_SECOND
         );
 
-        if (blob.size === 0 || finalDuration === 0) {
+        if (finalDuration === 0) {
           cleanup();
           setIsRecording(false);
           return;
         }
 
-        if (blob.size > MAX_FILE_SIZE) {
-          const message = `Видео слишком большое (${(blob.size / BYTES_PER_MB).toFixed(1)} MB). Максимальный размер: ${(MAX_FILE_SIZE / BYTES_PER_MB).toFixed(0)} MB`;
+        const blobClone = blob.slice(0, blob.size, blob.type);
+        const extension = selectedMimeType.includes('mp4') ? 'mp4' : 'webm';
+        const videoFile = new File(
+          [blobClone],
+          `video-${finalDuration}s.${extension}`,
+          {
+            type: selectedMimeType,
+          }
+        );
+
+        const validationError = validateFileSize(videoFile, {
+          fileType: 'file',
+          emptyAllowed: false,
+        });
+        if (validationError) {
+          const errorMessage = getFileValidationError(validationError);
+          const message = errorMessage
+            ? errorMessage.replace(
+                'Файл',
+                `Видео (${(blob.size / BYTES_PER_MB).toFixed(1)} MB)`
+              )
+            : `Видео слишком большое (${(blob.size / BYTES_PER_MB).toFixed(1)} MB)`;
           setError(message);
           onError(message);
           cleanup();
@@ -211,14 +236,9 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
           return;
         }
 
-        const extension = selectedMimeType.includes('mp4') ? 'mp4' : 'webm';
-        const file = new File([blob], `video-${finalDuration}s.${extension}`, {
-          type: selectedMimeType,
-        });
-
         cleanup();
         setIsRecording(false);
-        onRecorded(file, finalDuration);
+        onRecorded(videoFile, finalDuration);
       };
 
       mediaRecorder.start(VIDEO_RECORDER_TIMESLICE_MS);
@@ -292,8 +312,8 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
         <div className="relative aspect-video bg-black">
           {isInitializing ? (
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center">
-                <div className="w-12 h-12 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+              <div className="text-center flex flex-col items-center gap-3">
+                <Spinner size="lg" borderColorClass="border-emerald-400" />
                 <p className="text-emerald-400 text-sm">
                   Инициализация камеры...
                 </p>
@@ -339,7 +359,18 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
                     if (videoRef.current.paused) {
                       videoRef.current.play().catch(() => {});
                     }
+                    setTimeout(() => {
+                      if (
+                        videoRef.current &&
+                        videoRef.current.readyState >= 2
+                      ) {
+                        setIsVideoReady(true);
+                      }
+                    }, 300);
                   }
+                }}
+                onPlaying={() => {
+                  setIsVideoReady(true);
                 }}
                 onPause={() => {
                   if (videoRef.current && streamRef.current && !isRecording) {
@@ -347,6 +378,36 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
                   }
                 }}
               />
+              {!isVideoReady && !isRecording && (
+                <div className="absolute inset-0 bg-gradient-to-br from-emerald-900/90 via-emerald-950/90 to-emerald-900/90 flex flex-col items-center justify-center gap-4 transition-opacity duration-500">
+                  <div className="relative">
+                    <div className="w-20 h-20 rounded-full bg-emerald-600/30 flex items-center justify-center animate-pulse">
+                      <svg
+                        className="w-10 h-10 text-emerald-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                        />
+                      </svg>
+                    </div>
+                    <div className="absolute inset-0 rounded-full border-2 border-emerald-400/50 animate-ping" />
+                  </div>
+                  <div className="text-center space-y-2">
+                    <p className="text-emerald-300 text-lg font-medium">
+                      Готов к записи
+                    </p>
+                    <p className="text-emerald-400/80 text-sm">
+                      Нажмите ▶ для начала
+                    </p>
+                  </div>
+                </div>
+              )}
               {isRecording && (
                 <div className="absolute top-4 left-4 flex items-center gap-2 bg-black/60 px-3 py-1.5 rounded-lg">
                   <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />

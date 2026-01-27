@@ -62,8 +62,7 @@ function getWorker(): Worker {
       }
     };
 
-    worker.onerror = (error) => {
-      console.error('File encryption worker error:', error);
+    worker.onerror = (_error) => {
       for (const [requestId, pending] of pendingEncryptRequests.entries()) {
         pending.reject(new Error('Worker error'));
         pendingEncryptRequests.delete(requestId);

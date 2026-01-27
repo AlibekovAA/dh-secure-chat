@@ -47,10 +47,8 @@ export async function cacheThumbnail(
       timestamp: Date.now(),
     };
     localStorage.setItem(getCacheKey(fileId), JSON.stringify(cached));
-  } catch (err) {
-    if (err instanceof Error && err.name !== 'QuotaExceededError') {
-      console.warn('Failed to cache thumbnail:', err);
-    }
+  } catch (_err) {
+    void _err;
   }
 }
 

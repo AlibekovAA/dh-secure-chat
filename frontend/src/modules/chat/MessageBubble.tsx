@@ -11,6 +11,7 @@ import {
   MESSAGE_MAX_WIDTH_PERCENT,
   TEXTAREA_MAX_ROWS,
 } from '@/shared/constants';
+import { formatTime } from '@/shared/utils/format';
 
 type Props = {
   message: ChatMessage;
@@ -183,10 +184,7 @@ function MessageBubbleComponent({
             <p className="text-sm italic font-medium">Сообщение удалено</p>
           </div>
           <p className="text-xs text-emerald-500/50 mt-1.5 leading-relaxed font-mono">
-            {new Date(message.timestamp).toLocaleTimeString('ru-RU', {
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
+            {formatTime(message.timestamp)}
           </p>
         </div>
       </div>
@@ -379,10 +377,7 @@ function MessageBubbleComponent({
 
             <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-emerald-500/10">
               <p className="text-xs text-emerald-400/70 leading-relaxed font-medium">
-                {new Date(message.timestamp).toLocaleTimeString('ru-RU', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
+                {formatTime(message.timestamp)}
               </p>
               {message.isOwn && message.deliveryStatus && (
                 <div className="flex items-center gap-1">

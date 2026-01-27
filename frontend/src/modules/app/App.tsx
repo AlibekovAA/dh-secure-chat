@@ -16,15 +16,24 @@ import { apiClient } from '@/shared/api/client';
 import { fetchMe, type UserSummary } from '@/modules/chat/api';
 import { LoadingSpinner } from '@/shared/ui/LoadingSpinner';
 import { retryImport } from '@/shared/utils/retry-import';
+import {
+  attachTokenToClient,
+  clearSessionStorageSideEffects,
+  handleSessionExpired,
+} from '@/shared/api/session';
 
 const AuthScreen = lazy(() =>
   retryImport(() =>
-    import('@/modules/app/AuthScreen').then((module) => ({ default: module.AuthScreen }))
+    import('@/modules/app/AuthScreen').then((module) => ({
+      default: module.AuthScreen,
+    }))
   )
 );
 const ChatScreen = lazy(() =>
   retryImport(() =>
-    import('@/modules/app/ChatScreen').then((module) => ({ default: module.ChatScreen }))
+    import('@/modules/app/ChatScreen').then((module) => ({
+      default: module.ChatScreen,
+    }))
   )
 );
 
@@ -55,7 +64,7 @@ export function App() {
       if (!json.token) {
         return null;
       }
-      apiClient.setToken(json.token);
+      attachTokenToClient(json.token);
       setToken(json.token);
       return json.token;
     } catch {
@@ -65,7 +74,13 @@ export function App() {
 
   useEffect(() => {
     apiClient.setRefreshTokenFn(refreshAccessToken);
-    apiClient.setOnTokenExpired(resetAuthState);
+    apiClient.setOnTokenExpired(() => {
+      void handleSessionExpired(
+        null,
+        { showToast, resetAuthState },
+        { silent: true }
+      );
+    });
 
     let cancelled = false;
 
@@ -78,7 +93,7 @@ export function App() {
         if (!newToken) {
           resetAuthState();
         }
-      } catch (err) {
+      } catch {
         if (cancelled) {
           return;
         }
@@ -95,7 +110,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [refreshAccessToken, resetAuthState]);
+  }, [refreshAccessToken, resetAuthState, showToast]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -123,7 +138,7 @@ export function App() {
       return;
     }
 
-    apiClient.setToken(token);
+    attachTokenToClient(token);
     fetchMe()
       .then((data) => {
         setProfile(data);
@@ -140,7 +155,7 @@ export function App() {
           return;
         }
         if (isSessionExpiredError(err)) {
-          showToast('Сессия истекла. Войдите снова.', 'error');
+          void handleSessionExpired(err, { showToast, resetAuthState });
         } else {
           const friendly = getFriendlyErrorMessage(
             err,
@@ -149,8 +164,8 @@ export function App() {
           if (friendly) {
             showToast(friendly, 'error');
           }
+          resetAuthState();
         }
-        resetAuthState();
       });
   }, [token, showToast, resetAuthState]);
 
@@ -192,8 +207,7 @@ export function App() {
         return;
       }
       if (isSessionExpiredError(err)) {
-        showToast('Сессия истекла. Войдите снова.', 'error');
-        resetAuthState();
+        void handleSessionExpired(err, { showToast, resetAuthState });
       } else {
         const friendly = getFriendlyErrorMessage(
           err,
@@ -214,27 +228,17 @@ export function App() {
     } catch {
       void 0;
     } finally {
-      apiClient.setToken(null);
+      attachTokenToClient(null);
       resetAuthState();
       setSearchQuery('');
       setHasSearched(false);
 
-      try {
-        const { removeToken } = await import('@/shared/storage/token');
-        removeToken();
-
-        const { clearAllKeys } = await import('@/shared/storage/indexeddb');
-        await clearAllKeys();
-
-        localStorage.removeItem('userId');
-      } catch {
-        void 0;
-      }
+      await clearSessionStorageSideEffects();
     }
   }, [resetAuthState]);
 
   const handleAuthenticated = useCallback((newToken: string) => {
-    apiClient.setToken(newToken);
+    attachTokenToClient(newToken);
     setToken(newToken);
   }, []);
 

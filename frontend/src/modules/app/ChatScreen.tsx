@@ -2,6 +2,7 @@ import { useEffect, useState, type KeyboardEvent } from 'react';
 import type { UserSummary } from '@/modules/chat/api';
 import { ChatWindow } from '@/modules/chat/ChatWindow';
 import { RESULTS_PER_PAGE } from '@/shared/constants';
+import { Spinner } from '@/shared/ui/Spinner';
 
 type Profile = {
   id: string;
@@ -147,7 +148,7 @@ export function ChatScreen({
                     className="ml-auto rounded-md bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-700 disabled:cursor-not-allowed text-xs font-medium px-3 py-1.5 text-black smooth-transition button-press glow-emerald-hover min-w-[60px] flex items-center justify-center"
                   >
                     {isSearching ? (
-                      <div className="w-3 h-3 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                      <Spinner size="xs" borderColorClass="border-black" />
                     ) : (
                       'Поиск'
                     )}
@@ -157,7 +158,7 @@ export function ChatScreen({
               <div className="h-64 flex flex-col">
                 {isSearching ? (
                   <div className="flex items-center justify-center h-full">
-                    <div className="w-5 h-5 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+                    <Spinner size="sm" borderColorClass="border-emerald-400" />
                   </div>
                 ) : hasSearched &&
                   searchResults.length === 0 &&

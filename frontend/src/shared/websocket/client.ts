@@ -144,26 +144,18 @@ export class WebSocketClient {
               }
 
               if (message.sequence !== undefined) {
-                const { messages, hasGap } = this.sequenceManager.addMessage(
+                const { messages } = this.sequenceManager.addMessage(
                   message.sequence,
                   message
                 );
-                if (hasGap) {
-                  console.warn('WebSocket: detected missing sequence numbers');
-                }
                 for (const orderedMessage of messages) {
                   this.handlers.onMessage?.(orderedMessage as WSMessage);
                 }
               } else {
                 this.handlers.onMessage?.(message);
               }
-            } catch (parseErr) {
-              console.error(
-                'Failed to parse WebSocket message:',
-                parseErr,
-                'Data:',
-                messageData
-              );
+            } catch (_parseErr) {
+              void _parseErr;
             }
           }
         } catch (err) {

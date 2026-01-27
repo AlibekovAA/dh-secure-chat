@@ -7,14 +7,21 @@ type Props = {
   onRecorded: (file: File, duration: number) => void;
   onError: (error: string) => void;
   disabled?: boolean;
+  onRecordingChange?: (isRecording: boolean) => void;
 };
 
-export function VoiceRecorder({ onRecorded, onError, disabled }: Props) {
+export function VoiceRecorder({
+  onRecorded,
+  onError,
+  disabled,
+  onRecordingChange,
+}: Props) {
   const [isRecording, setIsRecording] = useState(false);
   const [duration, setDuration] = useState(0);
   const [isSupported, setIsSupported] = useState(true);
   const recorderRef = useRef<AudioRecorder | null>(null);
   const durationTimerRef = useRef<number | null>(null);
+  const isRecordingRef = useRef(false);
 
   useEffect(() => {
     try {
@@ -30,17 +37,24 @@ export function VoiceRecorder({ onRecorded, onError, disabled }: Props) {
     }
 
     return () => {
+      const currentIsRecording = isRecordingRef.current;
       if (recorderRef.current) {
+        if (currentIsRecording) {
+          return;
+        }
         recorderRef.current.cleanup();
       }
       if (durationTimerRef.current) {
         clearInterval(durationTimerRef.current);
+        durationTimerRef.current = null;
       }
     };
-  }, [onError]);
+  }, []);
 
   const stopRecording = useCallback(async () => {
-    if (!recorderRef.current || !isRecording) return;
+    if (!recorderRef.current || !isRecording) {
+      return;
+    }
 
     try {
       const recorder = recorderRef.current;
@@ -52,16 +66,31 @@ export function VoiceRecorder({ onRecorded, onError, disabled }: Props) {
         durationTimerRef.current = null;
       }
 
+      isRecordingRef.current = false;
       setIsRecording(false);
       setDuration(0);
+      onRecordingChange?.(false);
 
-      if (blob) {
-        const blobClone = blob.slice(0, blob.size, blob.type);
-        const file = new File([blobClone], `voice-${finalDuration}s.webm`, {
-          type: blob.type || 'audio/webm',
-        });
-        onRecorded(file, finalDuration);
+      if (!blob || blob.size === 0) {
+        onError('Голосовое сообщение не было записано. Попробуйте снова');
+        recorder.cleanup();
+        recorderRef.current = null;
+        return;
       }
+
+      const blobClone = blob.slice(0, blob.size, blob.type);
+      const file = new File([blobClone], `voice-${finalDuration}s.webm`, {
+        type: blob.type || 'audio/webm',
+      });
+
+      if (file.size === 0) {
+        onError('Записанное голосовое сообщение пустое. Попробуйте снова');
+        recorder.cleanup();
+        recorderRef.current = null;
+        return;
+      }
+
+      onRecorded(file, finalDuration);
 
       recorder.cleanup();
       recorderRef.current = null;
@@ -69,12 +98,16 @@ export function VoiceRecorder({ onRecorded, onError, disabled }: Props) {
       const message =
         error instanceof Error ? error.message : 'Ошибка при остановке записи';
       onError(message);
+      isRecordingRef.current = false;
       setIsRecording(false);
+      onRecordingChange?.(false);
     }
-  }, [isRecording, onRecorded, onError]);
+  }, [isRecording, onRecorded, onError, onRecordingChange]);
 
   const startRecording = useCallback(async () => {
-    if (!isSupported || disabled || isRecording) return;
+    if (!isSupported || disabled || isRecording) {
+      return;
+    }
 
     try {
       const recorder = new AudioRecorder({
@@ -84,11 +117,17 @@ export function VoiceRecorder({ onRecorded, onError, disabled }: Props) {
 
       recorderRef.current = recorder;
       await recorder.start();
+      isRecordingRef.current = true;
       setIsRecording(true);
       setDuration(0);
+      onRecordingChange?.(true);
 
       durationTimerRef.current = window.setInterval(() => {
-        const currentDuration = recorder.getDuration();
+        const currentRecorder = recorderRef.current;
+        if (!currentRecorder) {
+          return;
+        }
+        const currentDuration = currentRecorder.getDuration();
         setDuration(currentDuration);
 
         if (currentDuration >= MAX_VOICE_DURATION_SECONDS) {
@@ -101,9 +140,18 @@ export function VoiceRecorder({ onRecorded, onError, disabled }: Props) {
           ? error.message
           : 'Не удалось начать запись. Проверьте разрешения микрофона.';
       onError(message);
+      isRecordingRef.current = false;
       setIsRecording(false);
+      onRecordingChange?.(false);
     }
-  }, [isSupported, disabled, isRecording, onError, stopRecording]);
+  }, [
+    isSupported,
+    disabled,
+    isRecording,
+    onError,
+    stopRecording,
+    onRecordingChange,
+  ]);
 
   const cancelRecording = useCallback(() => {
     if (recorderRef.current) {
@@ -114,9 +162,11 @@ export function VoiceRecorder({ onRecorded, onError, disabled }: Props) {
       clearInterval(durationTimerRef.current);
       durationTimerRef.current = null;
     }
+    isRecordingRef.current = false;
     setIsRecording(false);
     setDuration(0);
-  }, []);
+    onRecordingChange?.(false);
+  }, [onRecordingChange]);
 
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);

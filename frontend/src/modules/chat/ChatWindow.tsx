@@ -7,8 +7,7 @@ import type { UserSummary } from '@/modules/chat/api';
 import { FingerprintVerificationModal } from '@/modules/chat/FingerprintVerificationModal';
 import { VoiceRecorder } from '@/modules/chat/VoiceRecorder';
 import { VideoRecorder } from '@/modules/chat/VideoRecorder';
-import { MessageBubble } from '@/modules/chat/MessageBubble';
-import { TypingIndicator } from '@/modules/chat/TypingIndicator';
+import { MessageList } from '@/modules/chat/MessageList';
 import {
   FileAccessDialog,
   type FileAccessMode,
@@ -20,9 +19,10 @@ import {
   isPeerVerified,
   normalizeFingerprint,
 } from '@/shared/crypto/fingerprint';
+import { getFriendlyErrorMessage } from '@/shared/api/error-handler';
+import { Spinner } from '@/shared/ui/Spinner';
 import { useToast } from '@/shared/ui/useToast';
 import {
-  MAX_FILE_SIZE,
   MAX_MESSAGE_LENGTH,
   SCROLL_DELAY_MS,
   SCROLL_DELAY_TYPING_MS,
@@ -30,6 +30,12 @@ import {
   INPUT_MIN_HEIGHT_PX,
   MODAL_MAX_HEIGHT_VH,
 } from '@/shared/constants';
+import {
+  validateFileSize,
+  validateImagePaste,
+  getFileValidationError,
+} from '@/shared/utils/files';
+import { attachTokenToClient } from '@/shared/api/session';
 
 type Props = {
   token: string;
@@ -65,6 +71,7 @@ export function ChatWindow({
   const { showToast } = useToast();
   const [activeMediaCount, setActiveMediaCount] = useState(0);
   const isMediaActive = activeMediaCount > 0;
+  const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const [hasShownMaxLengthToast, setHasShownMaxLengthToast] = useState(false);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [viewerFile, setViewerFile] = useState<{
@@ -77,9 +84,7 @@ export function ChatWindow({
 
   useEffect(() => {
     if (token) {
-      import('@/shared/api/client').then(({ apiClient }) => {
-        apiClient.setToken(token);
-      });
+      attachTokenToClient(token);
     }
   }, [token]);
 
@@ -244,10 +249,10 @@ export function ChatWindow({
           }
         }
       } catch (err) {
-        const errorMessage =
-          err instanceof Error
-            ? err.message
-            : 'Не удалось отправить сообщение. Проверьте соединение и попробуйте снова.';
+        const errorMessage = getFriendlyErrorMessage(
+          err,
+          'Не удалось отправить сообщение. Проверьте соединение и попробуйте снова.'
+        );
         showToast(errorMessage, 'error');
       } finally {
         setIsSending(false);
@@ -365,16 +370,9 @@ export function ChatWindow({
       const file = e.target.files?.[0];
       if (!file || isSendingFile || !isSessionActive || isChatBlocked) return;
 
-      if (file.size === 0) {
-        showToast('Файл пустой. Выберите файл с содержимым.', 'error');
-        return;
-      }
-
-      if (file.size > MAX_FILE_SIZE) {
-        showToast(
-          'Файл слишком большой. Максимальный размер: 50MB. Выберите файл меньшего размера.',
-          'error'
-        );
+      const validationError = validateFileSize(file, { fileType: 'file' });
+      if (validationError) {
+        showToast(getFileValidationError(validationError)!, 'error');
         return;
       }
 
@@ -400,16 +398,9 @@ export function ChatWindow({
           const file = item.getAsFile();
           if (!file) continue;
 
-          if (file.size === 0) {
-            showToast('Файл пустой. Выберите файл с содержимым.', 'error');
-            continue;
-          }
-
-          if (file.size > MAX_FILE_SIZE) {
-            showToast(
-              'Изображение слишком большое. Максимальный размер: 50MB. Выберите изображение меньшего размера.',
-              'error'
-            );
+          const validationError = validateImagePaste(file);
+          if (validationError) {
+            showToast(getFileValidationError(validationError)!, 'error');
             continue;
           }
 
@@ -529,12 +520,13 @@ export function ChatWindow({
             <button
               type="button"
               onClick={() => setShowFingerprintModal(true)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${fingerprintWarning
-                ? 'bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 border border-yellow-700/40'
-                : isPeerVerified(peer.id, peerFingerprint || '')
-                  ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-700/40'
-                  : 'bg-emerald-900/40 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-700/60'
-                }`}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                fingerprintWarning
+                  ? 'bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 border border-yellow-700/40'
+                  : isPeerVerified(peer.id, peerFingerprint || '')
+                    ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-700/40'
+                    : 'bg-emerald-900/40 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-700/60'
+              }`}
             >
               {fingerprintWarning ? (
                 <span className="flex items-center gap-1.5">
@@ -581,7 +573,7 @@ export function ChatWindow({
           {isLoadingFingerprint && (
             <div className="flex items-center justify-center py-8">
               <div className="flex flex-col items-center gap-3">
-                <div className="w-8 h-8 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+                <Spinner size="lg" borderColorClass="border-emerald-400" />
                 <p className="text-xs text-emerald-500/80">
                   Проверка безопасности...
                 </p>
@@ -592,7 +584,7 @@ export function ChatWindow({
           {!isLoadingFingerprint && isLoading && (
             <div className="flex items-center justify-center py-8">
               <div className="flex flex-col items-center gap-3">
-                <div className="w-8 h-8 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+                <Spinner size="lg" borderColorClass="border-emerald-400" />
                 <p className="text-xs text-emerald-500/80">{stateMessage}</p>
               </div>
             </div>
@@ -624,30 +616,27 @@ export function ChatWindow({
             </div>
           )}
 
-          {messages.map((message) => (
-            <MessageBubble
-              key={message.id}
-              message={message}
-              myUserId={myUserId}
-              peerUsername={peer.username}
-              onReaction={sendReaction}
-              onDelete={deleteMessage}
-              onEdit={editMessage}
-              onMarkAsRead={markMessageAsRead}
-              onMediaActiveChange={handleMediaActiveChange}
-              onReply={setReplyTo}
-              onEditingChange={setIsEditingMessage}
-              onViewFile={(filename, mimeType, blob, isProtected) => {
-                if (inputRef.current) {
-                  inputRef.current.blur();
-                }
-                setViewerFile({ filename, mimeType, blob, isProtected });
-              }}
-            />
-          ))}
-
-          <TypingIndicator
-            isVisible={isPeerTyping && isSessionActive && !isChatBlocked}
+          <MessageList
+            messages={messages}
+            myUserId={myUserId}
+            peerUsername={peer.username}
+            isPeerTyping={isPeerTyping}
+            isSessionActive={isSessionActive}
+            isChatBlocked={isChatBlocked}
+            onReaction={sendReaction}
+            onDelete={deleteMessage}
+            onEdit={editMessage}
+            onMarkAsRead={markMessageAsRead}
+            onMediaActiveChange={handleMediaActiveChange}
+            onReply={setReplyTo}
+            onEditingChange={setIsEditingMessage}
+            onViewFile={(filename, mimeType, blob, isProtected) => {
+              if (inputRef.current) {
+                inputRef.current.blur();
+              }
+              setViewerFile({ filename, mimeType, blob, isProtected });
+            }}
+            messagesEndRef={messagesEndRef}
           />
 
           {isChatBlocked && (
@@ -688,8 +677,6 @@ export function ChatWindow({
               </div>
             </div>
           )}
-
-          <div ref={messagesEndRef} />
         </div>
 
         <form
@@ -738,15 +725,18 @@ export function ChatWindow({
                   await sendVoice(file, duration);
                   showToast('Голосовое сообщение отправлено', 'success');
                 } catch (err) {
-                  const errorMessage =
-                    err instanceof Error
-                      ? err.message
-                      : 'Не удалось отправить голосовое сообщение. Проверьте микрофон и попробуйте снова.';
+                  const errorMessage = getFriendlyErrorMessage(
+                    err,
+                    'Не удалось отправить голосовое сообщение. Проверьте микрофон и попробуйте снова.'
+                  );
                   showToast(errorMessage, 'error');
                 }
               }}
               onError={(error) => showToast(error, 'error')}
               disabled={!isSessionActive || isChatBlocked}
+              onRecordingChange={useCallback((isRecording: boolean) => {
+                setIsVoiceRecording(isRecording);
+              }, [])}
             />
             <VideoRecorder
               onRecorded={async (file, duration) => {
@@ -755,15 +745,15 @@ export function ChatWindow({
                   await sendFile(file, 'both', undefined, duration);
                   showToast('Видео сообщение отправлено', 'success');
                 } catch (err) {
-                  const errorMessage =
-                    err instanceof Error
-                      ? err.message
-                      : 'Не удалось отправить видео сообщение. Проверьте камеру и попробуйте снова.';
+                  const errorMessage = getFriendlyErrorMessage(
+                    err,
+                    'Не удалось отправить видео сообщение. Проверьте камеру и попробуйте снова.'
+                  );
                   showToast(errorMessage, 'error');
                 }
               }}
               onError={(error) => showToast(error, 'error')}
-              disabled={!isSessionActive || isChatBlocked}
+              disabled={!isSessionActive || isChatBlocked || isVoiceRecording}
             />
             <div className="flex-1 relative flex items-center">
               <textarea
@@ -773,7 +763,12 @@ export function ChatWindow({
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
                 onBlur={handleInputBlur}
-                disabled={!isSessionActive || isSending || isChatBlocked}
+                disabled={
+                  !isSessionActive ||
+                  isSending ||
+                  isChatBlocked ||
+                  isVoiceRecording
+                }
                 placeholder={
                   isChatBlocked
                     ? 'Чат заблокирован: верифицируйте identity'
@@ -804,7 +799,7 @@ export function ChatWindow({
                 title="Прикрепить файл"
               >
                 {isSendingFile ? (
-                  <div className="w-3.5 h-3.5 border-2 border-emerald-300 border-t-transparent rounded-full animate-spin" />
+                  <Spinner size="xs" borderColorClass="border-emerald-300" />
                 ) : (
                   <svg
                     className="w-4 h-4"
@@ -824,11 +819,16 @@ export function ChatWindow({
             </div>
             <button
               type="submit"
-              disabled={!messageText.trim() || !isSessionActive || isSending}
+              disabled={
+                !messageText.trim() ||
+                !isSessionActive ||
+                isSending ||
+                isVoiceRecording
+              }
               className="rounded-md bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-700 disabled:cursor-not-allowed text-sm font-medium px-4 h-10 text-black smooth-transition button-press glow-emerald-hover flex items-center justify-center min-w-[80px]"
             >
               {isSending ? (
-                <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                <Spinner size="sm" borderColorClass="border-black" />
               ) : (
                 'Отправить'
               )}
@@ -876,8 +876,11 @@ export function ChatWindow({
               return;
             }
 
-            if (pendingFile.size === 0) {
-              showToast('Файл пустой. Выберите файл с содержимым.', 'error');
+            const validationError = validateFileSize(pendingFile, {
+              fileType: 'file',
+            });
+            if (validationError) {
+              showToast(getFileValidationError(validationError)!, 'error');
               setShowAccessDialog(false);
               setPendingFile(null);
               return;
@@ -889,10 +892,10 @@ export function ChatWindow({
               await sendFile(pendingFile, mode);
               showToast('Файл отправлен', 'success');
             } catch (err) {
-              const errorMessage =
-                err instanceof Error
-                  ? err.message
-                  : 'Не удалось отправить файл. Проверьте соединение и попробуйте снова.';
+              const errorMessage = getFriendlyErrorMessage(
+                err,
+                'Не удалось отправить файл. Проверьте соединение и попробуйте снова.'
+              );
               showToast(errorMessage, 'error');
             } finally {
               setIsSendingFile(false);

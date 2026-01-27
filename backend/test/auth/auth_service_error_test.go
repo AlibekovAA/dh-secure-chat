@@ -124,9 +124,16 @@ func TestAuthService_RefreshAccessToken_ExpiredDeleteError(t *testing.T) {
 		CreatedAt: mockClock.Now().Add(-2 * time.Hour),
 	}
 
+	mockUser := userdomain.User{
+		ID:           userdomain.ID(userID),
+		Username:     "testuser",
+		PasswordHash: "hashed",
+		CreatedAt:    mockClock.Now(),
+	}
+
 	mockTx := &mockRefreshTokenTx{}
-	mockTx.findByTokenHashForUpdateFunc = func(ctx context.Context, h string) (authdomain.RefreshToken, error) {
-		return storedToken, nil
+	mockTx.findByTokenHashWithUserForUpdateFunc = func(ctx context.Context, h string) (authdomain.RefreshToken, userdomain.User, error) {
+		return storedToken, mockUser, nil
 	}
 
 	mockTx.deleteByTokenHashFunc = func(ctx context.Context, h string) error {
@@ -151,7 +158,7 @@ func TestAuthService_RefreshAccessToken_ExpiredDeleteError(t *testing.T) {
 }
 
 func TestAuthService_RefreshAccessToken_DeleteError(t *testing.T) {
-	svc, mockUserRepo, _, mockRefreshTokenRepo, _, _, _, mockClock := setupAuthService(t)
+	svc, _, _, mockRefreshTokenRepo, _, _, _, mockClock := setupAuthService(t)
 
 	refreshToken := "test-refresh-token"
 	hash := service.HashRefreshToken(refreshToken)
@@ -166,18 +173,16 @@ func TestAuthService_RefreshAccessToken_DeleteError(t *testing.T) {
 		CreatedAt: mockClock.Now(),
 	}
 
-	mockUserRepo.findByIDFunc = func(ctx context.Context, id userdomain.ID) (userdomain.User, error) {
-		return userdomain.User{
-			ID:           userdomain.ID(userID),
-			Username:     username,
-			PasswordHash: "hashed",
-			CreatedAt:    mockClock.Now(),
-		}, nil
+	mockUser := userdomain.User{
+		ID:           userdomain.ID(userID),
+		Username:     username,
+		PasswordHash: "hashed",
+		CreatedAt:    mockClock.Now(),
 	}
 
 	mockTx := &mockRefreshTokenTx{}
-	mockTx.findByTokenHashForUpdateFunc = func(ctx context.Context, h string) (authdomain.RefreshToken, error) {
-		return storedToken, nil
+	mockTx.findByTokenHashWithUserForUpdateFunc = func(ctx context.Context, h string) (authdomain.RefreshToken, userdomain.User, error) {
+		return storedToken, mockUser, nil
 	}
 
 	mockTx.deleteByTokenHashFunc = func(ctx context.Context, h string) error {
@@ -198,7 +203,7 @@ func TestAuthService_RefreshAccessToken_DeleteError(t *testing.T) {
 }
 
 func TestAuthService_RefreshAccessToken_IssueTokensError(t *testing.T) {
-	svc, mockUserRepo, _, mockRefreshTokenRepo, _, _, _, mockClock := setupAuthService(t)
+	svc, _, _, mockRefreshTokenRepo, _, _, _, mockClock := setupAuthService(t)
 
 	refreshToken := "test-refresh-token"
 	hash := service.HashRefreshToken(refreshToken)
@@ -213,18 +218,16 @@ func TestAuthService_RefreshAccessToken_IssueTokensError(t *testing.T) {
 		CreatedAt: mockClock.Now(),
 	}
 
-	mockUserRepo.findByIDFunc = func(ctx context.Context, id userdomain.ID) (userdomain.User, error) {
-		return userdomain.User{
-			ID:           userdomain.ID(userID),
-			Username:     username,
-			PasswordHash: "hashed",
-			CreatedAt:    mockClock.Now(),
-		}, nil
+	mockUser := userdomain.User{
+		ID:           userdomain.ID(userID),
+		Username:     username,
+		PasswordHash: "hashed",
+		CreatedAt:    mockClock.Now(),
 	}
 
 	mockTx := &mockRefreshTokenTx{}
-	mockTx.findByTokenHashForUpdateFunc = func(ctx context.Context, h string) (authdomain.RefreshToken, error) {
-		return storedToken, nil
+	mockTx.findByTokenHashWithUserForUpdateFunc = func(ctx context.Context, h string) (authdomain.RefreshToken, userdomain.User, error) {
+		return storedToken, mockUser, nil
 	}
 
 	mockTx.deleteByTokenHashFunc = func(ctx context.Context, h string) error {

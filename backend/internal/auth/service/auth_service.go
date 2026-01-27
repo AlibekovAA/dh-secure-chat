@@ -147,22 +147,20 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (AuthRe
 
 	hash, err := s.hasher.Hash(input.Password)
 	if err != nil {
-		return AuthResult{}, commonerrors.NewDomainError(
+		return AuthResult{}, newInternalError(
 			"PASSWORD_HASH_FAILED",
-			commonerrors.CategoryInternal,
-			http.StatusInternalServerError,
 			"failed to hash password",
-		).WithCause(err)
+			err,
+		)
 	}
 
 	id, err := s.idGenerator.NewID()
 	if err != nil {
-		return AuthResult{}, commonerrors.NewDomainError(
+		return AuthResult{}, newInternalError(
 			"ID_GENERATION_FAILED",
-			commonerrors.CategoryInternal,
-			http.StatusInternalServerError,
 			"failed to generate user id",
-		).WithCause(err)
+			err,
+		)
 	}
 
 	user := userdomain.User{
@@ -272,12 +270,16 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (AuthResult, 
 
 	accessToken, refresh, err := s.issueTokens(ctx, user)
 	if err != nil {
-		return AuthResult{}, commonerrors.NewDomainError(
+		s.log.WithFields(ctx, logger.Fields{
+			"username": user.Username,
+			"user_id":  string(user.ID),
+			"action":   "login_token_issue_failed",
+		}).Errorf("failed to issue tokens: %v", err)
+		return AuthResult{}, newInternalError(
 			"TOKEN_ISSUE_FAILED",
-			commonerrors.CategoryInternal,
-			http.StatusInternalServerError,
 			"failed to issue tokens",
-		).WithCause(err)
+			err,
+		)
 	}
 
 	s.log.WithFields(ctx, logger.Fields{
@@ -306,13 +308,15 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken strin
 
 	var stored authdomain.RefreshToken
 	var user userdomain.User
-	var cachedUserID string
 	var cacheHit bool
 
-	if cachedToken, cachedUID, found := s.refreshTokenCache.Get(hash); found {
-		stored = cachedToken
-		cachedUserID = cachedUID
-		cacheHit = true
+	if cachedToken, _, found := s.refreshTokenCache.Get(hash); found {
+		if s.clock.Now().After(cachedToken.ExpiresAt) {
+			s.refreshTokenCache.Invalidate(hash)
+		} else {
+			stored = cachedToken
+			cacheHit = true
+		}
 	}
 
 	txMgr := s.refreshTokenRepo.TxManager()
@@ -321,11 +325,12 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken strin
 	err = s.dbCircuitBreaker.Call(ctx, func(ctx context.Context) error {
 		return txMgr.WithTx(ctx, func(txCtx context.Context, tx authrepo.RefreshTokenTx) error {
 			if !cacheHit {
-				var fetchErr error
-				stored, fetchErr = tx.FindByTokenHashForUpdate(txCtx, hash)
+				fetchedToken, fetchedUser, fetchErr := tx.FindByTokenHashWithUserForUpdate(txCtx, hash)
 				if fetchErr != nil {
 					return fetchErr
 				}
+				stored = fetchedToken
+				user = fetchedUser
 
 				if s.clock.Now().After(stored.ExpiresAt) {
 					s.log.WithFields(ctx, logger.Fields{
@@ -342,13 +347,19 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken strin
 					return ErrRefreshTokenExpired
 				}
 				s.refreshTokenCache.Set(hash, stored, stored.UserID)
-				cachedUserID = stored.UserID
-			}
-
-			var userFetchErr error
-			user, userFetchErr = s.repo.FindByID(txCtx, userdomain.ID(cachedUserID))
-			if userFetchErr != nil {
-				return userFetchErr
+			} else {
+				var userFetchErr error
+				user, userFetchErr = s.repo.FindByID(txCtx, userdomain.ID(stored.UserID))
+				if userFetchErr != nil {
+					if errors.Is(userFetchErr, userrepo.ErrUserNotFound) {
+						s.log.WithFields(ctx, logger.Fields{
+							"user_id": stored.UserID,
+							"action":  "refresh_token_user_not_found",
+						}).Warn("refresh token user not found")
+						return commonerrors.ErrUserNotFound
+					}
+					return userFetchErr
+				}
 			}
 
 			if delErr := tx.DeleteByTokenHash(txCtx, hash); delErr != nil {
@@ -361,41 +372,49 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken strin
 
 	s.refreshTokenCache.Invalidate(hash)
 	if err != nil {
-		if errors.Is(err, commonerrors.ErrCircuitOpen) {
+		if handledErr := handleCircuitBreakerError(err); handledErr != err {
 			s.log.WithFields(ctx, logger.Fields{
 				"action": "refresh_token_db_circuit_open",
 			}).Error("refresh token failed: database circuit breaker is open")
-			return AuthResult{}, ErrServiceUnavailable.WithCause(err)
+			return AuthResult{}, handledErr
 		}
-		if errors.Is(err, ErrRefreshTokenExpired) {
-			return AuthResult{}, ErrRefreshTokenExpired
-		}
-		if errors.Is(err, authrepo.ErrRefreshTokenNotFound) {
+		if handledErr := handleRefreshTokenError(err); handledErr != err {
 			fields := logger.Fields{
-				"action": "refresh_token_not_found",
+				"action": "refresh_token_error",
 			}
-			if clientIP != "" {
+			if errors.Is(err, authrepo.ErrRefreshTokenNotFound) && clientIP != "" {
 				fields["client_ip"] = clientIP
 			}
-			s.log.WithFields(ctx, fields).Warn("refresh token failed: not found")
+			s.log.WithFields(ctx, fields).Warnf("refresh token failed: %v", err)
+			return AuthResult{}, handledErr
+		}
+		if errors.Is(err, commonerrors.ErrUserNotFound) {
+			s.log.WithFields(ctx, logger.Fields{
+				"action": "refresh_token_user_not_found",
+			}).Warn("refresh token failed: user not found")
 			return AuthResult{}, ErrInvalidRefreshToken
 		}
-		return AuthResult{}, commonerrors.NewDomainError(
+		s.log.WithFields(ctx, logger.Fields{
+			"action": "refresh_token_tx_failed",
+		}).Errorf("refresh token transaction failed: %v", err)
+		return AuthResult{}, newInternalError(
 			"REFRESH_TOKEN_TX_FAILED",
-			commonerrors.CategoryInternal,
-			http.StatusInternalServerError,
 			"failed to process refresh token transaction",
-		).WithCause(err)
+			err,
+		)
 	}
 
 	accessToken, refresh, err := s.issueTokens(ctx, user)
 	if err != nil {
-		return AuthResult{}, commonerrors.NewDomainError(
+		s.log.WithFields(ctx, logger.Fields{
+			"user_id": stored.UserID,
+			"action":  "token_issue_failed",
+		}).Errorf("failed to issue tokens: %v", err)
+		return AuthResult{}, newInternalError(
 			"TOKEN_ISSUE_FAILED",
-			commonerrors.CategoryInternal,
-			http.StatusInternalServerError,
 			"failed to issue tokens",
-		).WithCause(err)
+			err,
+		)
 	}
 
 	s.log.WithFields(ctx, logger.Fields{
@@ -424,18 +443,20 @@ func (s *AuthService) RevokeRefreshToken(ctx context.Context, refreshToken strin
 		return fetchErr
 	})
 	if err != nil {
-		if errors.Is(err, commonerrors.ErrCircuitOpen) {
-			return ErrServiceUnavailable.WithCause(err)
+		if handledErr := handleCircuitBreakerError(err); handledErr != err {
+			return handledErr
 		}
 		if errors.Is(err, authrepo.ErrRefreshTokenNotFound) {
 			return nil
 		}
-		return commonerrors.NewDomainError(
+		s.log.WithFields(ctx, logger.Fields{
+			"action": "revoke_refresh_token_lookup_failed",
+		}).Errorf("failed to lookup refresh token for revocation: %v", err)
+		return newInternalError(
 			"REVOKE_REFRESH_TOKEN_LOOKUP_FAILED",
-			commonerrors.CategoryInternal,
-			http.StatusInternalServerError,
 			"failed to lookup refresh token for revocation",
-		).WithCause(err)
+			err,
+		)
 	}
 
 	err = s.dbCircuitBreaker.Call(ctx, func(ctx context.Context) error {
@@ -449,12 +470,18 @@ func (s *AuthService) RevokeRefreshToken(ctx context.Context, refreshToken strin
 		if errors.Is(err, authrepo.ErrRefreshTokenNotFound) {
 			return nil
 		}
-		return commonerrors.NewDomainError(
+		if handledErr := handleCircuitBreakerError(err); handledErr != err {
+			return handledErr
+		}
+		s.log.WithFields(ctx, logger.Fields{
+			"user_id": stored.UserID,
+			"action":  "revoke_refresh_token_failed",
+		}).Errorf("failed to revoke refresh token: %v", err)
+		return newInternalError(
 			"REVOKE_REFRESH_TOKEN_FAILED",
-			commonerrors.CategoryInternal,
-			http.StatusInternalServerError,
 			"failed to revoke refresh token",
-		).WithCause(err)
+			err,
+		)
 	}
 
 	s.log.WithFields(ctx, logger.Fields{
@@ -477,15 +504,19 @@ func (s *AuthService) RevokeAccessToken(ctx context.Context, jti string, userID 
 		return s.revokedTokenRepo.Revoke(ctx, jti, userID, expiresAt)
 	})
 	if err != nil {
-		if errors.Is(err, commonerrors.ErrCircuitOpen) {
-			return ErrServiceUnavailable.WithCause(err)
+		if handledErr := handleCircuitBreakerError(err); handledErr != err {
+			return handledErr
 		}
-		return commonerrors.NewDomainError(
+		s.log.WithFields(ctx, logger.Fields{
+			"jti":     jti,
+			"user_id": userID,
+			"action":  "revoke_access_token_failed",
+		}).Errorf("failed to revoke access token: %v", err)
+		return newInternalError(
 			"REVOKE_ACCESS_TOKEN_FAILED",
-			commonerrors.CategoryInternal,
-			http.StatusInternalServerError,
 			"failed to revoke access token",
-		).WithCause(err)
+			err,
+		)
 	}
 
 	metrics.AccessTokensRevoked.Inc()
@@ -509,12 +540,12 @@ type dbErrorConfig struct {
 }
 
 func (s *AuthService) handleDBError(ctx context.Context, err error, username string, config dbErrorConfig) (AuthResult, error) {
-	if errors.Is(err, commonerrors.ErrCircuitOpen) {
+	if handledErr := handleCircuitBreakerError(err); handledErr != err {
 		s.log.WithFields(ctx, logger.Fields{
 			"username": username,
 			"action":   config.operation + "_db_circuit_open",
 		}).Errorf("%s failed: database circuit breaker is open", config.operation)
-		return AuthResult{}, ErrServiceUnavailable.WithCause(err)
+		return AuthResult{}, handledErr
 	}
 	if errors.Is(err, config.specificError) {
 		actionField := config.operation + "_" + getSpecificErrorAction(config.specificError)
@@ -528,12 +559,11 @@ func (s *AuthService) handleDBError(ctx context.Context, err error, username str
 		"username": username,
 		"action":   config.operation + "_db_failed",
 	}).Errorf("%s failed: %v", config.operation, err)
-	return AuthResult{}, commonerrors.NewDomainError(
+	return AuthResult{}, newInternalError(
 		"DB_ERROR",
-		commonerrors.CategoryInternal,
-		http.StatusInternalServerError,
 		config.errorMessage,
-	).WithCause(err)
+		err,
+	)
 }
 
 func getSpecificErrorAction(err error) string {

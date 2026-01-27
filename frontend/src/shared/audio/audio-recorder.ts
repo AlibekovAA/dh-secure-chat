@@ -18,6 +18,7 @@ export class AudioRecorder {
   private maxDuration: number;
   private durationTimer: number | null = null;
   private stopResolve: ((blob: Blob | null) => void) | null = null;
+  private startResolve: (() => void) | null = null;
 
   constructor(private options: AudioRecorderOptions = {}) {
     this.maxDuration = options.maxDuration || 5 * 60 * 1000;
@@ -41,9 +42,46 @@ export class AudioRecorder {
       });
 
       this.chunks = [];
-      this.state = 'recording';
-      this.startTime = Date.now();
       this.duration = 0;
+
+      const startPromise = new Promise<void>((resolve, reject) => {
+        this.startResolve = resolve;
+
+        const timeout = setTimeout(() => {
+          if (this.startResolve === resolve) {
+            this.startResolve = null;
+            reject(new Error('Таймаут запуска записи'));
+          }
+        }, 5000);
+
+        const markAsStarted = () => {
+          if (this.startTime > 0) {
+            return;
+          }
+          clearTimeout(timeout);
+          if (this.startResolve === resolve) {
+            this.startResolve = null;
+            this.state = 'recording';
+            this.startTime = Date.now();
+            this.startDurationTimer();
+            resolve();
+          }
+        };
+
+        this.mediaRecorder!.onstart = () => {
+          markAsStarted();
+        };
+
+        this.mediaRecorder!.onerror = (_event) => {
+          clearTimeout(timeout);
+          if (this.startResolve === resolve) {
+            this.startResolve = null;
+            this.state = 'error';
+            this.stopStream();
+            reject(new Error('Ошибка MediaRecorder при запуске'));
+          }
+        };
+      });
 
       this.mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -51,13 +89,9 @@ export class AudioRecorder {
         }
       };
 
-      this.mediaRecorder.onerror = (_event) => {
-        this.state = 'error';
-        this.stop();
-      };
-
       this.mediaRecorder.onstop = () => {
-        this.duration = Date.now() - this.startTime;
+        const savedStartTime = this.startTime;
+        this.duration = savedStartTime > 0 ? Date.now() - savedStartTime : 0;
         this.stopStream();
         const mime = this.getSupportedMimeType();
         const blob =
@@ -70,9 +104,40 @@ export class AudioRecorder {
         }
       };
 
-      this.mediaRecorder.start(1000);
+      try {
+        this.mediaRecorder.start(100);
 
-      this.startDurationTimer();
+        await Promise.race([
+          startPromise,
+          new Promise<void>((resolve) => {
+            setTimeout(() => {
+              if (
+                this.mediaRecorder &&
+                this.mediaRecorder.state === 'recording' &&
+                this.startTime === 0
+              ) {
+                if (this.startResolve) {
+                  const resolveFn = this.startResolve;
+                  this.startResolve = null;
+                  this.state = 'recording';
+                  this.startTime = Date.now();
+                  this.startDurationTimer();
+                  resolveFn();
+                }
+                resolve();
+              } else {
+                resolve();
+              }
+            }, 100);
+          }),
+        ]);
+      } catch (startError) {
+        this.state = 'error';
+        this.stopStream();
+        throw startError instanceof Error
+          ? startError
+          : new Error(`Не удалось начать запись: ${startError}`);
+      }
     } catch (error) {
       this.state = 'error';
       this.stopStream();
@@ -91,30 +156,52 @@ export class AudioRecorder {
       this.duration = Date.now() - this.startTime;
     }
 
-    if (this.mediaRecorder.state === 'recording') {
+    const states: Array<'recording' | 'paused'> = ['recording', 'paused'];
+    if (states.includes(this.mediaRecorder.state as 'recording' | 'paused')) {
       const promise = new Promise<Blob | null>((resolve) => {
         this.stopResolve = resolve;
       });
-      this.mediaRecorder.requestData();
-      this.mediaRecorder.stop();
+
+      try {
+        if (this.mediaRecorder.state === 'recording') {
+          this.mediaRecorder.requestData();
+        }
+        this.mediaRecorder.stop();
+      } catch (error) {
+        this.state = 'error';
+        this.stopStream();
+        const resolve = this.stopResolve;
+        this.stopResolve = null;
+        if (resolve) {
+          resolve(null);
+        }
+        return Promise.resolve(null);
+      }
+
       return promise;
     }
 
+    this.state = 'error';
     return Promise.resolve(null);
   }
 
   cancel(): void {
+    if (this.startResolve) {
+      this.startResolve = null;
+    }
     if (this.state === 'recording' && this.mediaRecorder) {
       this.mediaRecorder.stop();
     }
     this.chunks = [];
     this.state = 'idle';
     this.duration = 0;
+    this.startTime = 0;
   }
 
   getDuration(): number {
     if (this.state === 'recording' && this.startTime > 0) {
-      return Math.floor((Date.now() - this.startTime) / 1000);
+      const elapsed = Math.floor((Date.now() - this.startTime) / 1000);
+      return Math.max(0, elapsed);
     }
     return Math.floor(this.duration / 1000);
   }
@@ -145,7 +232,13 @@ export class AudioRecorder {
   }
 
   private startDurationTimer(): void {
+    if (this.durationTimer !== null) {
+      clearInterval(this.durationTimer);
+    }
     this.durationTimer = window.setInterval(() => {
+      if (this.startTime === 0) {
+        return;
+      }
       const currentDuration = Date.now() - this.startTime;
       if (currentDuration >= this.maxDuration) {
         this.stop();
@@ -168,6 +261,13 @@ export class AudioRecorder {
   }
 
   cleanup(): void {
+    if (this.state === 'recording') {
+      this.stop().catch(() => {});
+      return;
+    }
+    if (this.startResolve) {
+      this.startResolve = null;
+    }
     this.cancel();
     this.stopStream();
   }

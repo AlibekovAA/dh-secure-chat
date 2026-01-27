@@ -10,6 +10,7 @@ import (
 	authdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/domain"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/db"
+	userdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
 )
 
 type RefreshTokenRepository interface {
@@ -22,7 +23,7 @@ type RefreshTokenRepository interface {
 }
 
 type RefreshTokenTx interface {
-	FindByTokenHashForUpdate(ctx context.Context, hash string) (authdomain.RefreshToken, error)
+	FindByTokenHashWithUserForUpdate(ctx context.Context, hash string) (authdomain.RefreshToken, userdomain.User, error)
 	DeleteByTokenHash(ctx context.Context, hash string) error
 	Commit(ctx context.Context) error
 	Rollback(ctx context.Context) error
@@ -138,23 +139,29 @@ type pgRefreshTokenTx struct {
 	tx pgx.Tx
 }
 
-func (t *pgRefreshTokenTx) FindByTokenHashForUpdate(ctx context.Context, hash string) (authdomain.RefreshToken, error) {
+func (t *pgRefreshTokenTx) FindByTokenHashWithUserForUpdate(ctx context.Context, hash string) (authdomain.RefreshToken, userdomain.User, error) {
 	start := time.Now()
 	row := t.tx.QueryRow(
 		ctx,
-		`SELECT id, token_hash, user_id, expires_at, created_at
-		 FROM refresh_tokens
-		 WHERE token_hash = $1
-		 FOR UPDATE`,
+		`SELECT rt.id, rt.token_hash, rt.user_id, rt.expires_at, rt.created_at,
+		        u.id, u.username, u.password_hash, u.created_at, u.last_seen_at
+		 FROM refresh_tokens rt
+		 INNER JOIN users u ON rt.user_id = u.id
+		 WHERE rt.token_hash = $1
+		 FOR UPDATE OF rt`,
 		hash,
 	)
 
 	var token authdomain.RefreshToken
-	err := row.Scan(&token.ID, &token.TokenHash, &token.UserID, &token.ExpiresAt, &token.CreatedAt)
-	if err := db.HandleQueryError(err, ErrRefreshTokenNotFound, "find refresh token in tx", start); err != nil {
-		return authdomain.RefreshToken{}, err
+	var user userdomain.User
+	err := row.Scan(
+		&token.ID, &token.TokenHash, &token.UserID, &token.ExpiresAt, &token.CreatedAt,
+		&user.ID, &user.Username, &user.PasswordHash, &user.CreatedAt, &user.LastSeenAt,
+	)
+	if err := db.HandleQueryError(err, ErrRefreshTokenNotFound, "find refresh token with user in tx", start); err != nil {
+		return authdomain.RefreshToken{}, userdomain.User{}, err
 	}
-	return token, nil
+	return token, user, nil
 }
 
 func (t *pgRefreshTokenTx) DeleteByTokenHash(ctx context.Context, hash string) error {

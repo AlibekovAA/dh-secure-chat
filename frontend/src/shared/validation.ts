@@ -40,7 +40,8 @@ export function validateUsername(username: string): ValidationError | null {
   if (!USERNAME_REGEX.test(username)) {
     return {
       field: 'username',
-      message: 'Имя пользователя может содержать только буквы, цифры, _ и -',
+      message:
+        'Имя пользователя может содержать только латинские буквы, цифры, _ и -',
     };
   }
 

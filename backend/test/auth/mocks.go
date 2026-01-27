@@ -176,17 +176,17 @@ func (m *mockRefreshTokenRepo) TxManager() authrepo.RefreshTokenTxManagerInterfa
 }
 
 type mockRefreshTokenTx struct {
-	findByTokenHashForUpdateFunc func(ctx context.Context, hash string) (authdomain.RefreshToken, error)
-	deleteByTokenHashFunc        func(ctx context.Context, hash string) error
-	commitFunc                   func(ctx context.Context) error
-	rollbackFunc                 func(ctx context.Context) error
+	findByTokenHashWithUserForUpdateFunc func(ctx context.Context, hash string) (authdomain.RefreshToken, userdomain.User, error)
+	deleteByTokenHashFunc                func(ctx context.Context, hash string) error
+	commitFunc                           func(ctx context.Context) error
+	rollbackFunc                         func(ctx context.Context) error
 }
 
-func (m *mockRefreshTokenTx) FindByTokenHashForUpdate(ctx context.Context, hash string) (authdomain.RefreshToken, error) {
-	if m.findByTokenHashForUpdateFunc != nil {
-		return m.findByTokenHashForUpdateFunc(ctx, hash)
+func (m *mockRefreshTokenTx) FindByTokenHashWithUserForUpdate(ctx context.Context, hash string) (authdomain.RefreshToken, userdomain.User, error) {
+	if m.findByTokenHashWithUserForUpdateFunc != nil {
+		return m.findByTokenHashWithUserForUpdateFunc(ctx, hash)
 	}
-	return authdomain.RefreshToken{}, authrepo.ErrRefreshTokenNotFound
+	return authdomain.RefreshToken{}, userdomain.User{}, authrepo.ErrRefreshTokenNotFound
 }
 
 func (m *mockRefreshTokenTx) DeleteByTokenHash(ctx context.Context, hash string) error {

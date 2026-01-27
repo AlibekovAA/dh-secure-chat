@@ -5,6 +5,7 @@ import {
   VIDEO_THUMBNAIL_REQUEST_IDLE_TIMEOUT_MS,
   VIDEO_THUMBNAIL_ROOT_MARGIN,
 } from '@/shared/constants';
+import { Spinner } from '@/shared/ui/Spinner';
 
 type Props = {
   blob: Blob;
@@ -34,7 +35,6 @@ export function VideoCircle({ blob, filename, fileId, onClick, isOwn }: Props) {
         const dataUrl = await generateVideoThumbnail(blob, fileId);
         setThumbnail(dataUrl);
       } catch (err) {
-        console.warn('Failed to generate video thumbnail:', err);
         setError(true);
       } finally {
         setIsLoading(false);
@@ -57,8 +57,8 @@ export function VideoCircle({ blob, filename, fileId, onClick, isOwn }: Props) {
     try {
       url = URL.createObjectURL(blob);
       setVideoUrl(url);
-    } catch (err) {
-      console.error('Failed to create video URL:', err);
+    } catch (_err) {
+      void _err;
     }
 
     return () => {
@@ -105,8 +105,7 @@ export function VideoCircle({ blob, filename, fileId, onClick, isOwn }: Props) {
             .then(() => {
               setIsPlaying(true);
             })
-            .catch((err) => {
-              console.error('Failed to play video:', err);
+            .catch((_err) => {
               if (onClick) {
                 onClick();
               }
@@ -203,7 +202,7 @@ export function VideoCircle({ blob, filename, fileId, onClick, isOwn }: Props) {
           </>
         ) : isLoading ? (
           <div className="w-full h-full flex items-center justify-center bg-emerald-900/20">
-            <div className="w-8 h-8 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+            <Spinner size="md" borderColorClass="border-emerald-400" />
           </div>
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-emerald-900/20">

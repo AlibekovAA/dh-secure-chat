@@ -5,6 +5,7 @@ import {
   PDF_MIME_TYPE,
   TEXT_MIME_TYPES,
 } from '@/shared/constants';
+import { Spinner } from '@/shared/ui/Spinner';
 
 type Props = {
   filename: string;
@@ -110,9 +111,8 @@ export function FileViewerModal({
       blob
         .text()
         .then((text: string) => setTextContent(text))
-        .catch((err: unknown) => {
+        .catch((_err: unknown) => {
           setError('Не удалось прочитать файл');
-          console.error('Error reading text file:', err);
         });
     } else {
       setError('Просмотр этого типа файла не поддерживается');
@@ -295,7 +295,7 @@ export function FileViewerModal({
           {videoLoading && !videoError && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-10">
               <div className="flex flex-col items-center gap-3 w-full max-w-md px-4">
-                <div className="w-10 h-10 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+                <Spinner size="md" borderColorClass="border-emerald-400" />
                 <p className="text-sm text-emerald-400/80">
                   Подготовка видео...
                 </p>

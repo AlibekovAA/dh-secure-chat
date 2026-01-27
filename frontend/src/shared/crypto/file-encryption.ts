@@ -57,11 +57,8 @@ export async function encryptFile(
     try {
       const extractableKey = await exportKeyForWorker(sessionKey);
       return await encryptFileWithWorker(extractableKey, file, onProgress);
-    } catch (error) {
-      console.warn(
-        'Worker encryption failed, falling back to main thread:',
-        error
-      );
+    } catch (_error) {
+      void _error;
     }
   }
 
@@ -102,11 +99,8 @@ export async function decryptFile(
     try {
       const extractableKey = await exportKeyForWorker(sessionKey);
       return await decryptFileWithWorker(extractableKey, chunks, onProgress);
-    } catch (error) {
-      console.warn(
-        'Worker decryption failed, falling back to main thread:',
-        error
-      );
+    } catch (_error) {
+      void _error;
     }
   }
 

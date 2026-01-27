@@ -2,6 +2,7 @@ import React, { lazy, Suspense } from 'react';
 import ReactDOM from 'react-dom/client';
 import { ToastProvider } from '@/shared/ui/ToastProvider';
 import { ErrorBoundary } from '@/shared/ui/ErrorBoundary';
+import { LoadingSpinner } from '@/shared/ui/LoadingSpinner';
 import { retryImport } from '@/shared/utils/retry-import';
 import '@/styles/index.css';
 
@@ -69,16 +70,7 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     <ErrorBoundary>
       <ToastProvider>
-        <Suspense
-          fallback={
-            <div className="min-h-screen flex items-center justify-center bg-black text-emerald-50">
-              <div className="flex flex-col items-center gap-3">
-                <div className="w-8 h-8 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
-                <p className="text-xs text-emerald-500/80">Загрузка...</p>
-              </div>
-            </div>
-          }
-        >
+        <Suspense fallback={<LoadingSpinner />}>
           <App />
         </Suspense>
       </ToastProvider>
