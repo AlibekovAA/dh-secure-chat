@@ -1,4 +1,5 @@
 import { createContext, ReactNode, useMemo, useState } from 'react';
+import { MESSAGES } from '@/shared/messages';
 
 type ToastKind = 'success' | 'error' | 'warning' | 'info';
 
@@ -86,7 +87,7 @@ export function ToastProvider({ children }: Props) {
                 <button
                   onClick={() => removeToast(toast.id)}
                   className="flex-shrink-0 -mt-1 -mr-1 h-6 w-6 rounded hover:bg-black/30 flex items-center justify-center transition-colors opacity-70 hover:opacity-100"
-                  aria-label="Закрыть"
+                  aria-label={MESSAGES.common.toastProvider.aria.close}
                 >
                   <svg
                     className="w-4 h-4"

@@ -8,6 +8,7 @@ import {
   saveVerifiedPeer,
 } from '@/shared/crypto/fingerprint';
 import { Spinner } from '@/shared/ui/Spinner';
+import { MESSAGES } from '@/shared/messages';
 
 type Props = {
   token: string;
@@ -43,7 +44,7 @@ export function FingerprintVerificationModal({
         setError(
           err instanceof Error
             ? err.message
-            : 'Не удалось загрузить fingerprint'
+            : MESSAGES.chat.fingerprintModal.errors.failedToLoadFingerprint
         );
       } finally {
         setIsLoading(false);
@@ -102,13 +103,13 @@ export function FingerprintVerificationModal({
         <div className="px-6 py-4 border-b border-emerald-700/60 bg-black/80">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-emerald-300">
-              Верификация Identity
+              {MESSAGES.chat.fingerprintModal.title}
             </h2>
             <button
               type="button"
               onClick={onClose}
               className="text-emerald-400 hover:text-emerald-200 transition-colors"
-              aria-label="Закрыть"
+              aria-label={MESSAGES.chat.fingerprintModal.aria.close}
             >
               <svg
                 className="w-5 h-5"
@@ -133,7 +134,7 @@ export function FingerprintVerificationModal({
               <div className="flex flex-col items-center gap-3">
                 <Spinner size="lg" borderColorClass="border-emerald-400" />
                 <p className="text-xs text-emerald-500/80">
-                  Загрузка fingerprint...
+                  {MESSAGES.chat.fingerprintModal.states.loadingFingerprint}
                 </p>
               </div>
             </div>
@@ -165,12 +166,10 @@ export function FingerprintVerificationModal({
                     </svg>
                     <div>
                       <p className="text-sm font-medium text-yellow-400">
-                        Внимание: Fingerprint изменился!
+                        {MESSAGES.chat.fingerprintModal.warnings.changedTitle}
                       </p>
                       <p className="text-xs text-yellow-500/80 mt-1">
-                        Fingerprint этого пользователя отличается от
-                        сохранённого. Убедитесь, что вы общаетесь с правильным
-                        человеком.
+                        {MESSAGES.chat.fingerprintModal.warnings.changedBody}
                       </p>
                     </div>
                   </div>
@@ -180,16 +179,17 @@ export function FingerprintVerificationModal({
               <div className="space-y-4">
                 <div>
                   <p className="text-xs font-medium text-emerald-400 mb-2">
-                    Ваш Fingerprint
+                    {MESSAGES.chat.fingerprintModal.labels.myFingerprint}
                   </p>
                   <div className="bg-emerald-900/20 border border-emerald-700/40 rounded-lg px-4 py-3 space-y-2">
                     <p className="text-xs font-mono text-emerald-200 break-all">
-                      {formattedMyFingerprint || 'Не загружен'}
+                      {formattedMyFingerprint ||
+                        MESSAGES.chat.fingerprintModal.labels.notLoaded}
                     </p>
                     {myFingerprintEmojis && (
                       <div className="flex items-center gap-2 pt-2 border-t border-emerald-700/30">
                         <span className="text-xs text-emerald-400/80">
-                          Visual:
+                          {MESSAGES.chat.fingerprintModal.labels.visually}
                         </span>
                         <span className="text-lg">{myFingerprintEmojis}</span>
                       </div>
@@ -199,7 +199,9 @@ export function FingerprintVerificationModal({
 
                 <div>
                   <p className="text-xs font-medium text-emerald-400 mb-2">
-                    Fingerprint {peerUsername}
+                    {MESSAGES.chat.fingerprintModal.labels.peerFingerprint(
+                      peerUsername
+                    )}
                   </p>
                   <div className="bg-emerald-900/20 border border-emerald-700/40 rounded-lg px-4 py-3 space-y-2">
                     <p className="text-xs font-mono text-emerald-200 break-all">
@@ -207,7 +209,7 @@ export function FingerprintVerificationModal({
                     </p>
                     <div className="flex items-center gap-2 pt-2 border-t border-emerald-700/30">
                       <span className="text-xs text-emerald-400/80">
-                        Visual:
+                        {MESSAGES.chat.fingerprintModal.labels.visually}
                       </span>
                       <span className="text-lg">{peerFingerprintEmojis}</span>
                     </div>
@@ -217,16 +219,17 @@ export function FingerprintVerificationModal({
 
               <div className="bg-emerald-900/10 border border-emerald-700/30 rounded-lg px-4 py-3">
                 <p className="text-xs text-emerald-400/90 leading-relaxed mb-2">
-                  <strong className="text-emerald-300">Инструкция:</strong>{' '}
-                  Сравните эти fingerprint'ы вне приложения (например, по
-                  телефону или в другом канале связи). Если они совпадают,
-                  нажмите "Подтвердить". Это защитит вас от атак типа
-                  man-in-the-middle.
+                  <strong className="text-emerald-300">
+                    {MESSAGES.chat.fingerprintModal.info.instructionTitle}
+                  </strong>{' '}
+                  {MESSAGES.chat.fingerprintModal.info.instructionText}
                 </p>
                 <p className="text-xs text-emerald-500/70">
-                  💡 <strong>Совет:</strong> Используйте визуальные коды
-                  (эмодзи) для быстрого сравнения по телефону — они легче
-                  запоминаются и произносятся.
+                  {MESSAGES.chat.fingerprintModal.info.tip.emoji}{' '}
+                  <strong>
+                    {MESSAGES.chat.fingerprintModal.info.tip.title}
+                  </strong>{' '}
+                  {MESSAGES.chat.fingerprintModal.info.tip.text}
                 </p>
               </div>
 
@@ -257,7 +260,7 @@ export function FingerprintVerificationModal({
                     />
                   </svg>
                   <p className="text-sm text-emerald-300">
-                    Identity подтверждён
+                    {MESSAGES.chat.security.identityVerifiedLabel}
                   </p>
                 </div>
               </div>
@@ -271,7 +274,7 @@ export function FingerprintVerificationModal({
             onClick={onClose}
             className="px-4 py-2 text-sm font-medium text-emerald-400 hover:text-emerald-200 transition-colors"
           >
-            Закрыть
+            {MESSAGES.chat.fingerprintModal.actions.close}
           </button>
           {!isLoading && !error && peerFingerprint && !isVerified && (
             <button
@@ -279,7 +282,7 @@ export function FingerprintVerificationModal({
               onClick={handleVerify}
               className="px-4 py-2 text-sm font-medium bg-emerald-500 hover:bg-emerald-400 text-black rounded-md transition-colors"
             >
-              Подтвердить
+              {MESSAGES.chat.fingerprintModal.actions.verify}
             </button>
           )}
         </div>

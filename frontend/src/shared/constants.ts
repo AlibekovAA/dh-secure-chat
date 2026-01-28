@@ -17,7 +17,8 @@ export const VIDEO_THUMBNAIL_REQUEST_IDLE_TIMEOUT_MS = 500;
 export const VIDEO_THUMBNAIL_INTERSECTION_THRESHOLD = 0.1;
 export const VIDEO_THUMBNAIL_ROOT_MARGIN = '50px';
 
-export const EMOJI_PICKER_ESTIMATED_WIDTH = 220;
+export const EMOJI_PICKER_WIDTH = 300;
+export const EMOJI_PICKER_ESTIMATED_WIDTH = EMOJI_PICKER_WIDTH;
 export const EMOJI_PICKER_ESTIMATED_HEIGHT = 120;
 export const EMOJI_PICKER_PAGE_SIZE = 4;
 export const EMOJI_PICKER_PADDING = 10;
@@ -93,7 +94,8 @@ export const EMOJI_LIST = [
 
 export const RESULTS_PER_PAGE = 4;
 
-export const MENU_ESTIMATED_WIDTH = 260;
+export const MENU_WIDTH = 260;
+export const MENU_ESTIMATED_WIDTH = MENU_WIDTH;
 export const MENU_ESTIMATED_HEIGHT = 140;
 export const MENU_PADDING = 10;
 
@@ -122,8 +124,6 @@ export const SESSION_EXPIRED_ERROR = 'session_expired';
 export const MS_PER_SECOND = 1000;
 export const BYTES_PER_MB = 1024 * 1024;
 
-export const SCROLL_DELAY_MS = 50;
-export const SCROLL_DELAY_TYPING_MS = 100;
 export const TYPING_INDICATOR_TIMEOUT_MS = 3000;
 
 export const VIDEO_THUMBNAIL_SEEK_TIME = 0.1;

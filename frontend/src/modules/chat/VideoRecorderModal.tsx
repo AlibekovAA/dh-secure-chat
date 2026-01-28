@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { checkMediaRecorderSupport } from '@/shared/browser-support';
 import { Spinner } from '@/shared/ui/Spinner';
+import { MESSAGES } from '@/shared/messages';
 import {
   VIDEO_RECORDER_CHECK_INTERVAL_MS,
   VIDEO_RECORDER_DURATION_UPDATE_DELAY_MS,
@@ -103,7 +104,7 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
         const message =
           err instanceof Error
             ? err.message
-            : 'Не удалось получить доступ к камере';
+            : MESSAGES.chat.videoRecorderModal.errors.noCameraAccess;
         setError(message);
         onError(message);
         setIsInitializing(false);
@@ -178,7 +179,9 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
 
       mediaRecorder.onerror = (event) => {
         const errorEvent = event as ErrorEvent;
-        const message = errorEvent.message || 'Ошибка при записи видео';
+        const message =
+          errorEvent.message ||
+          MESSAGES.chat.videoRecorderModal.errors.recordingError;
         setError(message);
         onError(message);
         cleanup();
@@ -223,12 +226,13 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
         });
         if (validationError) {
           const errorMessage = getFileValidationError(validationError);
+          const mb = (blob.size / BYTES_PER_MB).toFixed(1);
           const message = errorMessage
             ? errorMessage.replace(
-                'Файл',
-                `Видео (${(blob.size / BYTES_PER_MB).toFixed(1)} MB)`
+                MESSAGES.chat.videoRecorderModal.labels.file,
+                MESSAGES.chat.videoRecorderModal.labels.videoFile(mb)
               )
-            : `Видео слишком большое (${(blob.size / BYTES_PER_MB).toFixed(1)} MB)`;
+            : MESSAGES.chat.videoRecorderModal.labels.videoTooLarge(mb);
           setError(message);
           onError(message);
           cleanup();
@@ -264,7 +268,9 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
       }, VIDEO_RECORDER_DURATION_UPDATE_INTERVAL_MS);
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : 'Не удалось начать запись видео';
+        err instanceof Error
+          ? err.message
+          : MESSAGES.chat.videoRecorderModal.errors.failedToStartRecording;
       setError(message);
       onError(message);
       setIsRecording(false);
@@ -315,7 +321,7 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
               <div className="text-center flex flex-col items-center gap-3">
                 <Spinner size="lg" borderColorClass="border-emerald-400" />
                 <p className="text-emerald-400 text-sm">
-                  Инициализация камеры...
+                  {MESSAGES.chat.videoRecorderModal.labels.initializingCamera}
                 </p>
               </div>
             </div>
@@ -328,7 +334,7 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
                   onClick={onCancel}
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors"
                 >
-                  Закрыть
+                  {MESSAGES.chat.videoRecorderModal.labels.close}
                 </button>
               </div>
             </div>
@@ -400,10 +406,10 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
                   </div>
                   <div className="text-center space-y-2">
                     <p className="text-emerald-300 text-lg font-medium">
-                      Готов к записи
+                      {MESSAGES.chat.videoRecorderModal.labels.readyTitle}
                     </p>
                     <p className="text-emerald-400/80 text-sm">
-                      Нажмите ▶ для начала
+                      {MESSAGES.chat.videoRecorderModal.labels.readyHint}
                     </p>
                   </div>
                 </div>
@@ -430,7 +436,7 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
                       type="button"
                       onClick={startRecording}
                       className="flex items-center justify-center w-14 h-14 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white transition-colors shadow-lg"
-                      title="Начать запись"
+                      title={MESSAGES.chat.videoRecorderModal.titles.start}
                     >
                       <svg
                         className="w-6 h-6"
@@ -444,9 +450,9 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
                       type="button"
                       onClick={onCancel}
                       className="px-4 py-2 text-emerald-400 hover:text-emerald-200 transition-colors"
-                      title="Отменить"
+                      title={MESSAGES.chat.videoRecorderModal.titles.cancel}
                     >
-                      Отменить
+                      {MESSAGES.chat.videoRecorderModal.titles.cancel}
                     </button>
                   </>
                 ) : (
@@ -455,7 +461,7 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
                       type="button"
                       onClick={stopRecording}
                       className="flex items-center justify-center w-14 h-14 rounded-full bg-red-600 hover:bg-red-700 text-white transition-colors shadow-lg"
-                      title="Остановить запись"
+                      title={MESSAGES.chat.videoRecorderModal.titles.stop}
                     >
                       <div className="w-5 h-5 bg-white rounded-sm" />
                     </button>
@@ -463,9 +469,11 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
                       type="button"
                       onClick={cancelRecording}
                       className="px-4 py-2 text-emerald-400 hover:text-emerald-200 transition-colors"
-                      title="Отменить запись"
+                      title={
+                        MESSAGES.chat.videoRecorderModal.titles.cancelRecording
+                      }
                     >
-                      Отменить
+                      {MESSAGES.chat.videoRecorderModal.titles.cancel}
                     </button>
                   </>
                 )}

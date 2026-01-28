@@ -5,6 +5,7 @@ import {
   WEBSOCKET_MAX_RECONNECT_ATTEMPTS,
   WEBSOCKET_BASE_DELAY_MS,
 } from '@/shared/constants';
+import { MESSAGES } from '@/shared/messages';
 
 type MessageHandler = (message: WSMessage) => void;
 
@@ -111,15 +112,13 @@ export class WebSocketClient {
                         this.isRefreshingToken = false;
                         this.handlers.onError?.(
                           new Error(
-                            'Не удалось обновить токен доступа. Войдите снова.'
+                            MESSAGES.common.websocket.tokenRefreshFailed
                           )
                         );
                       } catch (err) {
                         this.isRefreshingToken = false;
                         this.handlers.onError?.(
-                          new Error(
-                            'Ошибка при обновлении токена доступа. Войдите снова.'
-                          )
+                          new Error(MESSAGES.common.websocket.tokenRefreshError)
                         );
                       }
                     })();
@@ -129,7 +128,7 @@ export class WebSocketClient {
                   this.handlers.onError?.(
                     new Error(
                       isTokenError
-                        ? 'Токен доступа истек. Попытка обновления...'
+                        ? MESSAGES.common.websocket.tokenExpiredRefreshing
                         : payload.error
                     )
                   );
@@ -159,13 +158,17 @@ export class WebSocketClient {
             }
           }
         } catch (err) {
-          this.handlers.onError?.(new Error('Ошибка обработки сообщения'));
+          this.handlers.onError?.(
+            new Error(MESSAGES.common.websocket.messageHandlingError)
+          );
         }
       };
 
       this.ws.onerror = () => {
         this.setState('error');
-        this.handlers.onError?.(new Error('Ошибка подключения'));
+        this.handlers.onError?.(
+          new Error(MESSAGES.common.websocket.connectionError)
+        );
       };
 
       this.ws.onclose = () => {
@@ -180,7 +183,9 @@ export class WebSocketClient {
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
           this.scheduleReconnect();
         } else {
-          this.handlers.onError?.(new Error('Не удалось подключиться'));
+          this.handlers.onError?.(
+            new Error(MESSAGES.common.websocket.failedToConnect)
+          );
         }
       };
     } catch (err) {
@@ -188,7 +193,7 @@ export class WebSocketClient {
       this.handlers.onError?.(
         err instanceof Error
           ? err
-          : new Error('Не удалось установить соединение')
+          : new Error(MESSAGES.common.websocket.failedToEstablishConnection)
       );
     }
   }
@@ -221,7 +226,9 @@ export class WebSocketClient {
       }
       this.ws.send(JSON.stringify(messageToSend));
     } else {
-      this.handlers.onError?.(new Error('WebSocket не подключен'));
+      this.handlers.onError?.(
+        new Error(MESSAGES.common.websocket.notConnected)
+      );
     }
   }
 

@@ -1,3 +1,5 @@
+import { MESSAGES } from '@/shared/messages';
+
 export async function signEphemeralKey(
   ephemeralPublicKeyBase64: string,
   identityPrivateKey: CryptoKey
@@ -34,7 +36,7 @@ export async function signEphemeralKey(
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     throw new Error(
-      `Failed to sign ephemeral key: ${errorMessage}. Identity key may be invalid or corrupted.`
+      MESSAGES.crypto.signature.errors.signEphemeralKeyFailed(errorMessage)
     );
   }
 }

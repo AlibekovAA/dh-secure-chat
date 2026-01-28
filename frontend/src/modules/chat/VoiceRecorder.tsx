@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { AudioRecorder } from '@/shared/audio/audio-recorder';
 import { checkMediaRecorderSupport } from '@/shared/browser-support';
 import { MAX_VOICE_DURATION_SECONDS } from '@/shared/constants';
+import { MESSAGES } from '@/shared/messages';
 
 type Props = {
   onRecorded: (file: File, duration: number) => void;
@@ -32,7 +33,7 @@ export function VoiceRecorder({
       const message =
         error instanceof Error
           ? error.message
-          : 'Запись аудио не поддерживается';
+          : MESSAGES.chat.voiceRecorder.errors.notSupported;
       onError(message);
     }
 
@@ -72,7 +73,7 @@ export function VoiceRecorder({
       onRecordingChange?.(false);
 
       if (!blob || blob.size === 0) {
-        onError('Голосовое сообщение не было записано. Попробуйте снова');
+        onError(MESSAGES.chat.voiceRecorder.errors.notRecorded);
         recorder.cleanup();
         recorderRef.current = null;
         return;
@@ -84,7 +85,7 @@ export function VoiceRecorder({
       });
 
       if (file.size === 0) {
-        onError('Записанное голосовое сообщение пустое. Попробуйте снова');
+        onError(MESSAGES.chat.voiceRecorder.errors.emptyRecording);
         recorder.cleanup();
         recorderRef.current = null;
         return;
@@ -96,7 +97,9 @@ export function VoiceRecorder({
       recorderRef.current = null;
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : 'Ошибка при остановке записи';
+        error instanceof Error
+          ? error.message
+          : MESSAGES.chat.voiceRecorder.errors.stopError;
       onError(message);
       isRecordingRef.current = false;
       setIsRecording(false);
@@ -138,7 +141,7 @@ export function VoiceRecorder({
       const message =
         error instanceof Error
           ? error.message
-          : 'Не удалось начать запись. Проверьте разрешения микрофона.';
+          : MESSAGES.chat.voiceRecorder.errors.startError;
       onError(message);
       isRecordingRef.current = false;
       setIsRecording(false);
@@ -186,7 +189,7 @@ export function VoiceRecorder({
             type="button"
             onClick={stopRecording}
             className="flex-shrink-0 w-10 h-10 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center transition-colors"
-            title="Остановить запись"
+            title={MESSAGES.chat.voiceRecorder.titles.stop}
           >
             <div className="w-4 h-4 bg-white rounded-sm" />
           </button>
@@ -200,9 +203,9 @@ export function VoiceRecorder({
             type="button"
             onClick={cancelRecording}
             className="flex-shrink-0 px-2 py-1 text-xs text-emerald-400 hover:text-emerald-200 transition-colors"
-            title="Отменить запись"
+            title={MESSAGES.chat.voiceRecorder.titles.cancel}
           >
-            Отмена
+            {MESSAGES.chat.voiceRecorder.labels.cancel}
           </button>
         </>
       ) : (
@@ -211,7 +214,7 @@ export function VoiceRecorder({
           onClick={startRecording}
           disabled={disabled}
           className="flex-shrink-0 w-10 h-10 rounded-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-900/40 disabled:cursor-not-allowed text-white flex items-center justify-center transition-colors"
-          title="Записать голосовое сообщение"
+          title={MESSAGES.chat.voiceRecorder.titles.record}
         >
           <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
             <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />

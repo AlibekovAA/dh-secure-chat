@@ -6,6 +6,7 @@ import {
   TEXT_MIME_TYPES,
 } from '@/shared/constants';
 import { Spinner } from '@/shared/ui/Spinner';
+import { MESSAGES } from '@/shared/messages';
 
 type Props = {
   filename: string;
@@ -94,7 +95,7 @@ export function FileViewerModal({
           URL.revokeObjectURL(url);
         };
         img.onerror = () => {
-          setError('Не удалось загрузить изображение');
+          setError(MESSAGES.chat.fileViewerModal.errors.failedToLoadImage);
           URL.revokeObjectURL(url);
         };
         img.src = url;
@@ -112,10 +113,10 @@ export function FileViewerModal({
         .text()
         .then((text: string) => setTextContent(text))
         .catch((_err: unknown) => {
-          setError('Не удалось прочитать файл');
+          setError(MESSAGES.chat.fileViewerModal.errors.failedToReadFile);
         });
     } else {
-      setError('Просмотр этого типа файла не поддерживается');
+      setError(MESSAGES.chat.fileViewerModal.errors.unsupportedType);
     }
   }, [blob, mimeType, isProtected]);
 
@@ -228,7 +229,7 @@ export function FileViewerModal({
               className="px-4 py-2 text-sm font-medium bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 text-black rounded-md transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg shadow-emerald-500/30"
               style={{ willChange: 'transform' }}
             >
-              Скачать файл
+              {MESSAGES.chat.fileViewerModal.labels.downloadFile}
             </button>
           </div>
         </div>
@@ -297,7 +298,7 @@ export function FileViewerModal({
               <div className="flex flex-col items-center gap-3 w-full max-w-md px-4">
                 <Spinner size="md" borderColorClass="border-emerald-400" />
                 <p className="text-sm text-emerald-400/80">
-                  Подготовка видео...
+                  {MESSAGES.chat.fileViewerModal.labels.preparingVideo}
                 </p>
                 {videoProgress > 0 && (
                   <div className="w-full bg-emerald-900/30 rounded-full h-1.5 overflow-hidden">
@@ -317,7 +318,7 @@ export function FileViewerModal({
             <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-10">
               <div className="text-center">
                 <p className="text-sm text-red-400 mb-2">
-                  Ошибка загрузки видео
+                  {MESSAGES.chat.fileViewerModal.labels.videoLoadError}
                 </p>
                 <button
                   onClick={() => {
@@ -330,7 +331,7 @@ export function FileViewerModal({
                   }}
                   className="px-3 py-1.5 text-xs bg-emerald-500 hover:bg-emerald-400 text-black rounded transition-colors"
                 >
-                  Попробовать снова
+                  {MESSAGES.chat.fileViewerModal.labels.retry}
                 </button>
               </div>
             </div>
@@ -385,7 +386,7 @@ export function FileViewerModal({
               setVideoLoading(false);
             }}
           >
-            Ваш браузер не поддерживает воспроизведение видео.
+            {MESSAGES.chat.fileViewerModal.labels.videoNotSupported}
           </video>
         </div>
       );
@@ -394,7 +395,9 @@ export function FileViewerModal({
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
-          <p className="text-emerald-500/80 mb-2">Загрузка...</p>
+          <p className="text-emerald-500/80 mb-2">
+            {MESSAGES.chat.fileViewerModal.labels.loading}
+          </p>
         </div>
       </div>
     );
@@ -426,7 +429,7 @@ export function FileViewerModal({
           <div className="flex items-center gap-3 ml-4">
             {isProtected && (
               <span className="text-xs text-yellow-400 px-2 py-1 rounded bg-yellow-900/20 border border-yellow-700/40">
-                Только просмотр
+                {MESSAGES.chat.fileViewerModal.labels.viewOnly}
               </span>
             )}
             {!isProtected && (
@@ -448,14 +451,14 @@ export function FileViewerModal({
                     d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
                   />
                 </svg>
-                Скачать
+                {MESSAGES.chat.fileViewerModal.labels.download}
               </button>
             )}
             <button
               type="button"
               onClick={onClose}
               className="text-emerald-400 hover:text-emerald-200 smooth-transition rounded-md p-1.5 hover:bg-emerald-900/40"
-              aria-label="Закрыть"
+              aria-label={MESSAGES.chat.fileViewerModal.aria.close}
             >
               <svg
                 className="w-5 h-5"

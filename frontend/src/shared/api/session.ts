@@ -1,4 +1,5 @@
 import { apiClient } from '@/shared/api/client';
+import { MESSAGES } from '@/shared/messages';
 
 type ToastFn = (
   message: string,
@@ -47,7 +48,7 @@ export async function handleSessionExpired(
   const { silent = false } = options;
 
   if (!silent && showToast) {
-    showToast('Сессия истекла. Войдите снова', 'error');
+    showToast(MESSAGES.apiErrors.sessionExpired, 'error');
   }
 
   attachTokenToClient(null);

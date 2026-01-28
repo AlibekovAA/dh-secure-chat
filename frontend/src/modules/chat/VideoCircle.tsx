@@ -6,6 +6,7 @@ import {
   VIDEO_THUMBNAIL_ROOT_MARGIN,
 } from '@/shared/constants';
 import { Spinner } from '@/shared/ui/Spinner';
+import { MESSAGES } from '@/shared/messages';
 
 type Props = {
   blob: Blob;
@@ -157,7 +158,7 @@ export function VideoCircle({ blob, filename, fileId, onClick, isOwn }: Props) {
             : 'border-emerald-700/60 hover:border-emerald-600/80'
         } ${isLoading ? 'opacity-70' : 'opacity-100'} hover:scale-105 active:scale-95`}
         style={{ transform: 'translateZ(0)' }}
-        aria-label={`Воспроизвести видео: ${filename}`}
+        aria-label={MESSAGES.chat.videoCircle.aria.play(filename)}
       >
         {videoUrl ? (
           <>

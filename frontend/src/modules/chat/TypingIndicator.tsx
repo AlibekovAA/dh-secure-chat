@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { MESSAGES } from '@/shared/messages';
 
 type Props = {
   isVisible: boolean;
@@ -31,7 +32,7 @@ function TypingIndicatorComponent({ isVisible }: Props) {
             />
           </div>
           <span className="text-xs text-emerald-300/90 italic leading-relaxed font-medium">
-            печатает...
+            {MESSAGES.chat.typingIndicator.label}
           </span>
         </div>
       </div>

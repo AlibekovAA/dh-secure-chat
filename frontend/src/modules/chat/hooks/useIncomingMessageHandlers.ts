@@ -10,6 +10,7 @@ import type {
 import { decrypt } from '@/shared/crypto/encryption';
 import type { SessionKey } from '@/shared/crypto/session';
 import type { ChatMessage } from '@/modules/chat/useChatSession';
+import { MESSAGES } from '@/shared/messages';
 
 type UseIncomingMessageHandlersOptions = {
   sessionKeyRef: React.MutableRefObject<SessionKey | null>;
@@ -79,9 +80,7 @@ export function useIncomingMessageHandlers({
           },
         });
       } catch (err) {
-        setError(
-          'Не удалось расшифровать сообщение. Возможно, сессия была прервана.'
-        );
+        setError(MESSAGES.chat.incomingMessages.errors.decryptFailed);
       }
     },
     [peerId, sessionKeyRef, messageIdCounterRef, setMessages, setError, sendRef]
@@ -195,7 +194,7 @@ export function useIncomingMessageHandlers({
           })
         );
       } catch (err) {
-        setError('Не удалось расшифровать отредактированное сообщение.');
+        setError(MESSAGES.chat.incomingMessages.errors.decryptEditedFailed);
       }
     },
     [peerId, sessionKeyRef, setMessages, setError]

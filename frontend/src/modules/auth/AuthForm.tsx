@@ -3,11 +3,13 @@ import { login, register } from '@/modules/auth/api';
 import { useToast } from '@/shared/ui/useToast';
 import { getFriendlyErrorMessage } from '@/shared/api/error-handler';
 import { validateAuthForm } from '@/shared/validation';
+import { MESSAGES } from '@/shared/messages';
 import {
   generateIdentityKeyPair,
   exportPublicKey,
   saveIdentityPrivateKey,
 } from '@/shared/crypto/identity';
+import { USERNAME_MIN_LENGTH, USERNAME_MAX_LENGTH } from '@/shared/constants';
 
 type Mode = 'login' | 'register';
 
@@ -30,18 +32,19 @@ function calculatePasswordStrength(password: string): {
   const feedback: string[] = [];
 
   if (password.length >= 8) score += 1;
-  else feedback.push('Минимум 8 символов');
+  else feedback.push(MESSAGES.auth.passwordStrength.min8);
 
   if (password.length >= 12) score += 1;
 
   if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score += 1;
-  else if (/[a-zA-Z]/.test(password)) feedback.push('Добавьте заглавные буквы');
+  else if (/[a-zA-Z]/.test(password))
+    feedback.push(MESSAGES.auth.passwordStrength.addUppercaseLatin);
 
   if (/\d/.test(password)) score += 1;
-  else feedback.push('Добавьте цифры');
+  else feedback.push(MESSAGES.auth.passwordStrength.addDigits);
 
   if (/[^a-zA-Z0-9]/.test(password)) score += 1;
-  else feedback.push('Добавьте спецсимволы (!@#$%...)');
+  else feedback.push(MESSAGES.auth.passwordStrength.addSpecial);
 
   if (password.length >= 16) score += 1;
 
@@ -105,7 +108,9 @@ export function AuthForm({ onAuthenticated }: Props) {
     try {
       if (mode === 'login') {
         const result = await login(username, password);
-        showToast('Успешный вход', 'success', { duration: 2000 });
+        showToast(MESSAGES.auth.toasts.loginSuccess, 'success', {
+          duration: 2000,
+        });
         onAuthenticated(result.token);
         return;
       }
@@ -120,7 +125,7 @@ export function AuthForm({ onAuthenticated }: Props) {
           const errorMessage =
             err instanceof Error
               ? err.message
-              : 'Ошибка генерации ключей. Попробуйте ещё раз.';
+              : MESSAGES.auth.errors.keygenDefault;
           showToast(errorMessage, 'error');
           setSubmitting(false);
           return;
@@ -128,7 +133,9 @@ export function AuthForm({ onAuthenticated }: Props) {
       }
 
       await register(username, password, identityPubKey);
-      showToast('Регистрация прошла успешно.', 'success', { duration: 2000 });
+      showToast(MESSAGES.auth.toasts.registerSuccess, 'success', {
+        duration: 2000,
+      });
       switchMode('login', false);
       setConfirmPassword('');
       setSubmitting(false);
@@ -152,7 +159,7 @@ export function AuthForm({ onAuthenticated }: Props) {
               : 'bg-black text-emerald-400 hover:bg-emerald-900/40'
           }`}
         >
-          Вход
+          {MESSAGES.auth.tabs.login}
         </button>
         <button
           type="button"
@@ -163,7 +170,7 @@ export function AuthForm({ onAuthenticated }: Props) {
               : 'bg-black text-emerald-400 hover:bg-emerald-900/40'
           }`}
         >
-          Регистрация
+          {MESSAGES.auth.tabs.register}
         </button>
       </div>
 
@@ -173,7 +180,7 @@ export function AuthForm({ onAuthenticated }: Props) {
       >
         <div className="space-y-1">
           <label className="block text-sm text-emerald-300">
-            Имя пользователя
+            {MESSAGES.auth.labels.username}
           </label>
           <input
             ref={usernameInputRef}
@@ -194,19 +201,21 @@ export function AuthForm({ onAuthenticated }: Props) {
             >
               <p className="text-xs text-emerald-500/70 mt-1">
                 {username.length < 3
-                  ? 'Минимум 3 символа'
+                  ? MESSAGES.auth.info.usernameMin(USERNAME_MIN_LENGTH)
                   : username.length > 32
-                    ? 'Максимум 32 символа'
+                    ? MESSAGES.auth.info.usernameMax(USERNAME_MAX_LENGTH)
                     : /^[a-zA-Z0-9_-]+$/.test(username)
-                      ? '✓ Корректное имя'
-                      : 'Только латинские буквы, цифры, _ и -'}
+                      ? MESSAGES.auth.info.usernameOk
+                      : MESSAGES.auth.info.usernameAllowed}
               </p>
             </div>
           )}
         </div>
 
         <div className="space-y-1">
-          <label className="block text-sm text-emerald-300">Пароль</label>
+          <label className="block text-sm text-emerald-300">
+            {MESSAGES.auth.labels.password}
+          </label>
           <div className="relative">
             <input
               type={showPassword ? 'text' : 'password'}
@@ -223,7 +232,9 @@ export function AuthForm({ onAuthenticated }: Props) {
               onClick={() => setShowPassword((current) => !current)}
               className="absolute inset-y-0 right-0 flex items-center px-3 text-xs text-emerald-400 hover:text-emerald-200 hover:bg-emerald-900/40 rounded-r-md"
             >
-              {showPassword ? 'Скрыть' : 'Показать'}
+              {showPassword
+                ? MESSAGES.auth.actions.hide
+                : MESSAGES.auth.actions.show}
             </button>
           </div>
           {mode === 'register' && (
@@ -274,12 +285,12 @@ export function AuthForm({ onAuthenticated }: Props) {
                     }`}
                   >
                     {passwordStrength.strength === 'weak'
-                      ? 'Слабый'
+                      ? MESSAGES.auth.passwordStrength.labels.weak
                       : passwordStrength.strength === 'medium'
-                        ? 'Средний'
+                        ? MESSAGES.auth.passwordStrength.labels.medium
                         : passwordStrength.strength === 'strong'
-                          ? 'Сильный'
-                          : 'Очень сильный'}
+                          ? MESSAGES.auth.passwordStrength.labels.strong
+                          : MESSAGES.auth.passwordStrength.labels.veryStrong}
                   </p>
                   {passwordStrength.feedback.length > 0 && (
                     <p className="text-xs text-emerald-500/70">
@@ -292,8 +303,7 @@ export function AuthForm({ onAuthenticated }: Props) {
           )}
           {mode === 'register' && (
             <p className="text-xs text-emerald-500/70">
-              Восстановление пароля невозможно. Сохраните пароль в надёжном
-              месте.
+              {MESSAGES.auth.info.noPasswordRecovery}
             </p>
           )}
         </div>
@@ -301,7 +311,7 @@ export function AuthForm({ onAuthenticated }: Props) {
         {mode === 'register' && (
           <div className="space-y-1">
             <label className="block text-sm text-emerald-300">
-              Подтвердите пароль
+              {MESSAGES.auth.labels.confirmPassword}
             </label>
             <div className="relative">
               <input
@@ -323,7 +333,9 @@ export function AuthForm({ onAuthenticated }: Props) {
                 onClick={() => setShowConfirmPassword((current) => !current)}
                 className="absolute inset-y-0 right-0 flex items-center px-3 text-xs text-emerald-400 hover:text-emerald-200 hover:bg-emerald-900/40 rounded-r-md"
               >
-                {showConfirmPassword ? 'Скрыть' : 'Показать'}
+                {showConfirmPassword
+                  ? MESSAGES.auth.actions.hide
+                  : MESSAGES.auth.actions.show}
               </button>
             </div>
             <div
@@ -341,8 +353,8 @@ export function AuthForm({ onAuthenticated }: Props) {
                 }`}
               >
                 {password === confirmPassword
-                  ? 'Пароли совпадают'
-                  : 'Пароли не совпадают'}
+                  ? MESSAGES.auth.info.passwordsMatch
+                  : MESSAGES.auth.info.passwordsMismatch}
               </p>
             </div>
           </div>
@@ -355,11 +367,11 @@ export function AuthForm({ onAuthenticated }: Props) {
         >
           {submitting
             ? mode === 'login'
-              ? 'Входим...'
-              : 'Регистрируем...'
+              ? MESSAGES.auth.actions.loggingIn
+              : MESSAGES.auth.actions.registering
             : mode === 'login'
-              ? 'Войти'
-              : 'Зарегистрироваться'}
+              ? MESSAGES.auth.actions.login
+              : MESSAGES.auth.actions.register}
         </button>
       </form>
     </div>

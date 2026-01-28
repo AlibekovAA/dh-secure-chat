@@ -534,6 +534,5 @@ make go-test-auth-coverage     # С HTML отчётом (coverage.html)
 ## Планы развития
 
 - [ ] Fallback библиотека для Web Crypto API
-- [ ] Виртуализация списка сообщений (1000+ сообщений)
 
 ---

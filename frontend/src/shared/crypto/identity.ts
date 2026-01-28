@@ -1,5 +1,6 @@
 import { checkWebCryptoSupport as checkBrowserSupport } from '@/shared/browser-support';
 import { IDENTITY_KEY_STORAGE, MASTER_KEY_STORAGE } from '@/shared/constants';
+import { MESSAGES } from '@/shared/messages';
 
 export type IdentityKeyPair = {
   publicKey: CryptoKey;
@@ -30,16 +31,12 @@ export async function generateIdentityKeyPair(): Promise<IdentityKeyPair> {
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
     if (error.includes('not supported') || error.includes('not implemented')) {
-      throw new Error(
-        'Генерация ключей не поддерживается. Используйте современный браузер (Chrome, Firefox, Safari, Edge).'
-      );
+      throw new Error(MESSAGES.crypto.identity.errors.keygenNotSupported);
     }
     if (error.includes('secure context') || error.includes('HTTPS')) {
-      throw new Error(
-        'Для генерации ключей требуется безопасное соединение (HTTPS).'
-      );
+      throw new Error(MESSAGES.crypto.identity.errors.keygenRequiresHttps);
     }
-    throw new Error(`Ошибка генерации ключей: ${error}`);
+    throw new Error(MESSAGES.crypto.identity.errors.keygenFailed(error));
   }
 }
 

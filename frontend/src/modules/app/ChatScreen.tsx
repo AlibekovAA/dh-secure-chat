@@ -3,6 +3,7 @@ import type { UserSummary } from '@/modules/chat/api';
 import { ChatWindow } from '@/modules/chat/ChatWindow';
 import { RESULTS_PER_PAGE } from '@/shared/constants';
 import { Spinner } from '@/shared/ui/Spinner';
+import { MESSAGES } from '@/shared/messages';
 
 type Profile = {
   id: string;
@@ -65,7 +66,7 @@ export function ChatScreen({
             dh-secure-chat
           </h1>
           <p className="text-[11px] text-emerald-500/80">
-            Защищённый мессенджер с E2E шифрованием и DH‑обменом ключами
+            {MESSAGES.app.chatScreen.subtitle}
           </p>
         </div>
         <div className="flex items-center gap-3 text-xs text-emerald-400">
@@ -80,7 +81,7 @@ export function ChatScreen({
             onClick={onLogout}
             className="text-emerald-400 hover:text-emerald-200 underline underline-offset-4 smooth-transition hover-lift press-scale rounded px-2 py-1 hover:bg-emerald-900/40"
           >
-            Выйти
+            {MESSAGES.app.chatScreen.actions.logout}
           </button>
         </div>
       </header>
@@ -89,22 +90,22 @@ export function ChatScreen({
         <div className="w-full max-w-4xl grid gap-6 md:grid-cols-2">
           <section className="rounded-xl glass-effect px-5 py-4 text-sm text-emerald-200 smooth-transition hover:border-emerald-600/60">
             <h2 className="text-sm font-semibold text-emerald-300 mb-2">
-              Профиль
+              {MESSAGES.app.chatScreen.profile.title}
             </h2>
             <p className="text-xs text-emerald-500/80 mb-1">
-              Имя: {profile?.username ?? '…'}
+              {MESSAGES.app.chatScreen.profile.name} {profile?.username ?? '…'}
             </p>
             <p className="text-xs text-emerald-500/80 break-all mb-3 font-mono">
               ID: {profile?.id ?? '…'}
             </p>
             <p className="text-xs text-emerald-500/70">
-              Выберите собеседника, чтобы начать защищённый диалог.
+              {MESSAGES.app.chatScreen.profile.choosePeer}
             </p>
           </section>
 
           <section className="rounded-xl glass-effect px-5 py-4 text-sm text-emerald-200 smooth-transition hover:border-emerald-600/60">
             <h2 className="text-sm font-semibold text-emerald-300 mb-2">
-              Найти собеседника
+              {MESSAGES.app.chatScreen.search.title}
             </h2>
             <div className="space-y-2">
               <div className="relative">
@@ -115,7 +116,7 @@ export function ChatScreen({
                   onKeyDown={handleKeyDown}
                   disabled={isSearching}
                   className="w-full rounded-md bg-black border border-emerald-700 pr-24 px-3 py-2 text-sm text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed smooth-transition hover:border-emerald-600 focus:glow-emerald-hover"
-                  placeholder="Имя пользователя..."
+                  placeholder={MESSAGES.app.chatScreen.search.placeholder}
                   autoComplete="off"
                 />
                 <div className="absolute inset-y-0 right-0 flex items-center gap-1 pr-1 w-24">
@@ -124,7 +125,9 @@ export function ChatScreen({
                       type="button"
                       onClick={() => onSearchQueryChange('')}
                       className="flex items-center justify-center w-5 h-5 rounded text-emerald-500 hover:text-emerald-300 hover:bg-emerald-900/40 transition-colors"
-                      aria-label="Очистить поиск"
+                      aria-label={
+                        MESSAGES.app.chatScreen.actions.clearSearchAria
+                      }
                     >
                       <svg
                         className="w-4 h-4"
@@ -150,7 +153,7 @@ export function ChatScreen({
                     {isSearching ? (
                       <Spinner size="xs" borderColorClass="border-black" />
                     ) : (
-                      'Поиск'
+                      MESSAGES.app.chatScreen.actions.search
                     )}
                   </button>
                 </div>
@@ -180,11 +183,10 @@ export function ChatScreen({
                       </svg>
                     </div>
                     <p className="text-sm font-medium text-emerald-400/80 mb-1">
-                      Пользователь не найден
+                      {MESSAGES.app.chatScreen.search.userNotFound}
                     </p>
                     <p className="text-xs text-emerald-500/60 text-center max-w-xs">
-                      Попробуйте изменить запрос или проверьте правильность
-                      написания
+                      {MESSAGES.app.chatScreen.search.userNotFoundHint}
                     </p>
                   </div>
                 ) : searchResults.length === 0 ? (
@@ -205,7 +207,7 @@ export function ChatScreen({
                       </svg>
                     </div>
                     <p className="text-xs text-emerald-500/50 text-center">
-                      Введите имя пользователя для поиска
+                      {MESSAGES.app.chatScreen.search.enterUsernameToSearch}
                     </p>
                   </div>
                 ) : (

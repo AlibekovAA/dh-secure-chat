@@ -43,7 +43,7 @@ type MessageHandlerOptions = {
   handlers: MessageHandlers;
   setState: (updater: (state: ChatSessionState) => ChatSessionState) => void;
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
-  setIsPeerTyping: (typing: boolean) => void;
+  setPeerActivity: (activity: 'typing' | 'voice' | 'video' | null) => void;
   clearPendingAcks: () => void;
   clearSession: () => void;
   clearFileBuffers: () => void;
@@ -66,7 +66,7 @@ export function useMessageHandler({
   handlers,
   setState,
   setMessages,
-  setIsPeerTyping,
+  setPeerActivity,
   clearPendingAcks,
   clearSession,
   clearFileBuffers,
@@ -177,13 +177,16 @@ export function useMessageHandler({
         case 'typing': {
           const payload = message.payload as TypingPayload;
           if (payload.from === peerId) {
-            setIsPeerTyping(payload.is_typing);
+            const nextActivity = payload.is_typing
+              ? (payload.activity ?? 'typing')
+              : null;
+            setPeerActivity(nextActivity);
             if (typingTimeoutRef.current) {
               clearTimeout(typingTimeoutRef.current);
             }
             if (payload.is_typing) {
               typingTimeoutRef.current = setTimeout(() => {
-                setIsPeerTyping(false);
+                setPeerActivity(null);
               }, 3000) as unknown as number;
             }
           }
@@ -220,7 +223,7 @@ export function useMessageHandler({
       handlers,
       setState,
       setMessages,
-      setIsPeerTyping,
+      setPeerActivity,
       clearPendingAcks,
       clearSession,
       clearFileBuffers,

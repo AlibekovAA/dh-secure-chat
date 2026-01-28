@@ -1,4 +1,5 @@
 import { AuthForm } from '@/modules/auth/AuthForm';
+import { MESSAGES } from '@/shared/messages';
 
 type Props = {
   onAuthenticated(token: string): void;
@@ -13,8 +14,7 @@ export function AuthScreen({ onAuthenticated }: Props) {
             dh-secure-chat
           </h1>
           <p className="text-sm text-emerald-500/80 leading-relaxed">
-            End-to-end зашифрованный чат 1-на-1. Начните с регистрации или
-            входа.
+            {MESSAGES.app.authScreen.description}
           </p>
         </header>
         <AuthForm onAuthenticated={onAuthenticated} />

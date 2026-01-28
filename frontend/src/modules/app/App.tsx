@@ -21,6 +21,7 @@ import {
   clearSessionStorageSideEffects,
   handleSessionExpired,
 } from '@/shared/api/session';
+import { MESSAGES } from '@/shared/messages';
 
 const AuthScreen = lazy(() =>
   retryImport(() =>
@@ -159,7 +160,7 @@ export function App() {
         } else {
           const friendly = getFriendlyErrorMessage(
             err,
-            'Не удалось получить профиль. Войдите снова'
+            MESSAGES.app.errors.failedToLoadProfile
           );
           if (friendly) {
             showToast(friendly, 'error');
@@ -211,7 +212,7 @@ export function App() {
       } else {
         const friendly = getFriendlyErrorMessage(
           err,
-          'Ошибка поиска пользователей'
+          MESSAGES.apiErrors.searchFailed
         );
         showToast(friendly, 'error');
         setSearchResults([]);

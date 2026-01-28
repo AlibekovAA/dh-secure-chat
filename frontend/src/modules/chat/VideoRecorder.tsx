@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { checkMediaRecorderSupport } from '@/shared/browser-support';
 import { VideoRecorderModal } from '@/modules/chat/VideoRecorderModal';
+import { MESSAGES } from '@/shared/messages';
 
 type Props = {
   onRecorded: (file: File, duration: number) => void;
@@ -23,7 +24,7 @@ export function VideoRecorder({ onRecorded, onError, disabled }: Props) {
       const message =
         error instanceof Error
           ? error.message
-          : 'Запись видео не поддерживается';
+          : MESSAGES.chat.videoRecorder.errors.notSupported;
       onError(message);
     }
   };
@@ -48,7 +49,7 @@ export function VideoRecorder({ onRecorded, onError, disabled }: Props) {
         onClick={handleClick}
         disabled={disabled}
         className="flex-shrink-0 w-10 h-10 rounded-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-900/40 disabled:cursor-not-allowed text-white flex items-center justify-center transition-colors"
-        title="Записать видео сообщение"
+        title={MESSAGES.chat.videoRecorder.titles.record}
       >
         <svg
           className="w-5 h-5"

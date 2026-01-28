@@ -1,4 +1,5 @@
 import { checkMediaRecorderSupport } from '@/shared/browser-support';
+import { MESSAGES } from '@/shared/messages';
 
 export type RecordingState = 'idle' | 'recording' | 'stopped' | 'error';
 
@@ -28,7 +29,7 @@ export class AudioRecorder {
     checkMediaRecorderSupport();
 
     if (this.state === 'recording') {
-      throw new Error('Запись уже начата');
+      throw new Error(MESSAGES.common.audioRecorder.errors.alreadyStarted);
     }
 
     try {
@@ -50,7 +51,9 @@ export class AudioRecorder {
         const timeout = setTimeout(() => {
           if (this.startResolve === resolve) {
             this.startResolve = null;
-            reject(new Error('Таймаут запуска записи'));
+            reject(
+              new Error(MESSAGES.common.audioRecorder.errors.startTimeout)
+            );
           }
         }, 5000);
 
@@ -78,7 +81,11 @@ export class AudioRecorder {
             this.startResolve = null;
             this.state = 'error';
             this.stopStream();
-            reject(new Error('Ошибка MediaRecorder при запуске'));
+            reject(
+              new Error(
+                MESSAGES.common.audioRecorder.errors.mediaRecorderStartError
+              )
+            );
           }
         };
       });
@@ -136,7 +143,11 @@ export class AudioRecorder {
         this.stopStream();
         throw startError instanceof Error
           ? startError
-          : new Error(`Не удалось начать запись: ${startError}`);
+          : new Error(
+              MESSAGES.common.audioRecorder.errors.failedToStart(
+                String(startError)
+              )
+            );
       }
     } catch (error) {
       this.state = 'error';

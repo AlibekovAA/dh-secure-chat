@@ -4,6 +4,7 @@ import { ToastProvider } from '@/shared/ui/ToastProvider';
 import { ErrorBoundary } from '@/shared/ui/ErrorBoundary';
 import { LoadingSpinner } from '@/shared/ui/LoadingSpinner';
 import { retryImport } from '@/shared/utils/retry-import';
+import { MESSAGES } from '@/shared/messages';
 import '@/styles/index.css';
 
 const App = lazy(() =>
@@ -57,9 +58,7 @@ window.addEventListener('unhandledrejection', (event) => {
       event.reason.message?.includes('404'))
   ) {
     event.preventDefault();
-    const shouldReload = window.confirm(
-      'Обнаружена устаревшая версия приложения. Перезагрузить страницу?'
-    );
+    const shouldReload = window.confirm(MESSAGES.common.main.confirmReload);
     if (shouldReload) {
       window.location.reload();
     }

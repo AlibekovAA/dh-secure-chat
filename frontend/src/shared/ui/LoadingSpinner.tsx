@@ -1,7 +1,8 @@
 import { Spinner } from '@/shared/ui/Spinner';
+import { MESSAGES } from '@/shared/messages';
 
 export function LoadingSpinner({
-  message = 'Загрузка...',
+  message = MESSAGES.common.loading.default,
 }: {
   message?: string;
 }) {

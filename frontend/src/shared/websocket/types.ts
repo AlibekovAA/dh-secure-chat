@@ -97,6 +97,7 @@ export type TypingPayload = {
   to: string;
   from?: string;
   is_typing: boolean;
+  activity?: 'typing' | 'voice' | 'video';
 };
 
 export type ReactionPayload = {

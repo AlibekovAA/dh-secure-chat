@@ -5,6 +5,7 @@ import type { SessionKey } from '@/shared/crypto/session';
 import type { ChatMessage } from '@/modules/chat/useChatSession';
 import { extractDurationFromFilename, isVideoFile } from '@/modules/chat/utils';
 import type { WSMessage } from '@/shared/websocket/types';
+import { MESSAGES } from '@/shared/messages';
 
 type FileBuffer = {
   chunks: Array<{ ciphertext: string; nonce: string }>;
@@ -58,7 +59,10 @@ export function useFileTransfer({
         const chunk = chunks[i];
         if (!chunk || !chunk.ciphertext || !chunk.nonce) {
           setError(
-            `Не все части файла получены (${sortedChunks.length}/${expectedChunks})`
+            MESSAGES.chat.fileTransfer.errors.missingChunks(
+              sortedChunks.length,
+              expectedChunks
+            )
           );
           return;
         }
@@ -72,7 +76,7 @@ export function useFileTransfer({
         );
 
         if (!decryptedBlob || decryptedBlob.size === 0) {
-          setError('Получен пустой файл');
+          setError(MESSAGES.chat.fileTransfer.errors.emptyFile);
           fileBuffersRef.current.delete(fileId);
           return;
         }
@@ -81,7 +85,7 @@ export function useFileTransfer({
         const blob = new Blob([decryptedBlob], { type: mimeType });
 
         if (!blob || blob.size === 0) {
-          setError('Получен пустой файл');
+          setError(MESSAGES.chat.fileTransfer.errors.emptyFile);
           fileBuffersRef.current.delete(fileId);
           return;
         }
@@ -141,7 +145,7 @@ export function useFileTransfer({
           });
         }
       } catch (err) {
-        setError('Не удалось расшифровать файл');
+        setError(MESSAGES.chat.fileTransfer.errors.decryptFailed);
         fileBuffersRef.current.delete(fileId);
       }
     },

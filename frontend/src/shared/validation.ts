@@ -7,6 +7,7 @@ import {
   MAX_MESSAGE_LENGTH,
   MAX_SEARCH_QUERY_LENGTH,
 } from '@/shared/constants';
+import { MESSAGES } from '@/shared/messages';
 
 export type ValidationError = {
   field:
@@ -20,28 +21,27 @@ export type ValidationError = {
 
 export function validateUsername(username: string): ValidationError | null {
   if (!username || username.trim().length === 0) {
-    return { field: 'username', message: 'Введите имя пользователя' };
+    return { field: 'username', message: MESSAGES.validation.usernameRequired };
   }
 
   if (username.length < USERNAME_MIN_LENGTH) {
     return {
       field: 'username',
-      message: `Имя пользователя должно быть минимум ${USERNAME_MIN_LENGTH} символа`,
+      message: MESSAGES.validation.usernameMinLength(USERNAME_MIN_LENGTH),
     };
   }
 
   if (username.length > USERNAME_MAX_LENGTH) {
     return {
       field: 'username',
-      message: `Имя пользователя должно быть максимум ${USERNAME_MAX_LENGTH} символов`,
+      message: MESSAGES.validation.usernameMaxLength(USERNAME_MAX_LENGTH),
     };
   }
 
   if (!USERNAME_REGEX.test(username)) {
     return {
       field: 'username',
-      message:
-        'Имя пользователя может содержать только латинские буквы, цифры, _ и -',
+      message: MESSAGES.validation.usernameAllowedChars,
     };
   }
 
@@ -55,8 +55,7 @@ export function validateUsername(username: string): ValidationError | null {
   ) {
     return {
       field: 'username',
-      message:
-        'Имя пользователя не может начинаться или заканчиваться на _ или -',
+      message: MESSAGES.validation.usernameCannotStartOrEnd,
     };
   }
 
@@ -65,34 +64,34 @@ export function validateUsername(username: string): ValidationError | null {
 
 export function validatePassword(password: string): ValidationError | null {
   if (!password || password.trim().length === 0) {
-    return { field: 'password', message: 'Введите пароль' };
+    return { field: 'password', message: MESSAGES.validation.passwordRequired };
   }
 
   if (password.length < PASSWORD_MIN_LENGTH) {
     return {
       field: 'password',
-      message: `Пароль должен быть минимум ${PASSWORD_MIN_LENGTH} символов`,
+      message: MESSAGES.validation.passwordMinLength(PASSWORD_MIN_LENGTH),
     };
   }
 
   if (password.length > PASSWORD_MAX_LENGTH) {
     return {
       field: 'password',
-      message: `Пароль должен быть максимум ${PASSWORD_MAX_LENGTH} символов`,
+      message: MESSAGES.validation.passwordMaxLength(PASSWORD_MAX_LENGTH),
     };
   }
 
   if (!/[a-zA-Z]/.test(password)) {
     return {
       field: 'password',
-      message: 'Пароль должен содержать хотя бы одну букву',
+      message: MESSAGES.validation.passwordMustContainLatinLetter,
     };
   }
 
   if (!/\d/.test(password)) {
     return {
       field: 'password',
-      message: 'Пароль должен содержать хотя бы одну цифру',
+      message: MESSAGES.validation.passwordMustContainDigit,
     };
   }
 
@@ -104,13 +103,16 @@ export function validateConfirmPassword(
   confirmPassword: string
 ): ValidationError | null {
   if (!confirmPassword || confirmPassword.trim().length === 0) {
-    return { field: 'confirmPassword', message: 'Подтвердите пароль' };
+    return {
+      field: 'confirmPassword',
+      message: MESSAGES.validation.confirmPasswordRequired,
+    };
   }
 
   if (password !== confirmPassword) {
     return {
       field: 'confirmPassword',
-      message: 'Пароли не совпадают',
+      message: MESSAGES.validation.passwordsDoNotMatch,
     };
   }
 
@@ -119,13 +121,13 @@ export function validateConfirmPassword(
 
 export function validateMessage(message: string): ValidationError | null {
   if (!message || message.trim().length === 0) {
-    return { field: 'message', message: 'Введите сообщение' };
+    return { field: 'message', message: MESSAGES.validation.messageRequired };
   }
 
   if (message.length > MAX_MESSAGE_LENGTH) {
     return {
       field: 'message',
-      message: `Сообщение слишком длинное (максимум ${MAX_MESSAGE_LENGTH} символов)`,
+      message: MESSAGES.validation.messageTooLong(MAX_MESSAGE_LENGTH),
     };
   }
 
@@ -134,13 +136,16 @@ export function validateMessage(message: string): ValidationError | null {
 
 export function validateSearchQuery(query: string): ValidationError | null {
   if (!query || query.trim().length === 0) {
-    return { field: 'searchQuery', message: 'Введите поисковый запрос' };
+    return {
+      field: 'searchQuery',
+      message: MESSAGES.validation.searchQueryRequired,
+    };
   }
 
   if (query.trim().length > MAX_SEARCH_QUERY_LENGTH) {
     return {
       field: 'searchQuery',
-      message: `Поисковый запрос слишком длинный (максимум ${MAX_SEARCH_QUERY_LENGTH} символов)`,
+      message: MESSAGES.validation.searchQueryTooLong(MAX_SEARCH_QUERY_LENGTH),
     };
   }
 

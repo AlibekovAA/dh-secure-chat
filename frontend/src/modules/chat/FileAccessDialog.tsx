@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { MESSAGES } from '@/shared/messages';
 
 export type FileAccessMode = 'download_only' | 'view_only' | 'both';
 
@@ -18,18 +19,19 @@ export function FileAccessDialog({ filename, onSelect, onCancel }: Props) {
   const options = [
     {
       value: 'both' as FileAccessMode,
-      title: 'Скачивание и просмотр',
-      description: 'Собеседник сможет скачать и просмотреть файл',
+      title: MESSAGES.chat.fileAccessDialog.modes.both.title,
+      description: MESSAGES.chat.fileAccessDialog.modes.both.description,
     },
     {
       value: 'view_only' as FileAccessMode,
-      title: 'Только просмотр',
-      description: 'Собеседник сможет только просмотреть файл, но не скачать',
+      title: MESSAGES.chat.fileAccessDialog.modes.viewOnly.title,
+      description: MESSAGES.chat.fileAccessDialog.modes.viewOnly.description,
     },
     {
       value: 'download_only' as FileAccessMode,
-      title: 'Только скачивание',
-      description: 'Собеседник сможет только скачать файл, но не просмотреть',
+      title: MESSAGES.chat.fileAccessDialog.modes.downloadOnly.title,
+      description:
+        MESSAGES.chat.fileAccessDialog.modes.downloadOnly.description,
     },
   ];
 
@@ -46,7 +48,7 @@ export function FileAccessDialog({ filename, onSelect, onCancel }: Props) {
       >
         <div className="px-6 py-4 border-b border-emerald-700/60 bg-gradient-to-r from-black via-emerald-950/20 to-black">
           <h3 className="text-lg font-semibold bg-gradient-to-r from-emerald-300 to-emerald-400 bg-clip-text text-transparent">
-            Выберите режим доступа
+            {MESSAGES.chat.fileAccessDialog.title}
           </h3>
           <p className="text-sm text-emerald-400/90 mt-1 truncate font-medium">
             {filename}
@@ -131,7 +133,7 @@ export function FileAccessDialog({ filename, onSelect, onCancel }: Props) {
             className="px-4 py-2 text-sm font-medium rounded-md bg-emerald-900/40 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-700/60 transition-all duration-200 hover:scale-105 active:scale-95"
             style={{ willChange: 'transform' }}
           >
-            Отмена
+            {MESSAGES.chat.fileAccessDialog.actions.cancel}
           </button>
           <button
             type="button"
@@ -139,7 +141,7 @@ export function FileAccessDialog({ filename, onSelect, onCancel }: Props) {
             className="px-4 py-2 text-sm font-medium rounded-md bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 text-black transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg shadow-emerald-500/30"
             style={{ willChange: 'transform' }}
           >
-            Отправить
+            {MESSAGES.chat.fileAccessDialog.actions.send}
           </button>
         </div>
       </div>

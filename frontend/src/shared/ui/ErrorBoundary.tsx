@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from 'react';
+import { MESSAGES } from '@/shared/messages';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -34,7 +35,7 @@ export class ErrorBoundary extends Component<
     ) {
       setTimeout(() => {
         const shouldReload = window.confirm(
-          'Обнаружена устаревшая версия приложения. Перезагрузить страницу?'
+          MESSAGES.common.errorBoundary.confirmReload
         );
         if (shouldReload) {
           window.location.reload();
@@ -64,13 +65,14 @@ export class ErrorBoundary extends Component<
           <div className="flex flex-col items-center gap-4 p-6 max-w-md">
             <div className="text-red-400 text-xl font-semibold">
               {isModuleLoadError
-                ? 'Устаревшая версия приложения'
-                : 'Произошла ошибка'}
+                ? MESSAGES.common.errorBoundary.staleTitle
+                : MESSAGES.common.errorBoundary.errorTitle}
             </div>
             <div className="text-sm text-gray-400 text-center">
               {isModuleLoadError
-                ? 'Обнаружена устаревшая версия приложения. Пожалуйста, перезагрузите страницу.'
-                : this.state.error.message || 'Неизвестная ошибка'}
+                ? MESSAGES.common.errorBoundary.staleDescription
+                : this.state.error.message ||
+                  MESSAGES.common.errorBoundary.unknownError}
             </div>
             <div className="flex gap-2">
               {isModuleLoadError ? (
@@ -78,14 +80,14 @@ export class ErrorBoundary extends Component<
                   onClick={() => window.location.reload()}
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded transition-colors"
                 >
-                  Перезагрузить страницу
+                  {MESSAGES.common.errorBoundary.actions.reload}
                 </button>
               ) : (
                 <button
                   onClick={this.reset}
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded transition-colors"
                 >
-                  Попробовать снова
+                  {MESSAGES.common.errorBoundary.actions.retry}
                 </button>
               )}
             </div>

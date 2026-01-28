@@ -24,8 +24,6 @@ import { Spinner } from '@/shared/ui/Spinner';
 import { useToast } from '@/shared/ui/useToast';
 import {
   MAX_MESSAGE_LENGTH,
-  SCROLL_DELAY_MS,
-  SCROLL_DELAY_TYPING_MS,
   TYPING_INDICATOR_TIMEOUT_MS,
   INPUT_MIN_HEIGHT_PX,
   MODAL_MAX_HEIGHT_VH,
@@ -36,6 +34,7 @@ import {
   getFileValidationError,
 } from '@/shared/utils/files';
 import { attachTokenToClient } from '@/shared/api/session';
+import { MESSAGES } from '@/shared/messages';
 
 type Props = {
   token: string;
@@ -65,7 +64,6 @@ export function ChatWindow({
   const [isLoadingFingerprint, setIsLoadingFingerprint] = useState(true);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [showAccessDialog, setShowAccessDialog] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const typingTimeoutRef = useRef<number | null>(null);
   const { showToast } = useToast();
@@ -81,6 +79,7 @@ export function ChatWindow({
     isProtected: boolean;
   } | null>(null);
   const [isEditingMessage, setIsEditingMessage] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (token) {
@@ -100,7 +99,7 @@ export function ChatWindow({
     deleteMessage,
     editMessage,
     markMessageAsRead,
-    isPeerTyping,
+    peerActivity,
     isSessionActive,
   } = useChatSession({
     token,
@@ -108,24 +107,6 @@ export function ChatWindow({
     enabled: isFingerprintVerified,
     onTokenExpired,
   });
-
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, []);
-
-  useEffect(() => {
-    if (messages.length > 0) {
-      const timer = setTimeout(scrollToBottom, SCROLL_DELAY_MS);
-      return () => clearTimeout(timer);
-    }
-  }, [messages.length, scrollToBottom]);
-
-  useEffect(() => {
-    if (isPeerTyping && isSessionActive && !isChatBlocked) {
-      const timer = setTimeout(scrollToBottom, SCROLL_DELAY_TYPING_MS);
-      return () => clearTimeout(timer);
-    }
-  }, [isPeerTyping, isSessionActive, isChatBlocked, scrollToBottom]);
 
   useEffect(() => {
     if (
@@ -193,7 +174,7 @@ export function ChatWindow({
             setShowFingerprintModal(true);
             setIsFingerprintVerified(false);
             showToast(
-              'Коды безопасности изменились. Пожалуйста, верифицируйте identity снова для безопасного общения.',
+              MESSAGES.chat.window.warnings.securityCodesChanged,
               'error'
             );
           } else if (!hasChanged && isVerified) {
@@ -208,10 +189,7 @@ export function ChatWindow({
       } catch (err) {
         setIsFingerprintVerified(false);
         setIsChatBlocked(true);
-        showToast(
-          'Не удалось загрузить fingerprint. Попробуйте перезагрузить страницу.',
-          'error'
-        );
+        showToast(MESSAGES.chat.window.errors.failedToLoadFingerprint, 'error');
       } finally {
         setIsLoadingFingerprint(false);
       }
@@ -230,7 +208,7 @@ export function ChatWindow({
         clearTimeout(typingTimeoutRef.current);
         typingTimeoutRef.current = null;
       }
-      sendTyping(false);
+      sendTyping(null);
 
       setIsSending(true);
       try {
@@ -251,7 +229,7 @@ export function ChatWindow({
       } catch (err) {
         const errorMessage = getFriendlyErrorMessage(
           err,
-          'Не удалось отправить сообщение. Проверьте соединение и попробуйте снова.'
+          MESSAGES.chat.window.errors.failedToSendMessage
         );
         showToast(errorMessage, 'error');
       } finally {
@@ -293,12 +271,12 @@ export function ChatWindow({
       }
 
       if (text.trim().length > 0) {
-        sendTyping(true);
+        sendTyping('typing');
         typingTimeoutRef.current = setTimeout(() => {
-          sendTyping(false);
+          sendTyping(null);
         }, TYPING_INDICATOR_TIMEOUT_MS) as unknown as number;
       } else {
-        sendTyping(false);
+        sendTyping(null);
       }
     },
     [isSessionActive, isChatBlocked, sendTyping]
@@ -310,7 +288,7 @@ export function ChatWindow({
       if (newText.length > MAX_MESSAGE_LENGTH) {
         if (!hasShownMaxLengthToast) {
           showToast(
-            `Сообщение слишком длинное (максимум ${MAX_MESSAGE_LENGTH} символов)`,
+            MESSAGES.chat.window.errors.messageTooLong(MAX_MESSAGE_LENGTH),
             'warning'
           );
           setHasShownMaxLengthToast(true);
@@ -328,7 +306,7 @@ export function ChatWindow({
       clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = null;
     }
-    sendTyping(false);
+    sendTyping(null);
 
     if (
       !isChatBlocked &&
@@ -424,13 +402,13 @@ export function ChatWindow({
   const stateMessage = useMemo(() => {
     switch (state) {
       case 'establishing':
-        return 'Установка защищённой сессии...';
+        return MESSAGES.chat.window.status.establishingSecureSession;
       case 'peer_offline':
-        return 'Собеседник не в сети';
+        return MESSAGES.chat.window.status.peerOffline;
       case 'peer_disconnected':
-        return 'Собеседник отключился';
+        return MESSAGES.chat.window.status.peerDisconnected;
       case 'error':
-        return error || 'Ошибка соединения';
+        return error || MESSAGES.chat.window.status.connectionError;
       default:
         return null;
     }
@@ -476,7 +454,7 @@ export function ChatWindow({
               type="button"
               onClick={onClose}
               className="text-emerald-400 hover:text-emerald-200 smooth-transition button-press rounded-md p-1 hover:bg-emerald-900/40"
-              aria-label="Закрыть чат"
+              aria-label={MESSAGES.chat.window.aria.closeChat}
             >
               <svg
                 className="w-5 h-5"
@@ -499,18 +477,18 @@ export function ChatWindow({
               <div className="flex items-center gap-2 mt-0.5">
                 {isLoadingFingerprint ? (
                   <span className="text-[10px] text-emerald-500/60">
-                    Проверка безопасности...
+                    {MESSAGES.chat.window.labels.securityCheck}
                   </span>
                 ) : isSessionActive ? (
                   <>
                     <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
                     <span className="text-[10px] text-emerald-500/80">
-                      Защищённая сессия
+                      {MESSAGES.chat.window.labels.secureSession}
                     </span>
                   </>
                 ) : (
                   <span className="text-[10px] text-emerald-500/60">
-                    {stateMessage || 'Подключение...'}
+                    {stateMessage || MESSAGES.chat.window.status.connecting}
                   </span>
                 )}
               </div>
@@ -543,7 +521,7 @@ export function ChatWindow({
                       d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
                     />
                   </svg>
-                  Проверить Identity
+                  {MESSAGES.chat.window.actions.verifyIdentity}
                 </span>
               ) : isPeerVerified(peer.id, peerFingerprint || '') ? (
                 <span className="flex items-center gap-1.5">
@@ -560,22 +538,25 @@ export function ChatWindow({
                       d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
                     />
                   </svg>
-                  Подтверждён
+                  {MESSAGES.chat.window.actions.verified}
                 </span>
               ) : (
-                'Проверить Identity'
+                MESSAGES.chat.window.actions.verifyIdentity
               )}
             </button>
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 scrollbar-custom relative chat-scroll-area">
+        <div
+          ref={scrollContainerRef}
+          className="flex-1 overflow-y-auto px-4 py-4 space-y-3 scrollbar-custom relative chat-scroll-area"
+        >
           {isLoadingFingerprint && (
             <div className="flex items-center justify-center py-8">
               <div className="flex flex-col items-center gap-3">
                 <Spinner size="lg" borderColorClass="border-emerald-400" />
                 <p className="text-xs text-emerald-500/80">
-                  Проверка безопасности...
+                  {MESSAGES.chat.window.labels.securityCheck}
                 </p>
               </div>
             </div>
@@ -608,10 +589,10 @@ export function ChatWindow({
                 </svg>
               </div>
               <p className="text-sm font-medium text-emerald-300 mb-1">
-                Начните переписку
+                {MESSAGES.chat.window.emptyState.title}
               </p>
               <p className="text-xs text-emerald-500/70 text-center max-w-xs">
-                Все сообщения защищены сквозным шифрованием
+                {MESSAGES.chat.window.emptyState.subtitle}
               </p>
             </div>
           )}
@@ -620,7 +601,7 @@ export function ChatWindow({
             messages={messages}
             myUserId={myUserId}
             peerUsername={peer.username}
-            isPeerTyping={isPeerTyping}
+            peerActivity={peerActivity}
             isSessionActive={isSessionActive}
             isChatBlocked={isChatBlocked}
             onReaction={sendReaction}
@@ -636,7 +617,7 @@ export function ChatWindow({
               }
               setViewerFile({ filename, mimeType, blob, isProtected });
             }}
-            messagesEndRef={messagesEndRef}
+            scrollElementRef={scrollContainerRef}
           />
 
           {isChatBlocked && (
@@ -658,11 +639,13 @@ export function ChatWindow({
                   </svg>
                   <div>
                     <p className="text-sm font-medium text-yellow-400">
-                      Чат заблокирован: Security codes изменились!
+                      {MESSAGES.chat.window.banners.securityCodesChanged.title}
                     </p>
                     <p className="text-xs text-yellow-500/80 mt-1">
-                      Верифицируйте identity собеседника, чтобы продолжить
-                      общение.
+                      {
+                        MESSAGES.chat.window.banners.securityCodesChanged
+                          .description
+                      }
                     </p>
                   </div>
                 </div>
@@ -687,23 +670,23 @@ export function ChatWindow({
             <div className="mb-2 rounded-lg border border-emerald-700/60 bg-black/70 px-3 py-2 flex items-start justify-between gap-2">
               <div className="flex-1 min-w-0">
                 <p className="text-[11px] text-emerald-400/80">
-                  Ответ на сообщение
+                  {MESSAGES.chat.window.labels.replyToMessage}
                 </p>
                 <p className="text-xs text-emerald-50 truncate">
                   {replyTo.text
                     ? replyTo.text
                     : replyTo.voice
-                      ? 'Голосовое сообщение'
+                      ? MESSAGES.chat.window.reply.voice
                       : replyTo.file
-                        ? 'Файл'
-                        : 'Сообщение'}
+                        ? MESSAGES.chat.window.reply.file
+                        : MESSAGES.chat.window.reply.message}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setReplyTo(null)}
                 className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-800/60 hover:bg-emerald-700 text-emerald-50 flex items-center justify-center text-[10px] transition-colors mt-1"
-                aria-label="Отменить ответ"
+                aria-label={MESSAGES.chat.window.aria.cancelReply}
               >
                 ×
               </button>
@@ -723,13 +706,15 @@ export function ChatWindow({
                 if (!isSessionActive || isChatBlocked) return;
                 try {
                   await sendVoice(file, duration);
-                  showToast('Голосовое сообщение отправлено', 'success');
+                  showToast(MESSAGES.chat.window.toasts.voiceSent, 'success');
                 } catch (err) {
                   const errorMessage = getFriendlyErrorMessage(
                     err,
-                    'Не удалось отправить голосовое сообщение. Проверьте микрофон и попробуйте снова.'
+                    MESSAGES.chat.window.errors.failedToSendVoice
                   );
                   showToast(errorMessage, 'error');
+                } finally {
+                  sendTyping(null);
                 }
               }}
               onError={(error) => showToast(error, 'error')}
@@ -743,11 +728,11 @@ export function ChatWindow({
                 if (!isSessionActive || isChatBlocked) return;
                 try {
                   await sendFile(file, 'both', undefined, duration);
-                  showToast('Видео сообщение отправлено', 'success');
+                  showToast(MESSAGES.chat.window.toasts.videoSent, 'success');
                 } catch (err) {
                   const errorMessage = getFriendlyErrorMessage(
                     err,
-                    'Не удалось отправить видео сообщение. Проверьте камеру и попробуйте снова.'
+                    MESSAGES.chat.window.errors.failedToSendVideo
                   );
                   showToast(errorMessage, 'error');
                 }
@@ -771,10 +756,10 @@ export function ChatWindow({
                 }
                 placeholder={
                   isChatBlocked
-                    ? 'Чат заблокирован: верифицируйте identity'
+                    ? MESSAGES.chat.window.placeholders.blocked
                     : isSessionActive
-                      ? 'Введите сообщение...'
-                      : 'Ожидание установки сессии...'
+                      ? MESSAGES.chat.window.placeholders.message
+                      : MESSAGES.chat.window.placeholders.waitingForSession
                 }
                 rows={1}
                 className="w-full resize-none rounded-md bg-black border border-emerald-700 px-3 pr-10 py-2.5 text-sm text-emerald-50 placeholder-emerald-500/50 outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all scrollbar-custom"
@@ -796,7 +781,7 @@ export function ChatWindow({
                 disabled={!isSessionActive || isSendingFile || isChatBlocked}
                 className="absolute right-2 rounded-md bg-emerald-900/40 hover:bg-emerald-900/60 disabled:bg-emerald-900/20 disabled:cursor-not-allowed text-emerald-300 p-1.5 smooth-transition button-press flex items-center justify-center h-7 w-7"
                 style={{ top: '50%', transform: 'translateY(-50%)' }}
-                title="Прикрепить файл"
+                title={MESSAGES.chat.window.actions.attachFileTitle}
               >
                 {isSendingFile ? (
                   <Spinner size="xs" borderColorClass="border-emerald-300" />
@@ -830,7 +815,7 @@ export function ChatWindow({
               {isSending ? (
                 <Spinner size="sm" borderColorClass="border-black" />
               ) : (
-                'Отправить'
+                MESSAGES.chat.window.actions.send
               )}
             </button>
           </div>
@@ -859,10 +844,7 @@ export function ChatWindow({
             setFingerprintWarning(false);
             setIsChatBlocked(false);
             setIsFingerprintVerified(true);
-            showToast(
-              'Identity подтверждён. Безопасное общение установлено.',
-              'success'
-            );
+            showToast(MESSAGES.chat.security.identityVerifiedToast, 'success');
           }}
         />
       )}
@@ -890,11 +872,11 @@ export function ChatWindow({
             setIsSendingFile(true);
             try {
               await sendFile(pendingFile, mode);
-              showToast('Файл отправлен', 'success');
+              showToast(MESSAGES.chat.window.toasts.fileSent, 'success');
             } catch (err) {
               const errorMessage = getFriendlyErrorMessage(
                 err,
-                'Не удалось отправить файл. Проверьте соединение и попробуйте снова.'
+                MESSAGES.chat.window.errors.failedToSendFile
               );
               showToast(errorMessage, 'error');
             } finally {

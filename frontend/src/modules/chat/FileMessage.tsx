@@ -1,3 +1,5 @@
+import { MESSAGES } from '@/shared/messages';
+
 type Props = {
   filename: string;
   mimeType: string;
@@ -87,7 +89,7 @@ export function FileMessage({
               type="button"
               onClick={onView}
               className="text-xs text-emerald-400 hover:text-emerald-200 transition-colors duration-150 flex items-center gap-1 px-2 py-1 rounded bg-emerald-900/20 hover:bg-emerald-900/40 border border-emerald-700/40"
-              title="Просмотреть файл"
+              title={MESSAGES.chat.fileMessage.actions.viewTitle}
             >
               <svg
                 className="w-3.5 h-3.5"
@@ -108,7 +110,7 @@ export function FileMessage({
                   d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
                 />
               </svg>
-              Просмотреть
+              {MESSAGES.chat.fileMessage.actions.view}
             </button>
           )}
           {canDownload && (
@@ -116,7 +118,7 @@ export function FileMessage({
               type="button"
               onClick={handleDownload}
               className="text-xs text-emerald-400 hover:text-emerald-200 transition-colors duration-150 flex items-center gap-1 px-2 py-1 rounded bg-emerald-900/20 hover:bg-emerald-900/40 border border-emerald-700/40"
-              title="Скачать файл"
+              title={MESSAGES.chat.fileMessage.actions.downloadTitle}
             >
               <svg
                 className="w-3.5 h-3.5"
@@ -131,7 +133,7 @@ export function FileMessage({
                   d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
                 />
               </svg>
-              Скачать
+              {MESSAGES.chat.fileMessage.actions.download}
             </button>
           )}
         </div>

@@ -1,3 +1,5 @@
+import { MESSAGES } from '@/shared/messages';
+
 function checkBrowserSupport(): {
   webCrypto: boolean;
   mediaRecorder: boolean;
@@ -31,7 +33,7 @@ function getBrowserSupportMessage(unsupported: string[]): string | null {
   }
 
   const features = unsupported.join(', ');
-  return `Ваш браузер не поддерживает: ${features}. Используйте современный браузер (Chrome, Firefox, Safari, Edge).`;
+  return MESSAGES.common.browserSupport.unsupportedFeatures(features);
 }
 
 export function checkWebCryptoSupport(): void {
@@ -39,7 +41,7 @@ export function checkWebCryptoSupport(): void {
   if (!support.webCrypto) {
     throw new Error(
       getBrowserSupportMessage(['Web Crypto API']) ||
-        'Web Crypto API не поддерживается'
+        MESSAGES.common.browserSupport.webCryptoNotSupported
     );
   }
 }
@@ -49,7 +51,7 @@ export function checkMediaRecorderSupport(): void {
   if (!support.mediaRecorder || !support.getUserMedia) {
     throw new Error(
       getBrowserSupportMessage(['MediaRecorder API', 'getUserMedia API']) ||
-        'Запись аудио не поддерживается'
+        MESSAGES.common.browserSupport.audioRecordingNotSupported
     );
   }
 }

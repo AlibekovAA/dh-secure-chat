@@ -26,6 +26,7 @@ import {
   getChunkSize,
 } from '@/shared/crypto/file-encryption';
 import { getFriendlyErrorMessage } from '@/shared/api/error-handler';
+import { MESSAGES } from '@/shared/messages';
 import { validateMessage } from '@/shared/validation';
 import { getIdentityKey } from '@/modules/chat/api';
 import type { SessionKey } from '@/shared/crypto/session';
@@ -54,6 +55,8 @@ export type ChatSessionState =
   | 'error';
 
 export type DeliveryStatus = 'sending' | 'delivered' | 'read';
+
+export type PeerActivity = 'typing' | 'voice' | 'video';
 
 export type ChatMessage = {
   id: string;
@@ -112,7 +115,7 @@ export function useChatSession({
   const [state, setState] = useState<ChatSessionState>('idle');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [isPeerTyping, setIsPeerTyping] = useState(false);
+  const [peerActivity, setPeerActivity] = useState<PeerActivity | null>(null);
 
   const sessionKeyRef = useRef<SessionKey | null>(null);
   const myEphemeralKeyRef = useRef<{
@@ -153,7 +156,7 @@ export function useChatSession({
     sendRef,
     pendingAcksRef,
     onMaxRetries: () => {
-      setError('Не удалось установить сессию. Переподключитесь');
+      setError(MESSAGES.chat.session.errors.failedToEstablishSession);
       setState('error');
     },
   });
@@ -225,7 +228,7 @@ export function useChatSession({
         );
 
         if (!isValid) {
-          setError('Ошибка проверки подписи. Переподключитесь');
+          setError(MESSAGES.chat.session.errors.signatureCheckFailed);
           setState('error');
           return;
         }
@@ -268,9 +271,7 @@ export function useChatSession({
           setError(null);
         }
       } catch (err) {
-        setError(
-          'Не удалось установить защищенную сессию. Попробуйте переподключиться.'
-        );
+        setError(MESSAGES.chat.session.errors.failedToEstablishSecureSession);
         setState('error');
       }
     },
@@ -279,7 +280,7 @@ export function useChatSession({
 
   const handlePeerOffline = useCallback((_payload: PeerOfflinePayload) => {
     setState('peer_offline');
-    setError('Собеседник не в сети');
+    setError(MESSAGES.chat.session.errors.peerOffline);
   }, []);
 
   const handlePeerDisconnected = useCallback(
@@ -324,7 +325,7 @@ export function useChatSession({
     },
     setState,
     setMessages,
-    setIsPeerTyping,
+    setPeerActivity,
     clearPendingAcks,
     clearSession,
     clearFileBuffers,
@@ -338,7 +339,10 @@ export function useChatSession({
     enabled: enabled && !!token,
     onMessage: messageHandler,
     onError: useCallback((err: Error) => {
-      const friendlyMessage = getFriendlyErrorMessage(err, 'Ошибка соединения');
+      const friendlyMessage = getFriendlyErrorMessage(
+        err,
+        MESSAGES.chat.session.errors.connectionError
+      );
       setError(friendlyMessage);
       setState('error');
     }, []),
@@ -366,7 +370,7 @@ export function useChatSession({
       if (!myIdentityPrivateKeyRef.current) {
         const identityKey = await loadIdentityPrivateKey();
         if (!identityKey) {
-          setError('Ключ идентификации не найден. Перезайдите в систему');
+          setError(MESSAGES.chat.session.errors.identityKeyNotFound);
           setState('error');
           return;
         }
@@ -425,7 +429,7 @@ export function useChatSession({
     } catch (err) {
       const errorMessage = getFriendlyErrorMessage(
         err,
-        'Ошибка установки сессии'
+        MESSAGES.chat.session.errors.sessionSetupErrorTitle
       );
       setError(errorMessage);
       setState('error');
@@ -503,7 +507,7 @@ export function useChatSession({
           return [...prev, newMessage];
         });
       } catch (err) {
-        setError('Не удалось отправить сообщение');
+        setError(MESSAGES.chat.session.errors.failedToSendMessage);
       }
     },
     [peerId, isConnected, state, send]
@@ -522,14 +526,16 @@ export function useChatSession({
         !isConnected ||
         state !== 'active'
       ) {
-        setError('Сессия не активна. Подождите подключения');
+        setError(MESSAGES.chat.session.errors.sessionNotActive);
         return;
       }
 
       const validationError = validateFileSize(file, { fileType: 'file' });
       if (validationError) {
         const errorMessage = getFileValidationError(validationError);
-        setError(errorMessage || 'Ошибка валидации файла');
+        setError(
+          errorMessage || MESSAGES.chat.session.errors.fileValidationError
+        );
         return;
       }
 
@@ -547,13 +553,11 @@ export function useChatSession({
           chunks = result.chunks;
           totalSize = result.totalSize;
         } catch (encryptError) {
-          setError(
-            `Ошибка шифрования файла: ${
-              encryptError instanceof Error
-                ? encryptError.message
-                : 'неизвестная ошибка'
-            }. Попробуйте выбрать другой файл.`
-          );
+          const reason =
+            encryptError instanceof Error
+              ? encryptError.message
+              : MESSAGES.chat.session.errors.unknownError;
+          setError(MESSAGES.chat.session.errors.fileEncryptionError(reason));
           return;
         }
 
@@ -662,7 +666,10 @@ export function useChatSession({
 
         setMessages((prev) => [...prev, newMessage]);
       } catch (err) {
-        const errorMsg = getFriendlyErrorMessage(err, 'Ошибка отправки файла');
+        const errorMsg = getFriendlyErrorMessage(
+          err,
+          MESSAGES.chat.session.errors.fileSendError
+        );
         setError(errorMsg);
         throw err;
       }
@@ -709,7 +716,7 @@ export function useChatSession({
       if (validationError) {
         const errorMessage = getFileValidationError(validationError);
         throw new Error(
-          errorMessage || 'Ошибка валидации голосового сообщения'
+          errorMessage || MESSAGES.chat.session.errors.voiceValidationError
         );
       }
       await sendFile(file, 'both', duration);
@@ -718,13 +725,14 @@ export function useChatSession({
   );
 
   const sendTyping = useCallback(
-    (isTyping: boolean) => {
+    (activity: PeerActivity | null) => {
       if (!peerId || !isConnected || !send) return;
       send({
         type: 'typing',
         payload: {
           to: peerId,
-          is_typing: isTyping,
+          is_typing: activity !== null,
+          activity: activity ?? undefined,
         },
       });
     },
@@ -858,7 +866,7 @@ export function useChatSession({
       const timeSinceSent = Date.now() - message.timestamp;
       const EDIT_TIMEOUT = EDIT_TIMEOUT_MS;
       if (timeSinceSent > EDIT_TIMEOUT) {
-        setError('Редактирование доступно только 15 минут после отправки');
+        setError(MESSAGES.chat.session.errors.editTimeLimit);
         return;
       }
 
@@ -911,7 +919,7 @@ export function useChatSession({
           })
         );
       } catch (err) {
-        setError('Не удалось отредактировать сообщение');
+        setError(MESSAGES.chat.session.errors.failedToEditMessage);
       }
     },
     [peerId, isConnected, send, state, messages, sessionKeyRef]
@@ -947,7 +955,7 @@ export function useChatSession({
     deleteMessage,
     editMessage,
     markMessageAsRead,
-    isPeerTyping,
+    peerActivity,
     isSessionActive: state === 'active',
   };
 }

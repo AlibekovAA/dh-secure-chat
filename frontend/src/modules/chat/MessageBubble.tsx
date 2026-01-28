@@ -12,11 +12,13 @@ import {
   TEXTAREA_MAX_ROWS,
 } from '@/shared/constants';
 import { formatTime } from '@/shared/utils/format';
+import { MESSAGES } from '@/shared/messages';
 
 type Props = {
   message: ChatMessage;
   myUserId: string;
   peerUsername?: string;
+  onJumpToMessageById?: (messageId: string) => void;
   onReaction: (
     messageId: string,
     emoji: string,
@@ -36,10 +38,20 @@ type Props = {
   ) => void;
 };
 
+type AnchorRect = {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  width: number;
+  height: number;
+};
+
 function MessageBubbleComponent({
   message,
   myUserId,
   peerUsername,
+  onJumpToMessageById,
   onReaction,
   onDelete,
   onEdit,
@@ -49,14 +61,12 @@ function MessageBubbleComponent({
   onEditingChange,
   onViewFile,
 }: Props) {
-  const [contextMenu, setContextMenu] = useState<{
-    x: number;
-    y: number;
-  } | null>(null);
-  const [emojiPicker, setEmojiPicker] = useState<{
-    x: number;
-    y: number;
-  } | null>(null);
+  const [contextMenuAnchor, setContextMenuAnchor] = useState<AnchorRect | null>(
+    null
+  );
+  const [emojiPickerAnchor, setEmojiPickerAnchor] = useState<AnchorRect | null>(
+    null
+  );
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState('');
   const messageRef = useRef<HTMLDivElement>(null);
@@ -64,19 +74,16 @@ function MessageBubbleComponent({
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-    const chatContainer =
-      (e.currentTarget.closest('.chat-scroll-area') as HTMLElement) || null;
     const bubbleRect = e.currentTarget.getBoundingClientRect();
 
-    if (chatContainer) {
-      const containerRect = chatContainer.getBoundingClientRect();
-      const centerX =
-        bubbleRect.left - containerRect.left + bubbleRect.width / 2;
-      const belowY = bubbleRect.bottom - containerRect.top + 8;
-      setContextMenu({ x: centerX, y: belowY });
-    } else {
-      setContextMenu({ x: e.clientX, y: e.clientY });
-    }
+    setContextMenuAnchor({
+      left: bubbleRect.left,
+      right: bubbleRect.right,
+      top: bubbleRect.top,
+      bottom: bubbleRect.bottom,
+      width: bubbleRect.width,
+      height: bubbleRect.height,
+    });
   };
 
   const handleCopy = () => {
@@ -86,9 +93,9 @@ function MessageBubbleComponent({
   };
 
   const handleReact = () => {
-    if (contextMenu) {
-      setEmojiPicker({ x: contextMenu.x, y: contextMenu.y });
-      setContextMenu(null);
+    if (contextMenuAnchor) {
+      setEmojiPickerAnchor(contextMenuAnchor);
+      setContextMenuAnchor(null);
     }
   };
 
@@ -104,7 +111,7 @@ function MessageBubbleComponent({
     setEditText(message.text);
     setIsEditing(true);
     onEditingChange?.(true);
-    setContextMenu(null);
+    setContextMenuAnchor(null);
   };
 
   const handleSaveEdit = () => {
@@ -181,7 +188,9 @@ function MessageBubbleComponent({
                 d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
               />
             </svg>
-            <p className="text-sm italic font-medium">Сообщение удалено</p>
+            <p className="text-sm italic font-medium">
+              {MESSAGES.chat.messageBubble.deleted}
+            </p>
           </div>
           <p className="text-xs text-emerald-500/50 mt-1.5 leading-relaxed font-mono">
             {formatTime(message.timestamp)}
@@ -203,7 +212,7 @@ function MessageBubbleComponent({
             message.isOwn
               ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-50 hover:bg-emerald-500/25 hover:border-emerald-500/50'
               : 'bg-emerald-900/20 border border-emerald-700/40 text-emerald-100 hover:bg-emerald-900/25 hover:border-emerald-700/50'
-          } ${contextMenu ? 'relative z-[120] scale-[1.02] shadow-2xl shadow-emerald-900/40' : ''}`}
+          } ${contextMenuAnchor ? 'relative z-[120] scale-[1.02] shadow-2xl shadow-emerald-900/40' : ''}`}
           style={{ willChange: 'background-color, border-color' }}
           onContextMenu={handleContextMenu}
           data-message-id={message.id}
@@ -215,6 +224,10 @@ function MessageBubbleComponent({
               onClick={() => {
                 const targetId = message.replyTo?.id;
                 if (!targetId) return;
+                if (onJumpToMessageById) {
+                  onJumpToMessageById(targetId);
+                  return;
+                }
                 const el = document.querySelector<HTMLElement>(
                   `[data-message-id="${targetId}"]`
                 );
@@ -223,20 +236,22 @@ function MessageBubbleComponent({
             >
               <div className="pl-3 pr-3 py-1.5">
                 <p className="text-xs font-medium text-emerald-400/90 mb-0.5">
-                  {message.replyTo.isOwn ? 'Вы' : peerUsername || 'Собеседник'}
+                  {message.replyTo.isOwn
+                    ? MESSAGES.chat.messageBubble.you
+                    : peerUsername || MESSAGES.chat.messageBubble.peerFallback}
                 </p>
                 <p className="text-xs text-emerald-200/70 line-clamp-2 break-words">
                   {message.replyTo.isDeleted
-                    ? 'Сообщение удалено'
+                    ? MESSAGES.chat.messageBubble.replyPreview.deleted
                     : message.replyTo.text
                       ? message.replyTo.text
                       : message.replyTo.hasVoice
-                        ? 'Голосовое сообщение'
+                        ? MESSAGES.chat.messageBubble.replyPreview.voice
                         : message.replyTo.hasVideo
-                          ? 'Видео сообщение'
+                          ? MESSAGES.chat.messageBubble.replyPreview.video
                           : message.replyTo.hasFile
-                            ? 'Файл'
-                            : 'Сообщение'}
+                            ? MESSAGES.chat.messageBubble.replyPreview.file
+                            : MESSAGES.chat.messageBubble.replyPreview.message}
                 </p>
               </div>
             </button>
@@ -269,13 +284,13 @@ function MessageBubbleComponent({
                     onClick={handleSaveEdit}
                     className="px-3 py-1 text-xs rounded-md bg-emerald-500 hover:bg-emerald-400 text-black transition-colors"
                   >
-                    Сохранить
+                    {MESSAGES.chat.messageBubble.actions.save}
                   </button>
                   <button
                     onClick={handleCancelEdit}
                     className="px-3 py-1 text-xs rounded-md bg-emerald-900/40 hover:bg-emerald-900/60 text-emerald-300 transition-colors"
                   >
-                    Отмена
+                    {MESSAGES.chat.messageBubble.actions.cancel}
                   </button>
                 </div>
               </div>
@@ -286,7 +301,7 @@ function MessageBubbleComponent({
                     {message.text}
                     {message.isEdited && (
                       <span className="ml-2 text-[10px] text-emerald-500/60 italic">
-                        (изменено)
+                        {MESSAGES.chat.messageBubble.edited}
                       </span>
                     )}
                   </p>
@@ -437,51 +452,65 @@ function MessageBubbleComponent({
         </div>
       </div>
 
-      {contextMenu && (
-        <>
-          <div
-            className="fixed inset-0 bg-black/40 backdrop-blur-[0.5px] z-40 animate-[fadeIn_0.15s_ease-out]"
-            onClick={() => setContextMenu(null)}
-          />
-          <MessageContextMenu
-            x={contextMenu.x}
-            y={contextMenu.y}
-            isOwn={message.isOwn}
-            canEdit={
-              message.isOwn &&
-              !!message.text &&
-              !message.isDeleted &&
-              Date.now() - message.timestamp <= EDIT_TIMEOUT_MS
-            }
-            onCopy={handleCopy}
-            onReact={handleReact}
-            onReply={onReply ? () => onReply(message) : undefined}
-            onEdit={
-              message.isOwn && !!message.text && !message.isDeleted
-                ? handleEdit
-                : undefined
-            }
-            onDeleteForMe={
-              message.isOwn ? () => onDelete?.(message.id, 'me') : undefined
-            }
-            onDeleteForAll={
-              message.isOwn ? () => onDelete?.(message.id, 'all') : undefined
-            }
-            onClose={() => setContextMenu(null)}
-          />
-        </>
+      {contextMenuAnchor && (
+        <MessageContextMenu
+          anchorRect={contextMenuAnchor}
+          isOwn={message.isOwn}
+          canEdit={
+            message.isOwn &&
+            !!message.text &&
+            !message.isDeleted &&
+            Date.now() - message.timestamp <= EDIT_TIMEOUT_MS
+          }
+          onCopy={handleCopy}
+          onReact={handleReact}
+          onReply={onReply ? () => onReply(message) : undefined}
+          onEdit={
+            message.isOwn && !!message.text && !message.isDeleted
+              ? handleEdit
+              : undefined
+          }
+          onDeleteForMe={
+            message.isOwn ? () => onDelete?.(message.id, 'me') : undefined
+          }
+          onDeleteForAll={
+            message.isOwn ? () => onDelete?.(message.id, 'all') : undefined
+          }
+          onClose={() => setContextMenuAnchor(null)}
+        />
       )}
 
-      {emojiPicker && (
+      {emojiPickerAnchor && (
         <EmojiPicker
-          x={emojiPicker.x}
-          y={emojiPicker.y}
+          anchorRect={emojiPickerAnchor}
+          isOwn={message.isOwn}
           onSelect={handleEmojiSelect}
-          onClose={() => setEmojiPicker(null)}
+          onClose={() => setEmojiPickerAnchor(null)}
         />
       )}
     </>
   );
+}
+
+function reactionsEqual(
+  a?: Record<string, string[]>,
+  b?: Record<string, string[]>
+) {
+  if (a === b) return true;
+  if (!a || !b) return !a && !b;
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) return false;
+  for (const key of aKeys) {
+    const av = a[key] ?? [];
+    const bv = b[key] ?? [];
+    if (av === bv) continue;
+    if (av.length !== bv.length) return false;
+    for (let i = 0; i < av.length; i++) {
+      if (av[i] !== bv[i]) return false;
+    }
+  }
+  return true;
 }
 
 export const MessageBubble = memo(
@@ -493,17 +522,41 @@ export const MessageBubble = memo(
       prevProps.message.isDeleted === nextProps.message.isDeleted &&
       prevProps.message.isEdited === nextProps.message.isEdited &&
       prevProps.message.timestamp === nextProps.message.timestamp &&
-      JSON.stringify(prevProps.message.reactions) ===
-        JSON.stringify(nextProps.message.reactions) &&
+      reactionsEqual(
+        prevProps.message.reactions,
+        nextProps.message.reactions
+      ) &&
+      prevProps.message.file?.filename === nextProps.message.file?.filename &&
+      prevProps.message.file?.mimeType === nextProps.message.file?.mimeType &&
+      prevProps.message.file?.size === nextProps.message.file?.size &&
+      prevProps.message.file?.accessMode ===
+        nextProps.message.file?.accessMode &&
       prevProps.message.file?.blob === nextProps.message.file?.blob &&
+      prevProps.message.voice?.filename === nextProps.message.voice?.filename &&
+      prevProps.message.voice?.mimeType === nextProps.message.voice?.mimeType &&
+      prevProps.message.voice?.size === nextProps.message.voice?.size &&
+      prevProps.message.voice?.duration === nextProps.message.voice?.duration &&
       prevProps.message.voice?.blob === nextProps.message.voice?.blob &&
+      prevProps.message.video?.filename === nextProps.message.video?.filename &&
+      prevProps.message.video?.mimeType === nextProps.message.video?.mimeType &&
+      prevProps.message.video?.size === nextProps.message.video?.size &&
+      prevProps.message.video?.duration === nextProps.message.video?.duration &&
+      prevProps.message.video?.blob === nextProps.message.video?.blob &&
       prevProps.message.replyTo?.id === nextProps.message.replyTo?.id &&
       prevProps.message.replyTo?.isDeleted ===
         nextProps.message.replyTo?.isDeleted &&
       prevProps.message.replyTo?.text === nextProps.message.replyTo?.text &&
+      prevProps.message.replyTo?.hasFile ===
+        nextProps.message.replyTo?.hasFile &&
+      prevProps.message.replyTo?.hasVoice ===
+        nextProps.message.replyTo?.hasVoice &&
+      prevProps.message.replyTo?.hasVideo ===
+        nextProps.message.replyTo?.hasVideo &&
+      prevProps.message.replyTo?.isOwn === nextProps.message.replyTo?.isOwn &&
       prevProps.message.deliveryStatus === nextProps.message.deliveryStatus &&
       prevProps.myUserId === nextProps.myUserId &&
-      prevProps.peerUsername === nextProps.peerUsername
+      prevProps.peerUsername === nextProps.peerUsername &&
+      prevProps.onJumpToMessageById === nextProps.onJumpToMessageById
     );
   }
 );
