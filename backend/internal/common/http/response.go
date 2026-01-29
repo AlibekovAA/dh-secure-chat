@@ -12,6 +12,13 @@ type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
+type ErrorEnvelope struct {
+	Code    string         `json:"code"`
+	Message string         `json:"message"`
+	Details map[string]any `json:"details,omitempty"`
+	TraceID string         `json:"trace_id,omitempty"`
+}
+
 func WriteJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -19,7 +26,18 @@ func WriteJSON(w http.ResponseWriter, status int, v any) {
 }
 
 func WriteError(w http.ResponseWriter, status int, message string) {
-	WriteJSON(w, status, ErrorResponse{Error: message})
+	WriteErrorEnvelope(w, status, CodeUnknown, message, nil, "")
+}
+
+func WriteErrorEnvelope(w http.ResponseWriter, status int, code, message string, details map[string]any, traceID string) {
+	env := ErrorEnvelope{Code: code, Message: message}
+	if len(details) > 0 {
+		env.Details = details
+	}
+	if traceID != "" {
+		env.TraceID = traceID
+	}
+	WriteJSON(w, status, env)
 }
 
 func DecodeJSON(r *http.Request, v any) error {
@@ -48,7 +66,7 @@ func RequireMethod(method string) func(http.HandlerFunc) http.HandlerFunc {
 	return func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != method {
-				WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+				WriteErrorEnvelope(w, http.StatusMethodNotAllowed, CodeMethodNotAllowed, "method not allowed", nil, "")
 				return
 			}
 			next(w, r)

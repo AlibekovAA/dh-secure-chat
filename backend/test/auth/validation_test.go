@@ -42,12 +42,9 @@ func TestCredentialValidator_Validate_UsernameTooShort(t *testing.T) {
 		t.Fatal("expected validation error")
 	}
 
-	if validationErr, ok := service.AsValidationError(err); !ok {
-		t.Error("expected ValidationError")
-	} else {
-		if validationErr.Error() != "username must be between 3 and 32 characters" {
-			t.Errorf("expected specific error message, got %s", validationErr.Error())
-		}
+	de, ok := commonerrors.AsDomainError(err)
+	if !ok || de.Code() != "VALIDATION_USERNAME_LENGTH" {
+		t.Errorf("expected VALIDATION_USERNAME_LENGTH, got %v", err)
 	}
 }
 
@@ -61,12 +58,9 @@ func TestCredentialValidator_Validate_UsernameTooLong(t *testing.T) {
 		t.Fatal("expected validation error")
 	}
 
-	if validationErr, ok := service.AsValidationError(err); !ok {
-		t.Error("expected ValidationError")
-	} else {
-		if validationErr.Error() != "username must be between 3 and 32 characters" {
-			t.Errorf("expected specific error message, got %s", validationErr.Error())
-		}
+	de, ok := commonerrors.AsDomainError(err)
+	if !ok || de.Code() != "VALIDATION_USERNAME_LENGTH" {
+		t.Errorf("expected VALIDATION_USERNAME_LENGTH, got %v", err)
 	}
 }
 
@@ -79,12 +73,9 @@ func TestCredentialValidator_Validate_PasswordTooShort(t *testing.T) {
 		t.Fatal("expected validation error")
 	}
 
-	if validationErr, ok := service.AsValidationError(err); !ok {
-		t.Error("expected ValidationError")
-	} else {
-		if validationErr.Error() != "password must be between 8 and 72 characters" {
-			t.Errorf("expected specific error message, got %s", validationErr.Error())
-		}
+	de, ok := commonerrors.AsDomainError(err)
+	if !ok || de.Code() != "VALIDATION_PASSWORD_LENGTH" {
+		t.Errorf("expected VALIDATION_PASSWORD_LENGTH, got %v", err)
 	}
 }
 
@@ -98,12 +89,9 @@ func TestCredentialValidator_Validate_PasswordTooLong(t *testing.T) {
 		t.Fatal("expected validation error")
 	}
 
-	if validationErr, ok := service.AsValidationError(err); !ok {
-		t.Error("expected ValidationError")
-	} else {
-		if validationErr.Error() != "password must be between 8 and 72 characters" {
-			t.Errorf("expected specific error message, got %s", validationErr.Error())
-		}
+	de, ok := commonerrors.AsDomainError(err)
+	if !ok || de.Code() != "VALIDATION_PASSWORD_LENGTH" {
+		t.Errorf("expected VALIDATION_PASSWORD_LENGTH, got %v", err)
 	}
 }
 
@@ -126,12 +114,9 @@ func TestCredentialValidator_Validate_InvalidUsernameChars(t *testing.T) {
 			if err == nil {
 				t.Error("expected validation error")
 			}
-			if validationErr, ok := service.AsValidationError(err); !ok {
-				t.Error("expected ValidationError")
-			} else {
-				if validationErr.Error() != "username may contain only letters, digits, underscore and dash" {
-					t.Errorf("expected specific error message, got %s", validationErr.Error())
-				}
+			de, ok := commonerrors.AsDomainError(err)
+			if !ok || de.Code() != "VALIDATION_USERNAME_CHARS" {
+				t.Errorf("expected VALIDATION_USERNAME_CHARS, got %v", err)
 			}
 		})
 	}
@@ -156,12 +141,9 @@ func TestCredentialValidator_Validate_UsernameStartsOrEndsWithInvalidChar(t *tes
 			if err == nil {
 				t.Error("expected validation error")
 			}
-			if validationErr, ok := service.AsValidationError(err); !ok {
-				t.Error("expected ValidationError")
-			} else {
-				if validationErr.Error() != "username may contain only letters, digits, underscore and dash" {
-					t.Errorf("expected specific error message, got %s", validationErr.Error())
-				}
+			de, ok := commonerrors.AsDomainError(err)
+			if !ok || de.Code() != "VALIDATION_USERNAME_CHARS" {
+				t.Errorf("expected VALIDATION_USERNAME_CHARS, got %v", err)
 			}
 		})
 	}
@@ -176,12 +158,9 @@ func TestCredentialValidator_Validate_PasswordWithoutLetter(t *testing.T) {
 		t.Fatal("expected validation error")
 	}
 
-	if validationErr, ok := service.AsValidationError(err); !ok {
-		t.Error("expected ValidationError")
-	} else {
-		if validationErr.Error() != "password must contain at least one letter and one digit" {
-			t.Errorf("expected specific error message, got %s", validationErr.Error())
-		}
+	de, ok := commonerrors.AsDomainError(err)
+	if !ok || de.Code() != "VALIDATION_PASSWORD_LATIN_DIGIT" {
+		t.Errorf("expected VALIDATION_PASSWORD_LATIN_DIGIT, got %v", err)
 	}
 }
 
@@ -194,57 +173,24 @@ func TestCredentialValidator_Validate_PasswordWithoutDigit(t *testing.T) {
 		t.Fatal("expected validation error")
 	}
 
-	if validationErr, ok := service.AsValidationError(err); !ok {
-		t.Error("expected ValidationError")
-	} else {
-		if validationErr.Error() != "password must contain at least one letter and one digit" {
-			t.Errorf("expected specific error message, got %s", validationErr.Error())
-		}
+	de, ok := commonerrors.AsDomainError(err)
+	if !ok || de.Code() != "VALIDATION_PASSWORD_LATIN_DIGIT" {
+		t.Errorf("expected VALIDATION_PASSWORD_LATIN_DIGIT, got %v", err)
 	}
 }
 
-func TestAsValidationError_WithValidationError(t *testing.T) {
+func TestCredentialValidator_Validate_ReturnsDomainError(t *testing.T) {
 	validator := service.NewCredentialValidator()
 	err := validator.Validate("ab", "password123")
 
-	validationErr, ok := service.AsValidationError(err)
+	de, ok := commonerrors.AsDomainError(err)
 	if !ok {
-		t.Fatal("expected ValidationError")
+		t.Fatal("expected domain error")
 	}
-
-	if validationErr.Error() == "" {
-		t.Error("expected error message")
+	if de.Code() == "" {
+		t.Error("expected non-empty code")
 	}
-}
-
-func TestAsValidationError_WithDomainError(t *testing.T) {
-	domainErr := commonerrors.NewDomainError(
-		"VALIDATION_FAILED",
-		commonerrors.CategoryValidation,
-		400,
-		"test validation error",
-	)
-
-	validationErr, ok := service.AsValidationError(domainErr)
-	if !ok {
-		t.Fatal("expected ValidationError")
-	}
-
-	if validationErr.Error() != "test validation error" {
-		t.Errorf("expected error message 'test validation error', got %s", validationErr.Error())
-	}
-}
-
-func TestAsValidationError_WithOtherError(t *testing.T) {
-	err := commonerrors.NewDomainError(
-		"OTHER_ERROR",
-		commonerrors.CategoryInternal,
-		http.StatusInternalServerError,
-		"other error",
-	)
-
-	_, ok := service.AsValidationError(err)
-	if ok {
-		t.Error("expected false for non-validation error")
+	if de.HTTPStatus() != http.StatusBadRequest {
+		t.Errorf("expected status 400, got %d", de.HTTPStatus())
 	}
 }

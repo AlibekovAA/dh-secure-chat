@@ -132,7 +132,7 @@ func (h *Handler) searchUsers(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) getIdentityKey(w http.ResponseWriter, r *http.Request) {
 	urlPath := r.URL.Path
 	if !strings.HasSuffix(urlPath, "/identity-key") {
-		commonhttp.WriteError(w, http.StatusBadRequest, "invalid path")
+		commonhttp.WriteErrorEnvelope(w, http.StatusBadRequest, commonhttp.CodeInvalidPath, "invalid path", nil, "")
 		return
 	}
 
@@ -140,14 +140,14 @@ func (h *Handler) getIdentityKey(w http.ResponseWriter, r *http.Request) {
 	userID, err := commonhttp.ExtractAndValidateUserID(urlPath, "/identity-key")
 	if err != nil {
 		if err == commonerrors.ErrEmptyUUID {
-			commonhttp.WriteError(w, http.StatusBadRequest, "user_id is required")
+			commonhttp.WriteErrorEnvelope(w, http.StatusBadRequest, commonhttp.CodeUserIDRequired, "user_id is required", nil, "")
 			return
 		}
 		h.log.WithFields(ctx, logger.Fields{
 			"user_id": userID,
 			"action":  "chat_identity_key_invalid_format",
 		}).Warn("chat/identity-key failed: invalid user_id format")
-		commonhttp.WriteError(w, http.StatusBadRequest, "invalid user_id format (must be UUID)")
+		commonhttp.WriteErrorEnvelope(w, http.StatusBadRequest, commonhttp.CodeInvalidUserIDFormat, "invalid user_id format (must be UUID)", nil, "")
 		return
 	}
 

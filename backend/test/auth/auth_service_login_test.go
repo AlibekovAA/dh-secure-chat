@@ -77,8 +77,12 @@ func TestAuthService_Login_ValidationError(t *testing.T) {
 		t.Fatal("expected validation error")
 	}
 
-	if domainErr, ok := commonerrors.AsDomainError(err); !ok || domainErr.Code() != "VALIDATION_FAILED" {
-		t.Errorf("expected VALIDATION_FAILED error, got %v", err)
+	de, ok := commonerrors.AsDomainError(err)
+	if !ok || de.Category() != commonerrors.CategoryValidation {
+		t.Errorf("expected validation domain error, got %v", err)
+	}
+	if de.Code() != "VALIDATION_USERNAME_LENGTH" {
+		t.Errorf("expected VALIDATION_USERNAME_LENGTH for short username, got %s", de.Code())
 	}
 }
 

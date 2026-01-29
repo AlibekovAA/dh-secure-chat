@@ -302,18 +302,15 @@ graph TB
 ### Процесс установки сессии
 
 1. **Генерация identity-ключей** (при регистрации)
-
    - Клиент генерирует долгоживущую пару ECDSA P-256
    - Публичный ключ отправляется на сервер
    - Приватный ключ остаётся только на клиенте
 
 2. **Генерация ephemeral-ключей** (для каждой сессии)
-
    - Каждый клиент генерирует временную пару ECDH P-256
    - Публичный ephemeral-ключ подписывается приватным identity-ключом
 
 3. **Обмен ключами**
-
    - Клиенты обмениваются публичными ephemeral-ключами и подписями
    - Подписи проверяются перед использованием ключей
    - Используется acknowledge mechanism для подтверждения
@@ -386,9 +383,8 @@ make help                      # Список всех команд
 make clean                     # Полная очистка Docker
 make backend                   # Запуск backend локально
 make frontend                  # Запуск frontend локально
-make format                    # Форматирование и линтинг (Go + TypeScript/React)
-make go-test-auth              # Тесты auth-service
-make go-test-auth-coverage     # Тесты с покрытием
+make format        # Форматирование и линтинг (Go + TypeScript/React)
+make backend-test  # Запуск всех тестов бэкенда
 ```
 
 ---
@@ -496,38 +492,11 @@ make go-test-auth-coverage     # Тесты с покрытием
 
 ## Тестирование
 
-### Покрытие кода
-
-**Auth Service** — детальное покрытие по модулям:
-
-- `auth_service.go` — **91.4%** (регистрация, вход, обновление токенов, обработка ошибок)
-- `refresh_token_cache.go` — **70.6%** (кэширование refresh токенов)
-- `refresh_token_rotator.go` — **95.3%** (ротация refresh токенов)
-- `token_issuer.go` — **92.9%** (выдача и парсинг JWT токенов)
-- `validation.go` — **100.0%** (валидация учетных данных)
-
-Тесты находятся в `backend/test/auth/`
-
-### Запуск тестов
+Тесты бэкенда находятся в `backend/test/`: пакеты `auth` (auth service, refresh token, validation, HTTP-хендлеры) и `chat` (chat service).
 
 ```bash
-make go-test-auth              # Все тесты
-make go-test-auth-coverage     # С HTML отчётом (coverage.html)
+make backend-test   # Запуск всех тестов
 ```
-
-### Структура тестов
-
-- `auth_service_register_test.go` — регистрация пользователей
-- `auth_service_login_test.go` — вход в систему
-- `auth_service_refresh_test.go` — обновление access токенов (включая cache hit)
-- `auth_service_revoke_test.go` — отзыв токенов
-- `auth_service_error_test.go` — обработка ошибок (circuit breaker, database errors, unknown errors)
-- `refresh_token_cache_test.go` — тестирование кэша refresh токенов (hit, miss, expired, invalidation)
-- `token_issuer_test.go` — выдача и парсинг JWT токенов
-- `refresh_token_rotator_test.go` — ротация refresh токенов
-- `validation_test.go` — валидация username и password
-- `cleanup_test.go` — очистка истекших токенов
-- `mocks.go` — моки для тестирования
 
 ---
 

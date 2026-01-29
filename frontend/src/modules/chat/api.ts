@@ -15,10 +15,7 @@ export type UserSummary = {
 
 export type ChatErrorResponse = ApiErrorResponse;
 
-export {
-  UNAUTHORIZED_MESSAGE,
-  SESSION_EXPIRED_ERROR,
-} from '@/shared/constants';
+export { SESSION_EXPIRED_ERROR } from '@/shared/constants';
 
 export async function fetchMe(): Promise<MeResponse> {
   return apiClient.get<MeResponse>(`${API_BASE}/me`);

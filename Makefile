@@ -24,7 +24,7 @@ COMPOSE_FILES_PROD = -f docker-compose.yml \
 	-f yaml/prometheus.yml \
 	-f yaml/grafana.yml
 
-.PHONY: clean help backend frontend format go-test-auth go-test-auth-coverage develop-up develop-up-build develop-down develop-down-volumes develop-reup develop-rebuild prod-up prod-up-build prod-down prod-down-volumes prod-reup prod-rebuild
+.PHONY: clean help backend frontend format backend-test develop-up develop-up-build develop-down develop-down-volumes develop-reup develop-rebuild prod-up prod-up-build prod-down prod-down-volumes prod-reup prod-rebuild
 
 develop-up:
 	@echo "Starting containers (DEVELOP mode - minimal)..."
@@ -107,13 +107,6 @@ else
 endif
 	@echo "Pruning Docker system..."
 	docker system prune -a --volumes -f
-	@echo "Removing coverage files..."
-ifeq ($(OS),Windows_NT)
-	@powershell -Command "if (Test-Path backend\coverage.html) { Remove-Item backend\coverage.html -Force }" 2>nul
-	@powershell -Command "if (Test-Path backend\coverage.out) { Remove-Item backend\coverage.out -Force }" 2>nul
-else
-	@rm -f backend/coverage.html backend/coverage.out 2>/dev/null || true
-endif
 	@echo "Docker cleanup complete!"
 
 help:
@@ -139,9 +132,8 @@ help:
 	@echo "  clean        - Remove ALL Docker containers, images, and volumes"
 	@echo "  backend      - Run backend services locally without Docker"
 	@echo "  frontend     - Run frontend locally without Docker"
-	@echo "  format       - Format and lint all code (backend + frontend)"
-	@echo "  go-test-auth          - Run auth service tests"
-	@echo "  go-test-auth-coverage - Run auth service tests with HTML coverage report"
+	@echo "  format        - Format and lint all code (backend + frontend)"
+	@echo "  backend-test  - Run all backend tests"
 
 backend:
 	cd backend && go run ./cmd/auth &
@@ -169,12 +161,8 @@ format:
 	@echo ""
 	@echo "All code formatted and linted!"
 
-go-test-auth:
-	@echo "Running auth service tests..."
-	cd backend && go test -v ./test/auth/...
-
-go-test-auth-coverage:
-	@echo "Running auth service tests with coverage..."
-	cd backend && go test -v -coverprofile=coverage.out -coverpkg=./internal/auth/service ./test/auth/...
-	cd backend && go tool cover -html=coverage.out -o coverage.html
-	@echo "Coverage report generated: backend/coverage.html"
+backend-test:
+	@echo "=== Backend: all tests ==="
+	cd backend && go test -count=1 ./test/...
+	@echo ""
+	@echo "Backend tests OK"

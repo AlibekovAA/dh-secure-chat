@@ -13,7 +13,7 @@ func RecoveryMiddleware(log *logger.Logger) func(next http.Handler) http.Handler
 			defer func() {
 				if err := recover(); err != nil {
 					log.Criticalf("panic recovered: %v\n%s", err, debug.Stack())
-					WriteError(w, http.StatusInternalServerError, "internal server error")
+					WriteErrorEnvelope(w, http.StatusInternalServerError, CodeUnknown, "internal server error", nil, "")
 				}
 			}()
 			next.ServeHTTP(w, r)

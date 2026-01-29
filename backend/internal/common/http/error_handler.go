@@ -50,7 +50,7 @@ func (h *ErrorHandler) HandleError(w http.ResponseWriter, r *http.Request, err e
 		r.Method,
 	).Inc()
 
-	WriteError(w, http.StatusInternalServerError, "internal server error")
+	WriteErrorEnvelope(w, http.StatusInternalServerError, CodeUnknown, "internal server error", nil, traceID)
 }
 
 func (h *ErrorHandler) handleDomainError(w http.ResponseWriter, r *http.Request, err commonerrors.DomainError) {
@@ -95,7 +95,7 @@ func (h *ErrorHandler) handleDomainError(w http.ResponseWriter, r *http.Request,
 		w.Header().Set("X-Trace-ID", traceID)
 	}
 
-	WriteError(w, status, message)
+	WriteErrorEnvelope(w, status, domainErr.Code(), message, nil, traceID)
 }
 
 func HandleError(w http.ResponseWriter, r *http.Request, err error, log *logger.Logger) {

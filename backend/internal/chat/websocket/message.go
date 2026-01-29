@@ -112,6 +112,12 @@ type AuthPayload struct {
 	Token string `json:"token"`
 }
 
+type AuthResponsePayload struct {
+	Authenticated bool   `json:"authenticated"`
+	Code          string `json:"code,omitempty"`
+	Message       string `json:"message,omitempty"`
+}
+
 type TypingPayload struct {
 	To       string `json:"to"`
 	From     string `json:"from,omitempty"`

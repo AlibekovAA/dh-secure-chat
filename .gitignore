@@ -1,8 +1,6 @@
 # Go
 backend/bin/
 backend/dist/
-backend/coverage.out
-backend/coverage.html
 backend/.cache/
 *.exe
 *.test

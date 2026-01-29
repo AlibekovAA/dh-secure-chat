@@ -26,6 +26,34 @@ var (
 		"validation failed",
 	)
 
+	ErrValidationUsernameLength = commonerrors.NewDomainError(
+		"VALIDATION_USERNAME_LENGTH",
+		commonerrors.CategoryValidation,
+		400,
+		"username must be between 3 and 32 characters",
+	)
+
+	ErrValidationPasswordLength = commonerrors.NewDomainError(
+		"VALIDATION_PASSWORD_LENGTH",
+		commonerrors.CategoryValidation,
+		400,
+		"password must be between 8 and 72 characters",
+	)
+
+	ErrValidationUsernameChars = commonerrors.NewDomainError(
+		"VALIDATION_USERNAME_CHARS",
+		commonerrors.CategoryValidation,
+		400,
+		"username may contain only letters, digits, underscore and dash",
+	)
+
+	ErrValidationPasswordLatinDigit = commonerrors.NewDomainError(
+		"VALIDATION_PASSWORD_LATIN_DIGIT",
+		commonerrors.CategoryValidation,
+		400,
+		"password must contain at least one letter and one digit",
+	)
+
 	ErrInvalidRefreshToken = commonerrors.NewDomainError(
 		"INVALID_REFRESH_TOKEN",
 		commonerrors.CategoryUnauthorized,

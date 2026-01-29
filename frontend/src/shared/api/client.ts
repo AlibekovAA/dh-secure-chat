@@ -1,8 +1,5 @@
 import { parseApiError } from '@/shared/api/error-handler';
-import {
-  SESSION_EXPIRED_ERROR,
-  UNAUTHORIZED_MESSAGE,
-} from '@/shared/constants';
+import { SESSION_EXPIRED_ERROR } from '@/shared/constants';
 
 type RefreshTokenCallback = () => Promise<string | null>;
 type OnTokenExpiredCallback = () => void;
@@ -63,8 +60,12 @@ class ApiClient {
         if (this.onTokenExpired) {
           this.onTokenExpired();
         }
-        const error = new Error(SESSION_EXPIRED_ERROR);
-        (error as { silent?: boolean }).silent = true;
+        const error = new Error(SESSION_EXPIRED_ERROR) as Error & {
+          code?: string;
+          silent?: boolean;
+        };
+        error.code = 'REFRESH_TOKEN_EXPIRED';
+        error.silent = true;
         throw error;
       }
 
@@ -94,10 +95,20 @@ class ApiClient {
               if (this.onTokenExpired) {
                 this.onTokenExpired();
               }
-              throw new Error(UNAUTHORIZED_MESSAGE);
+              const err = new Error(SESSION_EXPIRED_ERROR) as Error & {
+                code?: string;
+              };
+              err.code = 'UNAUTHORIZED';
+              throw err;
             }
-            const errorMessage = await parseApiError(retryResponse);
-            throw new Error(errorMessage.message);
+            const appErr = await parseApiError(retryResponse);
+            const errRetry = new Error(appErr.message) as Error & {
+              code?: string;
+              statusCode?: number;
+            };
+            errRetry.code = appErr.code;
+            errRetry.statusCode = appErr.statusCode;
+            throw errRetry;
           }
 
           const json = (await retryResponse.json()) as T;
@@ -107,7 +118,11 @@ class ApiClient {
           if (this.onTokenExpired) {
             this.onTokenExpired();
           }
-          throw new Error(SESSION_EXPIRED_ERROR);
+          const errExpired = new Error(SESSION_EXPIRED_ERROR) as Error & {
+            code?: string;
+          };
+          errExpired.code = 'REFRESH_TOKEN_EXPIRED';
+          throw errExpired;
         }
       }
 
@@ -119,12 +134,24 @@ class ApiClient {
           }
         }
 
-        const errorMessage = await parseApiError(response);
-        throw new Error(errorMessage.message);
+        const appErr = await parseApiError(response);
+        const err401 = new Error(appErr.message) as Error & {
+          code?: string;
+          statusCode?: number;
+        };
+        err401.code = appErr.code;
+        err401.statusCode = appErr.statusCode;
+        throw err401;
       }
 
-      const errorMessage = await parseApiError(response);
-      throw new Error(errorMessage.message);
+      const appErr = await parseApiError(response);
+      const err = new Error(appErr.message) as Error & {
+        code?: string;
+        statusCode?: number;
+      };
+      err.code = appErr.code;
+      err.statusCode = appErr.statusCode;
+      throw err;
     }
 
     const json = (await response.json()) as T;

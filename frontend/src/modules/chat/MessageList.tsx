@@ -98,6 +98,8 @@ export function MessageList({
     };
   }, [scrollElementRef]);
 
+  const items = virtualizer.getVirtualItems();
+
   useEffect(() => {
     const prevLength = prevMessagesLengthRef.current;
     prevMessagesLengthRef.current = messages.length;
@@ -128,8 +130,6 @@ export function MessageList({
       });
     };
   }, [messages, virtualizer]);
-
-  const items = virtualizer.getVirtualItems();
 
   return (
     <>

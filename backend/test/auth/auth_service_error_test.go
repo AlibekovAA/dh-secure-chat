@@ -415,7 +415,7 @@ func TestRefreshTokenRotator_IssueRefreshToken_RotateError(t *testing.T) {
 	}
 }
 
-func TestValidationError_Unwrap(t *testing.T) {
+func TestValidationError_DomainError(t *testing.T) {
 	validator := service.NewCredentialValidator()
 
 	err := validator.Validate("ab", "password123")
@@ -423,18 +423,15 @@ func TestValidationError_Unwrap(t *testing.T) {
 		t.Fatal("expected validation error")
 	}
 
-	validationErr, ok := service.AsValidationError(err)
+	de, ok := commonerrors.AsDomainError(err)
 	if !ok {
-		t.Fatal("expected ValidationError")
+		t.Fatal("expected domain error")
 	}
-
-	unwrapped := validationErr.Unwrap()
-	if unwrapped == nil {
-		t.Error("expected unwrapped error")
+	if de.Code() != "VALIDATION_USERNAME_LENGTH" {
+		t.Errorf("expected VALIDATION_USERNAME_LENGTH, got %s", de.Code())
 	}
-
-	if !errors.Is(unwrapped, service.ErrValidation) {
-		t.Errorf("expected ErrValidation, got %v", unwrapped)
+	if de.Category() != commonerrors.CategoryValidation {
+		t.Errorf("expected CategoryValidation, got %s", de.Category())
 	}
 }
 

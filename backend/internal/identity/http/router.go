@@ -40,7 +40,7 @@ func (h *Handler) handleIdentityRoutes(w http.ResponseWriter, r *http.Request) {
 		h.getPublicKey(w, r)
 		return
 	}
-	commonhttp.WriteError(w, http.StatusBadRequest, "invalid path")
+	commonhttp.WriteErrorEnvelope(w, http.StatusBadRequest, commonhttp.CodeInvalidPath, "invalid path", nil, "")
 }
 
 func (h *Handler) getPublicKey(w http.ResponseWriter, r *http.Request) {
@@ -76,7 +76,7 @@ func (h *Handler) handleIdentityRequest(
 ) {
 	urlPath := r.URL.Path
 	if !strings.HasSuffix(urlPath, suffix) {
-		commonhttp.WriteError(w, http.StatusBadRequest, "invalid path")
+		commonhttp.WriteErrorEnvelope(w, http.StatusBadRequest, commonhttp.CodeInvalidPath, "invalid path", nil, "")
 		return
 	}
 
@@ -87,7 +87,7 @@ func (h *Handler) handleIdentityRequest(
 				"operation": operation,
 				"action":    "identity_empty_user_id",
 			}).Warn("identity request failed: empty user_id")
-			commonhttp.WriteError(w, http.StatusBadRequest, "user_id is required")
+			commonhttp.WriteErrorEnvelope(w, http.StatusBadRequest, commonhttp.CodeUserIDRequired, "user_id is required", nil, "")
 			return
 		}
 		h.log.WithFields(r.Context(), logger.Fields{
@@ -95,7 +95,7 @@ func (h *Handler) handleIdentityRequest(
 			"user_id":   userID,
 			"action":    "identity_invalid_user_id_format",
 		}).Warn("identity request failed: invalid user_id format")
-		commonhttp.WriteError(w, http.StatusBadRequest, "invalid user_id format (must be UUID)")
+		commonhttp.WriteErrorEnvelope(w, http.StatusBadRequest, commonhttp.CodeInvalidUserIDFormat, "invalid user_id format (must be UUID)", nil, "")
 		return
 	}
 

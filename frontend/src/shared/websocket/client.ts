@@ -1,5 +1,6 @@
 import type { WSMessage, ConnectionState } from '@/shared/websocket/types';
 import { SequenceManager } from '@/shared/websocket/sequence-manager';
+import { isAuthErrorCode } from '@/shared/api/error-handler';
 import {
   MAX_RECONNECT_DELAY_MS,
   WEBSOCKET_MAX_RECONNECT_ATTEMPTS,
@@ -75,6 +76,8 @@ export class WebSocketClient {
               if (message.type === 'auth') {
                 const payload = message.payload as {
                   authenticated?: boolean;
+                  code?: string;
+                  message?: string;
                   error?: string;
                 };
                 if (payload.authenticated === true) {
@@ -83,14 +86,9 @@ export class WebSocketClient {
                   this.isRefreshingToken = false;
                   continue;
                 }
-                if (payload.error) {
-                  const errorMessage = payload.error.toLowerCase();
-                  const isTokenError =
-                    errorMessage.includes('token') ||
-                    errorMessage.includes('invalid') ||
-                    errorMessage.includes('expired') ||
-                    errorMessage.includes('unauthorized');
+                const isTokenError = isAuthErrorCode(payload.code);
 
+                if (payload.code ?? payload.message ?? payload.error) {
                   if (
                     isTokenError &&
                     this.handlers.onTokenExpired &&
@@ -125,13 +123,13 @@ export class WebSocketClient {
                     return;
                   }
 
-                  this.handlers.onError?.(
-                    new Error(
-                      isTokenError
-                        ? MESSAGES.common.websocket.tokenExpiredRefreshing
-                        : payload.error
-                    )
-                  );
+                  const displayMessage =
+                    payload.message ??
+                    payload.error ??
+                    (isTokenError
+                      ? MESSAGES.common.websocket.tokenExpiredRefreshing
+                      : MESSAGES.common.websocket.connectionError);
+                  this.handlers.onError?.(new Error(displayMessage));
                   this.ws?.close();
                   return;
                 }

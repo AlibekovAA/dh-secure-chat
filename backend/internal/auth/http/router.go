@@ -50,7 +50,7 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 	var req registerRequest
 	if err := commonhttp.DecodeJSON(r, &req); err != nil {
 		h.log.Warnf("register failed: invalid json: %v", err)
-		commonhttp.WriteError(w, http.StatusBadRequest, "invalid json")
+		commonhttp.WriteErrorEnvelope(w, http.StatusBadRequest, commonhttp.CodeInvalidJSON, "invalid json", nil, "")
 		return
 	}
 
@@ -61,7 +61,7 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 		decoded, err := base64.StdEncoding.DecodeString(req.IdentityPubKey)
 		if err != nil {
 			h.log.Warnf("register failed: invalid identity_pub_key encoding: %v", err)
-			commonhttp.WriteError(w, http.StatusBadRequest, "invalid identity_pub_key encoding")
+			commonhttp.WriteErrorEnvelope(w, http.StatusBadRequest, commonhttp.CodeInvalidIdentityPubKeyEnc, "invalid identity_pub_key encoding", nil, "")
 			return
 		}
 		pubKey = decoded
@@ -85,7 +85,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
 	if err := commonhttp.DecodeJSON(r, &req); err != nil {
 		h.log.Warnf("login failed: invalid json: %v", err)
-		commonhttp.WriteError(w, http.StatusBadRequest, "invalid json")
+		commonhttp.WriteErrorEnvelope(w, http.StatusBadRequest, commonhttp.CodeInvalidJSON, "invalid json", nil, "")
 		return
 	}
 
@@ -107,7 +107,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("refresh_token")
 	if err != nil || cookie.Value == "" {
-		commonhttp.WriteError(w, http.StatusUnauthorized, "missing refresh token")
+		commonhttp.WriteErrorEnvelope(w, http.StatusUnauthorized, commonhttp.CodeMissingRefreshToken, "missing refresh token", nil, "")
 		return
 	}
 
@@ -165,19 +165,19 @@ func (h *Handler) revoke(w http.ResponseWriter, r *http.Request) {
 	} else {
 		tokenString, ok := jwtverify.ExtractTokenFromHeader(r)
 		if !ok {
-			commonhttp.WriteError(w, http.StatusUnauthorized, "missing authorization")
+			commonhttp.WriteErrorEnvelope(w, http.StatusUnauthorized, commonhttp.CodeMissingAuthorization, "missing authorization", nil, "")
 			return
 		}
 
 		claims, err = h.auth.ParseTokenForRevoke(ctx, tokenString)
 		if err != nil {
-			commonhttp.WriteError(w, http.StatusUnauthorized, "invalid token")
+			commonhttp.WriteErrorEnvelope(w, http.StatusUnauthorized, commonhttp.CodeInvalidToken, "invalid token", nil, "")
 			return
 		}
 	}
 
 	if claims.JTI == "" {
-		commonhttp.WriteError(w, http.StatusBadRequest, "token does not have jti")
+		commonhttp.WriteErrorEnvelope(w, http.StatusBadRequest, commonhttp.CodeTokenMissingJTI, "token does not have jti", nil, "")
 		return
 	}
 

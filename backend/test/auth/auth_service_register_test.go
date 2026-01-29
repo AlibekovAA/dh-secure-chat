@@ -143,8 +143,12 @@ func TestAuthService_Register_ValidationError(t *testing.T) {
 				t.Error("expected validation error")
 			}
 
-			if domainErr, ok := commonerrors.AsDomainError(err); !ok || domainErr.Code() != "VALIDATION_FAILED" {
-				t.Errorf("expected VALIDATION_FAILED error, got %v", err)
+			de, ok := commonerrors.AsDomainError(err)
+			if !ok || de.Category() != commonerrors.CategoryValidation {
+				t.Errorf("expected validation domain error, got %v", err)
+			}
+			if de.Code() == "" || de.Code() == "VALIDATION_FAILED" {
+				t.Errorf("expected specific validation code (VALIDATION_*), got %s", de.Code())
 			}
 		})
 	}

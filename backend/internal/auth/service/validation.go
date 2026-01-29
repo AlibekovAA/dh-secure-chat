@@ -1,25 +1,11 @@
 package service
 
 import (
-	"errors"
 	"regexp"
 	"unicode"
 
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
-	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 )
-
-type ValidationError struct {
-	reason string
-}
-
-func (e ValidationError) Error() string {
-	return e.reason
-}
-
-func (e ValidationError) Unwrap() error {
-	return ErrValidation
-}
 
 type CredentialValidator struct{}
 
@@ -37,19 +23,19 @@ var (
 
 func validateCredentials(username, password string) error {
 	if len(username) < constants.UsernameMinLength || len(username) > constants.UsernameMaxLength {
-		return ValidationError{reason: "username must be between 3 and 32 characters"}
+		return ErrValidationUsernameLength
 	}
 
 	if len(password) < constants.PasswordMinLength || len(password) > constants.PasswordMaxLength {
-		return ValidationError{reason: "password must be between 8 and 72 characters"}
+		return ErrValidationPasswordLength
 	}
 
 	if !isValidUsername(username) {
-		return ValidationError{reason: "username may contain only letters, digits, underscore and dash"}
+		return ErrValidationUsernameChars
 	}
 
 	if !isValidPassword(password) {
-		return ValidationError{reason: "password must contain at least one letter and one digit"}
+		return ErrValidationPasswordLatinDigit
 	}
 
 	return nil
@@ -88,15 +74,4 @@ func isValidPassword(value string) bool {
 	}
 
 	return false
-}
-
-func AsValidationError(err error) (ValidationError, bool) {
-	var v ValidationError
-	if errors.As(err, &v) {
-		return v, true
-	}
-	if domainErr, ok := commonerrors.AsDomainError(err); ok && domainErr.Code() == "VALIDATION_FAILED" {
-		return ValidationError{reason: domainErr.Message()}, true
-	}
-	return ValidationError{}, false
 }
