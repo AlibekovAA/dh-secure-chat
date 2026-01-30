@@ -1,5 +1,6 @@
 import { FormEvent, useState, useMemo, useRef, useEffect } from 'react';
-import { login, register } from '@/modules/auth/api';
+import { login, register, updatePublicKey } from '@/modules/auth/api';
+import { apiClient } from '@/shared/api/client';
 import { useToast } from '@/shared/ui/useToast';
 import { getFriendlyErrorMessage } from '@/shared/api/error-handler';
 import { validateAuthForm } from '@/shared/validation';
@@ -8,6 +9,7 @@ import {
   generateIdentityKeyPair,
   exportPublicKey,
   saveIdentityPrivateKey,
+  loadIdentityPrivateKey,
 } from '@/shared/crypto/identity';
 import { USERNAME_MIN_LENGTH, USERNAME_MAX_LENGTH } from '@/shared/constants';
 
@@ -108,6 +110,24 @@ export function AuthForm({ onAuthenticated }: Props) {
     try {
       if (mode === 'login') {
         const result = await login(username, password);
+        apiClient.setToken(result.token);
+        const existingKey = await loadIdentityPrivateKey();
+        if (!existingKey) {
+          try {
+            const keyPair = await generateIdentityKeyPair();
+            await saveIdentityPrivateKey(keyPair.privateKey);
+            const pub = await exportPublicKey(keyPair.publicKey);
+            await updatePublicKey(pub);
+            showToast(MESSAGES.auth.toasts.newKeyCreatedOnDevice, 'success', {
+              duration: 3000,
+            });
+          } catch (keyErr) {
+            const friendly = getFriendlyErrorMessage(keyErr);
+            showToast(friendly, 'error');
+            setSubmitting(false);
+            return;
+          }
+        }
         showToast(MESSAGES.auth.toasts.loginSuccess, 'success', {
           duration: 2000,
         });

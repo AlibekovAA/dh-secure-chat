@@ -61,7 +61,7 @@ export async function importPublicKey(base64: string): Promise<CryptoKey> {
 }
 
 async function getOrCreateMasterKey(): Promise<CryptoKey> {
-  const stored = sessionStorage.getItem(MASTER_KEY_STORAGE);
+  const stored = localStorage.getItem(MASTER_KEY_STORAGE);
   if (stored) {
     const keyData = Uint8Array.from(atob(stored), (c) => c.charCodeAt(0));
     return await crypto.subtle.importKey(
@@ -83,7 +83,7 @@ async function getOrCreateMasterKey(): Promise<CryptoKey> {
   );
 
   const exported = await crypto.subtle.exportKey('raw', key);
-  sessionStorage.setItem(
+  localStorage.setItem(
     MASTER_KEY_STORAGE,
     btoa(String.fromCharCode(...new Uint8Array(exported)))
   );

@@ -14,6 +14,7 @@ import (
 
 type Service interface {
 	CreateIdentityKey(ctx context.Context, userID string, publicKey []byte) error
+	UpdatePublicKey(ctx context.Context, userID string, publicKey []byte) error
 	GetPublicKey(ctx context.Context, userID string) ([]byte, error)
 	GetIdentityKey(ctx context.Context, userID string) (identitydomain.IdentityKey, error)
 	GetFingerprint(ctx context.Context, userID string) (string, error)
@@ -71,6 +72,57 @@ func (s *IdentityService) CreateIdentityKey(ctx context.Context, userID string, 
 		"user_id": userID,
 		"action":  "identity_key_created",
 	}).Info("identity key created")
+	return nil
+}
+
+func (s *IdentityService) UpdatePublicKey(ctx context.Context, userID string, publicKey []byte) error {
+	if len(publicKey) == 0 {
+		s.log.WithFields(ctx, logger.Fields{
+			"user_id": userID,
+			"action":  "update_identity_key_empty",
+		}).Warn("update identity key failed: empty public key")
+		return commonerrors.ErrInvalidPublicKey
+	}
+	if len(publicKey) < 50 || len(publicKey) > 200 {
+		s.log.WithFields(ctx, logger.Fields{
+			"user_id":    userID,
+			"key_length": len(publicKey),
+			"action":     "update_identity_key_invalid_length",
+		}).Warnf("update identity key failed: invalid public key length %d bytes (expected SPKI format 50-200 bytes)", len(publicKey))
+		return commonerrors.ErrInvalidPublicKey
+	}
+
+	err := s.repo.Update(ctx, userID, publicKey)
+	if err != nil {
+		if errors.Is(err, commonerrors.ErrIdentityKeyNotFound) {
+			key := identitydomain.IdentityKey{
+				UserID:    userID,
+				PublicKey: publicKey,
+			}
+			if createErr := s.repo.Create(ctx, key); createErr != nil {
+				s.log.WithFields(ctx, logger.Fields{
+					"user_id": userID,
+					"action":  "update_identity_key_create_failed",
+				}).Errorf("update identity key: create after missing row failed: %v", createErr)
+				return commonerrors.ErrIdentityKeyCreateFailed.WithCause(createErr)
+			}
+			s.log.WithFields(ctx, logger.Fields{
+				"user_id": userID,
+				"action":  "identity_key_created_on_update",
+			}).Info("identity key created (no existing row)")
+			return nil
+		}
+		s.log.WithFields(ctx, logger.Fields{
+			"user_id": userID,
+			"action":  "update_identity_key_failed",
+		}).Errorf("update identity key failed: %v", err)
+		return commonerrors.ErrIdentityKeyUpdateFailed.WithCause(err)
+	}
+
+	s.log.WithFields(ctx, logger.Fields{
+		"user_id": userID,
+		"action":  "identity_key_updated",
+	}).Info("identity key updated")
 	return nil
 }
 

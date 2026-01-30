@@ -43,3 +43,13 @@ export async function login(
     { credentials: 'include' }
   );
 }
+
+export async function updatePublicKey(publicKey: string): Promise<{
+  success: boolean;
+}> {
+  return apiClient.post<{ success: boolean }>(
+    '/api/identity/update-public-key',
+    { public_key: publicKey },
+    { credentials: 'include' }
+  );
+}

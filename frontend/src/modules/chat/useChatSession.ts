@@ -215,16 +215,27 @@ export function useChatSession({
         return;
       }
 
+      const senderId = payload.from || peerId;
+      if (payload.from && payload.from !== peerId) {
+        return;
+      }
+
       try {
-        if (!peerIdentityPublicKeyRef.current) {
-          const identityKeyResponse = await getIdentityKey(peerId);
-          peerIdentityPublicKeyRef.current = identityKeyResponse.public_key;
+        let senderPublicKey: string;
+        if (senderId === peerId && peerIdentityPublicKeyRef.current) {
+          senderPublicKey = peerIdentityPublicKeyRef.current;
+        } else {
+          const identityKeyResponse = await getIdentityKey(senderId);
+          senderPublicKey = identityKeyResponse.public_key;
+          if (senderId === peerId) {
+            peerIdentityPublicKeyRef.current = senderPublicKey;
+          }
         }
 
         const isValid = await verifyEphemeralKeySignature(
           payload.public_key,
           payload.signature,
-          peerIdentityPublicKeyRef.current
+          senderPublicKey
         );
 
         if (!isValid) {

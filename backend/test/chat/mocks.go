@@ -56,6 +56,10 @@ func (m *mockIdentityService) CreateIdentityKey(ctx context.Context, userID stri
 	return nil
 }
 
+func (m *mockIdentityService) UpdatePublicKey(ctx context.Context, userID string, publicKey []byte) error {
+	return nil
+}
+
 func (m *mockIdentityService) GetPublicKey(ctx context.Context, userID string) ([]byte, error) {
 	if m.getPublicKeyFunc != nil {
 		return m.getPublicKeyFunc(ctx, userID)

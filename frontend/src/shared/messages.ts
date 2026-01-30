@@ -6,7 +6,7 @@ export const MESSAGES = {
     usernameMaxLength: (max: number) =>
       `Имя пользователя должно быть максимум ${max} символов`,
     usernameAllowedChars:
-      'Имя пользователя может содержать только латинские буквы (A–Z), цифры, _ и -',
+      'Имя пользователя может содержать только латинские буквы, цифры, _ и -',
     usernameCannotStartOrEnd:
       'Имя пользователя не может начинаться или заканчиваться на _ или -',
 
@@ -16,7 +16,7 @@ export const MESSAGES = {
     passwordMaxLength: (max: number) =>
       `Пароль должен быть максимум ${max} символов`,
     passwordMustContainLatinLetter:
-      'Пароль должен содержать хотя бы одну латинскую букву (A–Z)',
+      'Пароль должен содержать хотя бы одну латинскую букву',
     passwordMustContainDigit: 'Пароль должен содержать хотя бы одну цифру',
 
     confirmPasswordRequired: 'Подтвердите пароль',
@@ -52,12 +52,14 @@ export const MESSAGES = {
     toasts: {
       loginSuccess: 'Успешный вход',
       registerSuccess: 'Регистрация прошла успешно.',
+      newKeyCreatedOnDevice:
+        'Создан новый ключ шифрования для этого устройства.',
     },
     info: {
       usernameMin: (min: number) => `Минимум ${min} символа`,
       usernameMax: (max: number) => `Максимум ${max} символа`,
       usernameOk: '✓ Корректное имя',
-      usernameAllowed: 'Только латинские буквы (A–Z), цифры, _ и -',
+      usernameAllowed: 'Только латинские буквы, цифры, _ и -',
       noPasswordRecovery:
         'Восстановление пароля невозможно. Сохраните пароль в надёжном месте.',
       passwordsMatch: 'Пароли совпадают',
@@ -65,7 +67,7 @@ export const MESSAGES = {
     },
     passwordStrength: {
       min8: 'Минимум 8 символов',
-      addUppercaseLatin: 'Добавьте заглавные латинские буквы (A–Z)',
+      addUppercaseLatin: 'Добавьте заглавные латинские буквы',
       addDigits: 'Добавьте цифры',
       addSpecial: 'Добавьте спецсимволы (!@#$%...)',
       labels: {
@@ -121,6 +123,10 @@ export const MESSAGES = {
       },
       errors: {
         failedToLoadFingerprint: 'Не удалось загрузить отпечаток',
+      },
+      myFingerprintModal: {
+        title: 'Ваш отпечаток',
+        close: 'Закрыть',
       },
     },
     contextMenu: {
@@ -463,6 +469,8 @@ export const MESSAGES = {
         title: 'Профиль',
         name: 'Имя:',
         choosePeer: 'Выберите собеседника, чтобы начать защищённый диалог.',
+        myFingerprintButton: 'Мой отпечаток',
+        myFingerprintAria: 'Показать мой отпечаток',
       },
       search: {
         title: 'Найти собеседника',
@@ -502,9 +510,9 @@ export const MESSAGES = {
     usernameBetween: 'Имя пользователя должно быть от 3 до 32 символов',
     passwordBetween: 'Пароль должен быть от 8 до 72 символов',
     usernameAllowedChars:
-      'Имя пользователя может содержать только латинские буквы (A–Z), цифры, подчёркивание и дефис',
+      'Имя пользователя может содержать только латинские буквы, цифры, подчёркивание и дефис',
     passwordMustContainLatinAndDigit:
-      'Пароль должен содержать хотя бы одну латинскую букву (A–Z) и одну цифру',
+      'Пароль должен содержать хотя бы одну латинскую букву и одну цифру',
     queryEmpty: 'Поисковый запрос не может быть пустым',
     queryTooLong: 'Поисковый запрос слишком длинный',
     sessionExpired: 'Сессия истекла. Войдите снова',

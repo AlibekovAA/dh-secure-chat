@@ -73,6 +73,7 @@ func (m *mockUserRepo) Delete(ctx context.Context, id userdomain.ID) error {
 
 type mockIdentityService struct {
 	createIdentityKeyFunc func(ctx context.Context, userID string, publicKey []byte) error
+	updatePublicKeyFunc   func(ctx context.Context, userID string, publicKey []byte) error
 	getPublicKeyFunc      func(ctx context.Context, userID string) ([]byte, error)
 	getIdentityKeyFunc    func(ctx context.Context, userID string) (identitydomain.IdentityKey, error)
 	getFingerprintFunc    func(ctx context.Context, userID string) (string, error)
@@ -81,6 +82,13 @@ type mockIdentityService struct {
 func (m *mockIdentityService) CreateIdentityKey(ctx context.Context, userID string, publicKey []byte) error {
 	if m.createIdentityKeyFunc != nil {
 		return m.createIdentityKeyFunc(ctx, userID, publicKey)
+	}
+	return nil
+}
+
+func (m *mockIdentityService) UpdatePublicKey(ctx context.Context, userID string, publicKey []byte) error {
+	if m.updatePublicKeyFunc != nil {
+		return m.updatePublicKeyFunc(ctx, userID, publicKey)
 	}
 	return nil
 }

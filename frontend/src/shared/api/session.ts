@@ -1,4 +1,5 @@
 import { apiClient } from '@/shared/api/client';
+import { MASTER_KEY_STORAGE } from '@/shared/constants';
 import { MESSAGES } from '@/shared/messages';
 
 type ToastFn = (
@@ -27,6 +28,7 @@ export async function clearSessionStorageSideEffects(): Promise<void> {
 
     try {
       localStorage.removeItem('userId');
+      localStorage.removeItem(MASTER_KEY_STORAGE);
     } catch {
       void 0;
     }

@@ -15,6 +15,7 @@ import (
 type Repository interface {
 	Create(ctx context.Context, key domain.IdentityKey) error
 	FindByUserID(ctx context.Context, userID string) (domain.IdentityKey, error)
+	Update(ctx context.Context, userID string, publicKey []byte) error
 }
 
 type PgRepository struct {
@@ -56,4 +57,24 @@ func (r *PgRepository) FindByUserID(ctx context.Context, userID string) (domain.
 		return domain.IdentityKey{}, err
 	}
 	return key, nil
+}
+
+func (r *PgRepository) Update(ctx context.Context, userID string, publicKey []byte) error {
+	ctx, cancel := context.WithTimeout(ctx, constants.DBQueryTimeout)
+	defer cancel()
+
+	start := time.Now()
+	result, err := r.pool.Exec(
+		ctx,
+		`UPDATE identity_keys SET public_key = $2 WHERE user_id = $1`,
+		userID,
+		publicKey,
+	)
+	if err != nil {
+		return db.HandleExecError(err, "update identity key", start)
+	}
+	if result.RowsAffected() == 0 {
+		return commonerrors.ErrIdentityKeyNotFound
+	}
+	return nil
 }

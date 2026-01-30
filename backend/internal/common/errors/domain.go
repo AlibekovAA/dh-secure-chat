@@ -325,6 +325,13 @@ var (
 		"failed to create identity key",
 	)
 
+	ErrIdentityKeyUpdateFailed = NewDomainError(
+		"IDENTITY_KEY_UPDATE_FAILED",
+		CategoryInternal,
+		http.StatusInternalServerError,
+		"failed to update identity key",
+	)
+
 	ErrIdentityKeyGetFailed = NewDomainError(
 		"IDENTITY_KEY_GET_FAILED",
 		CategoryInternal,
