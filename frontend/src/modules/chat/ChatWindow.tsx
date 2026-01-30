@@ -80,6 +80,40 @@ export function ChatWindow({
   } | null>(null);
   const [isEditingMessage, setIsEditingMessage] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+
+  const SCROLL_TO_BOTTOM_THRESHOLD_PX = 100;
+
+  const updateScrollToBottomVisibility = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const isScrollable = el.scrollHeight > el.clientHeight;
+    setShowScrollToBottom(
+      isScrollable && distanceFromBottom > SCROLL_TO_BOTTOM_THRESHOLD_PX
+    );
+  }, []);
+
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    updateScrollToBottomVisibility();
+    el.addEventListener('scroll', updateScrollToBottomVisibility, {
+      passive: true,
+    });
+    const resizeObserver = new ResizeObserver(updateScrollToBottomVisibility);
+    resizeObserver.observe(el);
+    return () => {
+      el.removeEventListener('scroll', updateScrollToBottomVisibility);
+      resizeObserver.disconnect();
+    };
+  }, [updateScrollToBottomVisibility]);
+
+  const handleScrollToBottom = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  }, []);
 
   useEffect(() => {
     if (token) {
@@ -547,11 +581,12 @@ export function ChatWindow({
           )}
         </div>
 
-        <div
-          ref={scrollContainerRef}
-          className="flex-1 overflow-y-auto px-4 py-4 space-y-3 scrollbar-custom relative chat-scroll-area"
-        >
-          {isLoadingFingerprint && (
+        <div className="flex-1 relative min-h-0 flex flex-col">
+          <div
+            ref={scrollContainerRef}
+            className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-3 scrollbar-custom chat-scroll-area"
+          >
+            {isLoadingFingerprint && (
             <div className="flex items-center justify-center py-8">
               <div className="flex flex-col items-center gap-3">
                 <Spinner size="lg" borderColorClass="border-emerald-400" />
@@ -659,6 +694,30 @@ export function ChatWindow({
                 <p className="text-sm text-red-300 text-center">{error}</p>
               </div>
             </div>
+          )}
+          </div>
+
+          {showScrollToBottom && (
+            <button
+              type="button"
+              onClick={handleScrollToBottom}
+              className="absolute bottom-4 right-4 z-10 rounded-full bg-emerald-500 hover:bg-emerald-400 text-black p-2.5 shadow-lg smooth-transition button-press flex items-center justify-center"
+              aria-label={MESSAGES.chat.window.aria.scrollToLastMessage}
+            >
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 14l-7 7m0 0l-7-7m7 7V3"
+                />
+              </svg>
+            </button>
           )}
         </div>
 

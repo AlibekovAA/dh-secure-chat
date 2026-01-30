@@ -240,6 +240,7 @@ export const MESSAGES = {
       aria: {
         closeChat: 'Закрыть чат',
         cancelReply: 'Отменить ответ',
+        scrollToLastMessage: 'Прокрутить к последнему сообщению',
       },
       actions: {
         verifyIdentity: 'Проверить Identity',
