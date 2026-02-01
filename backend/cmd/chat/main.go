@@ -13,11 +13,13 @@ import (
 	chathttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/http"
 	chatservice "github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/service"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/websocket"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/websocket/middleware"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/bootstrap"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/clock"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	commonhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/http"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/jwtverify"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/resilience"
 	srv "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/server"
 	identityhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/http"
 )
@@ -51,11 +53,42 @@ func main() {
 		DebugSampleRate:         constants.WebSocketDebugSampleRate,
 	}
 
+	clk := clock.NewRealClock()
 	hub := websocket.NewHub(websocket.HubDeps{
-		Log:      app.Log,
-		UserRepo: app.UserRepo,
-		Clock:    clock.NewRealClock(),
+		Log:   app.Log,
+		Clock: clk,
 	}, hubConfig)
+
+	lastSeenCB := resilience.NewCircuitBreaker(resilience.CircuitBreakerConfig{
+		Threshold:  hubConfig.CircuitBreakerThreshold,
+		Timeout:    hubConfig.CircuitBreakerTimeout,
+		ResetAfter: hubConfig.CircuitBreakerReset,
+		Name:       "last_seen_update",
+		Logger:     app.Log,
+	})
+	presenceService := websocket.NewPresenceService(hub.Context(), websocket.PresenceServiceDeps{
+		Sender:   hub,
+		UserRepo: app.UserRepo,
+		Log:      app.Log,
+		Clock:    clk,
+	}, websocket.PresenceServiceConfig{
+		LastSeenUpdateInterval: hubConfig.LastSeenUpdateInterval,
+		CircuitBreaker:         lastSeenCB,
+	})
+
+	fileService := websocket.NewFileTransferService(hub, hubConfig.FileTransferTimeout, clk, app.Log, hub.Context())
+
+	validator := websocket.NewDefaultValidator(hubConfig.MaxFileSize, hubConfig.MaxVoiceSize)
+	router := websocket.NewMessageRouter(hub, presenceService, fileService, validator, app.Log, hubConfig.DebugSampleRate)
+	processor := websocket.NewMessageProcessor(hubConfig.ProcessorWorkers, router, app.Log, hubConfig.ProcessorQueueSize)
+
+	idempotencyTracker := websocket.NewIdempotencyTracker(hub.Context(), hubConfig.IdempotencyTTL, clk)
+	idempotencyAdapter := &websocket.IdempotencyAdapter{Tracker: idempotencyTracker}
+	idempotencyMiddleware := middleware.NewIdempotencyMiddleware(idempotencyAdapter, app.Log)
+	messageHandler := websocket.NewIncomingMessageHandler(idempotencyTracker, idempotencyMiddleware, processor)
+
+	hub.Wire(messageHandler, presenceService, fileService)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
 	wg.Add(1)

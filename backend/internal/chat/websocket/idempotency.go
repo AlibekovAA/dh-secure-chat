@@ -95,3 +95,15 @@ func (t *IdempotencyTracker) cleanup() {
 func (t *IdempotencyTracker) Shutdown() {
 	t.cancel()
 }
+
+type IdempotencyAdapter struct {
+	Tracker *IdempotencyTracker
+}
+
+func (a *IdempotencyAdapter) GenerateOperationID(userID string, msgType string, payload []byte) string {
+	return a.Tracker.GenerateOperationID(userID, MessageType(msgType), payload)
+}
+
+func (a *IdempotencyAdapter) Execute(operationID string, msgType string, fn func() (interface{}, error)) (interface{}, error) {
+	return a.Tracker.Execute(operationID, MessageType(msgType), fn)
+}

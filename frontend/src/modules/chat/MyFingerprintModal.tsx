@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getFingerprint } from '@/modules/chat/api';
-import { fingerprintToEmojis, formatFingerprint } from '@/shared/crypto/fingerprint';
+import {
+  fingerprintToEmojis,
+  formatFingerprint,
+} from '@/shared/crypto/fingerprint';
 import { Spinner } from '@/shared/ui/Spinner';
 import { MESSAGES } from '@/shared/messages';
 
