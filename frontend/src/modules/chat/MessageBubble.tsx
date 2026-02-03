@@ -71,6 +71,7 @@ function MessageBubbleComponent({
   const [editText, setEditText] = useState('');
   const messageRef = useRef<HTMLDivElement>(null);
   const editInputRef = useRef<HTMLTextAreaElement>(null);
+  const [reactionsPage, setReactionsPage] = useState(0);
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -137,6 +138,19 @@ function MessageBubbleComponent({
       editInputRef.current.select();
     }
   }, [isEditing]);
+
+  useEffect(() => {
+    if (!message.reactions) {
+      setReactionsPage(0);
+      return;
+    }
+    const entries = Object.entries(message.reactions).filter(
+      ([, userIds]) => userIds.length > 0
+    );
+    const maxPage =
+      entries.length > 0 ? Math.max(0, Math.ceil(entries.length / 2) - 1) : 0;
+    setReactionsPage((prev) => Math.min(prev, maxPage));
+  }, [message.reactions, message.id]);
 
   useEffect(() => {
     if (message.isOwn || !onMarkAsRead || !messageRef.current) return;
@@ -297,7 +311,7 @@ function MessageBubbleComponent({
             ) : (
               <>
                 {message.text && (
-                  <p className="text-sm whitespace-pre-wrap break-words leading-relaxed text-emerald-50/95">
+                  <p className="text-[0.95rem] whitespace-pre-wrap break-words leading-relaxed text-emerald-50/95">
                     {message.text}
                     {message.isEdited && (
                       <span className="ml-2 text-[10px] text-emerald-500/60 italic">
@@ -359,38 +373,99 @@ function MessageBubbleComponent({
               />
             )}
 
-            {message.reactions && Object.keys(message.reactions).length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-2">
-                {Object.entries(message.reactions).map(([emoji, userIds]) => {
-                  if (userIds.length === 0) return null;
-                  const hasReacted = userIds.includes(myUserId);
-                  return (
+            {(() => {
+              const reactionEntries = message.reactions
+                ? Object.entries(message.reactions).filter(
+                    ([, userIds]) => userIds.length > 0
+                  )
+                : [];
+              const hasReactions = reactionEntries.length > 0;
+              const pageSize = 2;
+              const totalPages = Math.max(
+                1,
+                Math.ceil(reactionEntries.length / pageSize)
+              );
+              const currentPage = Math.min(reactionsPage, totalPages - 1);
+              const startIndex = currentPage * pageSize;
+              const visibleReactions = reactionEntries.slice(
+                startIndex,
+                startIndex + pageSize
+              );
+
+              if (!hasReactions) {
+                return null;
+              }
+
+              return (
+                <div
+                  className={`mt-1.5 mb-0.5 flex items-center gap-1 ${
+                    message.isOwn ? 'justify-end' : 'justify-start'
+                  }`}
+                >
+                  {totalPages > 1 && (
                     <button
-                      key={emoji}
+                      type="button"
                       onClick={() =>
-                        onReaction(
-                          message.id,
-                          emoji,
-                          hasReacted ? 'remove' : 'add'
+                        setReactionsPage((prev) =>
+                          prev > 0 ? prev - 1 : totalPages - 1
                         )
                       }
-                      className={`px-2 py-0.5 rounded text-xs flex items-center gap-1 transition-colors ${
-                        hasReacted
-                          ? 'bg-emerald-500/40 border border-emerald-500/60'
-                          : 'bg-black/40 border border-emerald-500/20 hover:bg-emerald-500/20'
-                      }`}
+                      className="w-6 h-6 flex items-center justify-center rounded-full border border-emerald-700/60 bg-black/40 text-[10px] text-emerald-300 hover:bg-emerald-900/60 smooth-transition"
                     >
-                      <span>{emoji}</span>
-                      <span className="text-emerald-500/80">
-                        {userIds.length}
-                      </span>
+                      ←
                     </button>
-                  );
-                })}
-              </div>
-            )}
+                  )}
+                  <div className="flex flex-wrap gap-1">
+                    {visibleReactions.map(([emoji, userIds]) => {
+                      const hasReacted = userIds.includes(myUserId);
+                      return (
+                        <button
+                          key={emoji}
+                          onClick={() =>
+                            onReaction(
+                              message.id,
+                              emoji,
+                              hasReacted ? 'remove' : 'add'
+                            )
+                          }
+                          className={`group/reaction inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium shadow-sm transition-all duration-150 animate-[fadeIn_0.18s_ease-out] ${
+                            hasReacted
+                              ? message.isOwn
+                                ? 'bg-gradient-to-br from-emerald-400 to-emerald-500 text-black shadow-emerald-900/40 ring-1 ring-emerald-300/80'
+                                : 'bg-gradient-to-br from-emerald-500/80 to-emerald-400/80 text-black shadow-emerald-900/30 ring-1 ring-emerald-300/70'
+                              : message.isOwn
+                                ? 'bg-emerald-500/15 border border-emerald-400/50 text-emerald-50/90 hover:bg-emerald-500/20 shadow-emerald-900/20'
+                                : 'bg-emerald-900/40 border border-emerald-600/40 text-emerald-50/90 hover:bg-emerald-900/55 shadow-emerald-900/30'
+                          } hover:scale-[1.04] active:scale-[0.97]`}
+                        >
+                          <span className="text-lg leading-none">
+                            {emoji}
+                          </span>
+                          <span className="text-[10px] font-semibold text-emerald-100/90">
+                            {userIds.length}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {totalPages > 1 && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setReactionsPage((prev) =>
+                          prev < totalPages - 1 ? prev + 1 : 0
+                        )
+                      }
+                      className="w-6 h-6 flex items-center justify-center rounded-full border border-emerald-700/60 bg-black/40 text-[10px] text-emerald-300 hover:bg-emerald-900/60 smooth-transition"
+                    >
+                      →
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
 
-            <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-emerald-500/10">
+            <div className="flex items-center justify-between border-t border-emerald-500/10 pt-1.5 mt-2.5">
               <p className="text-xs text-emerald-400/70 leading-relaxed font-medium">
                 {formatTime(message.timestamp)}
               </p>

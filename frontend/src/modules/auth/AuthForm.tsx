@@ -79,6 +79,26 @@ export function AuthForm({ onAuthenticated }: Props) {
     usernameInputRef.current?.focus();
   }, [mode]);
 
+  const trimmedUsername = username.trim();
+  const usernameLength = trimmedUsername.length;
+  const isUsernameTooShort =
+    usernameLength > 0 && usernameLength < USERNAME_MIN_LENGTH;
+  const isUsernameTooLong =
+    usernameLength > 0 && usernameLength > USERNAME_MAX_LENGTH;
+  const usernameCharsValid =
+    usernameLength === 0 || /^[a-zA-Z0-9_-]+$/.test(trimmedUsername);
+  const usernameStartsOrEndsInvalid =
+    usernameLength > 0 &&
+    (trimmedUsername[0] === '_' ||
+      trimmedUsername[0] === '-' ||
+      trimmedUsername[usernameLength - 1] === '_' ||
+      trimmedUsername[usernameLength - 1] === '-');
+  const isUsernameValid =
+    usernameLength >= USERNAME_MIN_LENGTH &&
+    usernameLength <= USERNAME_MAX_LENGTH &&
+    usernameCharsValid &&
+    !usernameStartsOrEndsInvalid;
+
   const switchMode = (next: Mode, resetFields: boolean) => {
     setMode(next);
     if (resetFields) {
@@ -207,7 +227,13 @@ export function AuthForm({ onAuthenticated }: Props) {
             type="text"
             value={username}
             onChange={(event) => setUsername(event.target.value)}
-            className="w-full rounded-md bg-black border border-emerald-700 px-3 py-2 text-sm text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500"
+            className={`w-full rounded-md bg-black border px-3 py-2 text-sm text-emerald-50 outline-none focus:ring-2 ${
+              mode === 'register' && username
+                ? isUsernameValid
+                  ? 'border-emerald-500/70 focus:ring-emerald-500'
+                  : 'border-red-500/60 focus:ring-red-500'
+                : 'border-emerald-700 focus:ring-emerald-500'
+            }`}
             autoComplete="username"
             disabled={submitting}
           />
@@ -219,14 +245,22 @@ export function AuthForm({ onAuthenticated }: Props) {
                 opacity: username ? 1 : 0,
               }}
             >
-              <p className="text-xs text-emerald-500/70 mt-1">
-                {username.length < 3
+              <p
+                className={`text-xs mt-1 transition-colors ${
+                  username && !isUsernameValid
+                    ? 'text-red-400'
+                    : 'text-emerald-500/70'
+                }`}
+              >
+                {isUsernameTooShort
                   ? MESSAGES.auth.info.usernameMin(USERNAME_MIN_LENGTH)
-                  : username.length > 32
+                  : isUsernameTooLong
                     ? MESSAGES.auth.info.usernameMax(USERNAME_MAX_LENGTH)
-                    : /^[a-zA-Z0-9_-]+$/.test(username)
-                      ? MESSAGES.auth.info.usernameOk
-                      : MESSAGES.auth.info.usernameAllowed}
+                    : !usernameCharsValid
+                      ? MESSAGES.auth.info.usernameAllowed
+                      : usernameStartsOrEndsInvalid
+                        ? MESSAGES.validation.usernameCannotStartOrEnd
+                        : MESSAGES.auth.info.usernameOk}
               </p>
             </div>
           )}

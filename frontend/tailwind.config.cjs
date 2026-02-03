@@ -5,7 +5,6 @@ module.exports = {
     extend: {
       fontFamily: {
         sans: [
-          'Inter',
           'system-ui',
           '-apple-system',
           'BlinkMacSystemFont',
@@ -13,21 +12,15 @@ module.exports = {
           'Roboto',
           'sans-serif',
         ],
-        mono: [
-          'JetBrains Mono',
-          'Consolas',
-          'Monaco',
-          'Courier New',
-          'monospace',
-        ],
+        mono: ['Consolas', 'Monaco', 'Courier New', 'monospace'],
       },
       fontSize: {
         xs: ['0.75rem', { lineHeight: '1.5', letterSpacing: '0.01em' }],
-        sm: ['0.875rem', { lineHeight: '1.5', letterSpacing: '0.01em' }],
-        base: ['1rem', { lineHeight: '1.6', letterSpacing: '0' }],
-        lg: ['1.125rem', { lineHeight: '1.5', letterSpacing: '-0.01em' }],
-        xl: ['1.25rem', { lineHeight: '1.4', letterSpacing: '-0.02em' }],
-        '2xl': ['1.5rem', { lineHeight: '1.3', letterSpacing: '-0.02em' }],
+        sm: ['0.9rem', { lineHeight: '1.55', letterSpacing: '0.01em' }],
+        base: ['1.05rem', { lineHeight: '1.65', letterSpacing: '0' }],
+        lg: ['1.18rem', { lineHeight: '1.55', letterSpacing: '-0.01em' }],
+        xl: ['1.28rem', { lineHeight: '1.45', letterSpacing: '-0.02em' }],
+        '2xl': ['1.55rem', { lineHeight: '1.32', letterSpacing: '-0.02em' }],
       },
       spacing: {
         18: '4.5rem',

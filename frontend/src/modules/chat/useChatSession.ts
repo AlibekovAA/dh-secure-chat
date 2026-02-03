@@ -763,15 +763,57 @@ export function useChatSession({
     async (messageId: string, emoji: string, action: 'add' | 'remove') => {
       if (!peerId || !isConnected || !send || state !== 'active') return;
 
+      const myUserId = localStorage.getItem('userId') || '';
+
       const message = messages.find((m) => m.id === messageId);
       if (!message) return;
 
       const reactions = message.reactions || {};
       const emojiReactions = reactions[emoji] || [];
-      const myUserId = localStorage.getItem('userId') || '';
 
       if (action === 'add' && emojiReactions.includes(myUserId)) return;
       if (action === 'remove' && !emojiReactions.includes(myUserId)) return;
+
+      const myEmojisOnMessage = Object.entries(reactions)
+        .filter(([, userIds]) => userIds.includes(myUserId))
+        .map(([e]) => e);
+
+      if (
+        action === 'add' &&
+        !emojiReactions.includes(myUserId) &&
+        myEmojisOnMessage.length >= 2
+      ) {
+        const emojiToRemove = myEmojisOnMessage[0];
+        if (emojiToRemove && emojiToRemove !== emoji) {
+          send({
+            type: 'reaction',
+            payload: {
+              to: peerId,
+              message_id: messageId,
+              emoji: emojiToRemove,
+              action: 'remove',
+            },
+          });
+
+          setMessages((prev) =>
+            prev.map((msg) => {
+              if (msg.id !== messageId) return msg;
+              const currentReactions = msg.reactions || {};
+              const currentEmojiReactions =
+                currentReactions[emojiToRemove] || [];
+              return {
+                ...msg,
+                reactions: {
+                  ...currentReactions,
+                  [emojiToRemove]: currentEmojiReactions.filter(
+                    (id) => id !== myUserId
+                  ),
+                },
+              };
+            })
+          );
+        }
+      }
 
       send({
         type: 'reaction',
@@ -785,30 +827,25 @@ export function useChatSession({
 
       setMessages((prev) =>
         prev.map((msg) => {
-          if (msg.id === messageId) {
-            const currentReactions = msg.reactions || {};
-            const currentEmojiReactions = currentReactions[emoji] || [];
-            if (action === 'add') {
-              return {
-                ...msg,
-                reactions: {
-                  ...currentReactions,
-                  [emoji]: [...currentEmojiReactions, myUserId],
-                },
-              };
-            } else {
-              return {
-                ...msg,
-                reactions: {
-                  ...currentReactions,
-                  [emoji]: currentEmojiReactions.filter(
-                    (id) => id !== myUserId
-                  ),
-                },
-              };
-            }
+          if (msg.id !== messageId) return msg;
+          const currentReactions = msg.reactions || {};
+          const currentEmojiReactions = currentReactions[emoji] || [];
+          if (action === 'add') {
+            return {
+              ...msg,
+              reactions: {
+                ...currentReactions,
+                [emoji]: [...currentEmojiReactions, myUserId],
+              },
+            };
           }
-          return msg;
+          return {
+            ...msg,
+            reactions: {
+              ...currentReactions,
+              [emoji]: currentEmojiReactions.filter((id) => id !== myUserId),
+            },
+          };
         })
       );
     },

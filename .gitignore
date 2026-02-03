@@ -22,6 +22,7 @@ pnpm-debug.log*
 .env
 .env.local
 .env.*.local
+infra/proxy/certs/*
 
 # IDE / OS
 .DS_Store

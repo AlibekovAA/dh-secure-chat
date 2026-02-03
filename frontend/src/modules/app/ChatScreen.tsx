@@ -1,7 +1,6 @@
 import { useEffect, useState, type KeyboardEvent } from 'react';
 import type { UserSummary } from '@/modules/chat/api';
 import { ChatWindow } from '@/modules/chat/ChatWindow';
-import { MyFingerprintModal } from '@/modules/chat/MyFingerprintModal';
 import { RESULTS_PER_PAGE } from '@/shared/constants';
 import { Spinner } from '@/shared/ui/Spinner';
 import { MESSAGES } from '@/shared/messages';
@@ -38,7 +37,6 @@ export function ChatScreen({
 }: Props) {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedPeer, setSelectedPeer] = useState<UserSummary | null>(null);
-  const [showMyFingerprintModal, setShowMyFingerprintModal] = useState(false);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !isSearching && searchQuery.trim()) {
@@ -97,21 +95,9 @@ export function ChatScreen({
             <p className="text-xs text-emerald-500/80 mb-1">
               {MESSAGES.app.chatScreen.profile.name} {profile?.username ?? '…'}
             </p>
-            <div className="flex flex-wrap items-center gap-2 mb-3">
-              <p className="text-xs text-emerald-500/80 break-all font-mono">
-                ID: {profile?.id ?? '…'}
-              </p>
-              {profile && (
-                <button
-                  type="button"
-                  onClick={() => setShowMyFingerprintModal(true)}
-                  className="inline-flex items-center rounded-lg border border-emerald-700/60 bg-emerald-900/30 px-3 py-2 text-xs font-medium text-emerald-400 hover:bg-emerald-900/50 hover:border-emerald-600/60 hover:text-emerald-300 transition-colors shrink-0"
-                  aria-label={MESSAGES.app.chatScreen.profile.myFingerprintAria}
-                >
-                  {MESSAGES.app.chatScreen.profile.myFingerprintButton}
-                </button>
-              )}
-            </div>
+            <p className="text-xs text-emerald-500/80 break-all font-mono mb-3">
+              ID: {profile?.id ?? '…'}
+            </p>
             <p className="text-xs text-emerald-500/70 mb-3">
               {MESSAGES.app.chatScreen.profile.choosePeer}
             </p>
@@ -375,13 +361,6 @@ export function ChatScreen({
           myUserId={profile.id}
           onClose={() => setSelectedPeer(null)}
           onTokenExpired={onTokenExpired}
-        />
-      )}
-
-      {showMyFingerprintModal && profile && (
-        <MyFingerprintModal
-          userId={profile.id}
-          onClose={() => setShowMyFingerprintModal(false)}
         />
       )}
     </div>
