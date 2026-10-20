@@ -36,7 +36,7 @@ export function EmojiPicker({ anchorRect, isOwn, onSelect, onClose }: Props) {
 
   const initialPosition = useMemo(() => {
     if (typeof document === 'undefined') {
-      return { x: anchorRect.left, y: anchorRect.bottom + 8 };
+      return { x: left, y: bottom + 8 };
     }
 
     const chatContainer = document.querySelector(

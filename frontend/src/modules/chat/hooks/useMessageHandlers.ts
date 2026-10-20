@@ -19,7 +19,84 @@ import type {
 import type {
   ChatMessage,
   ChatSessionState,
+  FileBuffer,
 } from '@/modules/chat/useChatSession';
+import {
+  AES_GCM_NONCE_SIZE_BYTES,
+  AES_GCM_TAG_SIZE_BYTES,
+  FILE_CHUNK_SIZE,
+  MAX_CONCURRENT_FILE_TRANSFERS,
+  MAX_FILE_CHUNKS,
+  MAX_FILE_SIZE,
+  MAX_VOICE_SIZE,
+} from '@/shared/constants';
+import { MESSAGES } from '@/shared/messages';
+
+const BASE64_PATTERN =
+  /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+
+function decodedBase64Length(
+  value: unknown,
+  maxEncodedLength: number
+): number | null {
+  if (
+    typeof value !== 'string' ||
+    value.length === 0 ||
+    value.length > maxEncodedLength ||
+    value.length % 4 !== 0 ||
+    !BASE64_PATTERN.test(value)
+  ) {
+    return null;
+  }
+
+  try {
+    const decoded = atob(value);
+    return btoa(decoded) === value ? decoded.length : null;
+  } catch {
+    return null;
+  }
+}
+
+function isValidFileMetadata(payload: FileStartPayload): boolean {
+  if (
+    typeof payload.file_id !== 'string' ||
+    typeof payload.from !== 'string' ||
+    typeof payload.to !== 'string' ||
+    typeof payload.mime_type !== 'string'
+  ) {
+    return false;
+  }
+
+  const maxSize = payload.mime_type.startsWith('audio/')
+    ? MAX_VOICE_SIZE
+    : MAX_FILE_SIZE;
+
+  return (
+    payload.file_id.length > 0 &&
+    payload.from.length > 0 &&
+    payload.to.length > 0 &&
+    Number.isSafeInteger(payload.total_size) &&
+    payload.total_size > 0 &&
+    payload.total_size <= maxSize &&
+    Number.isSafeInteger(payload.chunk_size) &&
+    payload.chunk_size > 0 &&
+    payload.chunk_size <= FILE_CHUNK_SIZE &&
+    Number.isSafeInteger(payload.total_chunks) &&
+    payload.total_chunks > 0 &&
+    payload.total_chunks <= MAX_FILE_CHUNKS &&
+    payload.total_chunks === Math.ceil(payload.total_size / payload.chunk_size)
+  );
+}
+
+function expectedChunkSize(
+  metadata: FileStartPayload,
+  chunkIndex: number
+): number {
+  if (chunkIndex === metadata.total_chunks - 1) {
+    return metadata.total_size - metadata.chunk_size * chunkIndex;
+  }
+  return metadata.chunk_size;
+}
 
 type MessageHandlers = {
   onEphemeralKey: (payload: EphemeralKeyPayload) => void;
@@ -43,20 +120,12 @@ type MessageHandlerOptions = {
   handlers: MessageHandlers;
   setState: (updater: (state: ChatSessionState) => ChatSessionState) => void;
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
+  setError: (error: string | null) => void;
   setPeerActivity: (activity: 'typing' | 'voice' | 'video' | null) => void;
   clearPendingAcks: () => void;
   clearSession: () => void;
   clearFileBuffers: () => void;
-  fileBuffersRef: React.MutableRefObject<
-    Map<
-      string,
-      {
-        chunks: Array<{ ciphertext: string; nonce: string }>;
-        metadata: FileStartPayload;
-        processing: boolean;
-      }
-    >
-  >;
+  fileBuffersRef: React.MutableRefObject<Map<string, FileBuffer>>;
   typingTimeoutRef: React.MutableRefObject<number | null>;
   handleIncomingFile: (fileId: string) => void;
 };
@@ -66,6 +135,7 @@ export function useMessageHandler({
   handlers,
   setState,
   setMessages,
+  setError,
   setPeerActivity,
   clearPendingAcks,
   clearSession,
@@ -136,10 +206,22 @@ export function useMessageHandler({
         case 'file_start': {
           const payload = message.payload as FileStartPayload;
           if (payload.from === peerId) {
+            if (!isValidFileMetadata(payload)) {
+              setError(MESSAGES.chat.fileTransfer.errors.invalidTransfer);
+              break;
+            }
+            if (fileBuffersRef.current.has(payload.file_id)) {
+              break;
+            }
+            if (fileBuffersRef.current.size >= MAX_CONCURRENT_FILE_TRANSFERS) {
+              setError(MESSAGES.chat.fileTransfer.errors.transferLimitExceeded);
+              break;
+            }
             fileBuffersRef.current.set(payload.file_id, {
               chunks: [],
               metadata: payload,
               processing: false,
+              receivedSize: 0,
             });
           }
           break;
@@ -150,15 +232,46 @@ export function useMessageHandler({
           if (payload.from === peerId) {
             const buffer = fileBuffersRef.current.get(payload.file_id);
             if (buffer && !buffer.processing) {
-              if (
+              const maxCiphertextLength =
+                Math.ceil((FILE_CHUNK_SIZE + AES_GCM_TAG_SIZE_BYTES) / 3) * 4;
+              const ciphertextSize = decodedBase64Length(
+                payload.ciphertext,
+                maxCiphertextLength
+              );
+              const nonceSize = decodedBase64Length(
+                payload.nonce,
+                Math.ceil(AES_GCM_NONCE_SIZE_BYTES / 3) * 4
+              );
+              const plaintextSize =
+                ciphertextSize === null
+                  ? null
+                  : ciphertextSize - AES_GCM_TAG_SIZE_BYTES;
+              const isValidChunk =
+                payload.from === buffer.metadata.from &&
+                payload.to === buffer.metadata.to &&
+                payload.total_chunks === buffer.metadata.total_chunks &&
+                Number.isSafeInteger(payload.chunk_index) &&
                 payload.chunk_index >= 0 &&
-                payload.chunk_index < payload.total_chunks
-              ) {
-                buffer.chunks[payload.chunk_index] = {
-                  ciphertext: payload.ciphertext,
-                  nonce: payload.nonce,
-                };
+                payload.chunk_index < buffer.metadata.total_chunks &&
+                buffer.chunks[payload.chunk_index] === undefined &&
+                nonceSize === AES_GCM_NONCE_SIZE_BYTES &&
+                plaintextSize !== null &&
+                plaintextSize ===
+                  expectedChunkSize(buffer.metadata, payload.chunk_index) &&
+                buffer.receivedSize + plaintextSize <=
+                  buffer.metadata.total_size;
+
+              if (!isValidChunk) {
+                fileBuffersRef.current.delete(payload.file_id);
+                setError(MESSAGES.chat.fileTransfer.errors.invalidTransfer);
+                break;
               }
+
+              buffer.chunks[payload.chunk_index] = {
+                ciphertext: payload.ciphertext,
+                nonce: payload.nonce,
+              };
+              buffer.receivedSize += plaintextSize;
             }
           }
           break;
@@ -167,9 +280,29 @@ export function useMessageHandler({
         case 'file_complete': {
           const payload = message.payload as FileCompletePayload;
           if (payload.from === peerId) {
-            setTimeout(() => {
-              handleIncomingFile(payload.file_id);
-            }, 100);
+            const buffer = fileBuffersRef.current.get(payload.file_id);
+            if (!buffer || buffer.processing) {
+              break;
+            }
+
+            let hasAllChunks =
+              payload.from === buffer.metadata.from &&
+              payload.to === buffer.metadata.to &&
+              buffer.receivedSize === buffer.metadata.total_size;
+            for (let i = 0; i < buffer.metadata.total_chunks; i++) {
+              if (!buffer.chunks[i]) {
+                hasAllChunks = false;
+                break;
+              }
+            }
+
+            if (!hasAllChunks) {
+              fileBuffersRef.current.delete(payload.file_id);
+              setError(MESSAGES.chat.fileTransfer.errors.invalidTransfer);
+              break;
+            }
+
+            void handleIncomingFile(payload.file_id);
           }
           break;
         }
@@ -223,6 +356,7 @@ export function useMessageHandler({
       handlers,
       setState,
       setMessages,
+      setError,
       setPeerActivity,
       clearPendingAcks,
       clearSession,

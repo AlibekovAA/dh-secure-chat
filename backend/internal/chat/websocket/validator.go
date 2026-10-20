@@ -70,7 +70,12 @@ func (v *DefaultValidator) ValidateFileStart(p FileStartPayload) error {
 		return commonerrors.ErrInvalidFileSize
 	}
 
-	if p.TotalChunks <= 0 || p.TotalChunks > constants.MaxFileChunks {
+	if p.ChunkSize <= 0 || p.ChunkSize > constants.MaxFileChunkSizeBytes {
+		return commonerrors.ErrInvalidChunkSize
+	}
+
+	expectedChunks := (p.TotalSize + int64(p.ChunkSize) - 1) / int64(p.ChunkSize)
+	if p.TotalChunks <= 0 || p.TotalChunks > constants.MaxFileChunks || int64(p.TotalChunks) != expectedChunks {
 		return commonerrors.ErrInvalidTotalChunks
 	}
 

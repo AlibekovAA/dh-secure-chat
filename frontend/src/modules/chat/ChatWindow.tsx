@@ -8,10 +8,8 @@ import { FingerprintVerificationModal } from '@/modules/chat/FingerprintVerifica
 import { VoiceRecorder } from '@/modules/chat/VoiceRecorder';
 import { VideoRecorder } from '@/modules/chat/VideoRecorder';
 import { MessageList } from '@/modules/chat/MessageList';
-import {
-  FileAccessDialog,
-  type FileAccessMode,
-} from '@/modules/chat/FileAccessDialog';
+import { FileAccessDialog } from '@/modules/chat/FileAccessDialog';
+import type { FileAccessMode } from '@/shared/websocket/types';
 import { FileViewerModal } from '@/modules/chat/FileViewerModal';
 import { getFingerprint } from '@/modules/chat/api';
 import {

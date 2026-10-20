@@ -23,13 +23,13 @@ type updatePublicKeyResponse struct {
 }
 
 type Handler struct {
-	identity *service.IdentityService
+	identity service.Service
 	log      *logger.Logger
 }
 
 func NewHandler(identity service.Service, log *logger.Logger) http.Handler {
 	h := &Handler{
-		identity: identity.(*service.IdentityService),
+		identity: identity,
 		log:      log,
 	}
 

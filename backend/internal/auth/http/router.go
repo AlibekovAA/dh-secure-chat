@@ -28,13 +28,13 @@ type tokenResponse struct {
 }
 
 type Handler struct {
-	auth *service.AuthService
+	auth service.Service
 	log  *logger.Logger
 }
 
 func NewHandler(auth service.Service, cfg config.AuthConfig, log *logger.Logger) http.Handler {
 	h := &Handler{
-		auth: auth.(*service.AuthService),
+		auth: auth,
 		log:  log,
 	}
 	mux := http.NewServeMux()

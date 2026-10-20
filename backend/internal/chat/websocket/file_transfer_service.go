@@ -2,6 +2,7 @@ package websocket
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"time"
 
@@ -31,12 +32,14 @@ func NewFileTransferService(sender MessageSender, timeout time.Duration, clk clo
 	}
 }
 
-func (s *FileTransferService) Track(payload FileStartPayload) {
+func (s *FileTransferService) Track(payload FileStartPayload) error {
 	req := transfer.TrackRequest{
 		FileID:      payload.FileID,
 		From:        payload.From,
 		To:          payload.To,
+		TotalSize:   payload.TotalSize,
 		TotalChunks: payload.TotalChunks,
+		ChunkSize:   payload.ChunkSize,
 	}
 
 	if err := s.tracker.Track(req); err != nil {
@@ -47,26 +50,70 @@ func (s *FileTransferService) Track(payload FileStartPayload) {
 			"action":  "ws_file_track",
 		}).Warnf("websocket failed to track file transfer: %v", err)
 		observabilitymetrics.ChatWebSocketFileTransferFailures.WithLabelValues("track_failed").Inc()
+		return err
 	}
+
+	return nil
 }
 
-func (s *FileTransferService) UpdateProgress(fileID string, chunkIndex int) {
-	if err := s.tracker.UpdateProgress(fileID, chunkIndex); err != nil {
-		if errors.Is(err, commonerrors.ErrTransferNotFound) {
-			if s.log.ShouldLog(logger.DEBUG) {
-				s.log.WithFields(s.ctx, logger.Fields{
-					"file_id":     fileID,
-					"chunk_index": chunkIndex,
-					"action":      "ws_file_progress_skipped",
-				}).Debug("websocket file transfer progress skipped (no tracking)")
-			}
-			return
-		}
+func (s *FileTransferService) Validate(fileID string, senderID string, recipientID string) error {
+	return s.tracker.Validate(fileID, senderID, recipientID)
+}
+
+func (s *FileTransferService) AcceptChunk(payload FileChunkPayload, senderID string) error {
+	if err := s.tracker.Validate(payload.FileID, senderID, payload.To); err != nil {
+		return err
+	}
+
+	maxCiphertextSize := constants.MaxFileChunkSizeBytes + constants.AESGCMTagSizeBytes
+	if payload.Ciphertext == "" || len(payload.Ciphertext) > base64.StdEncoding.EncodedLen(maxCiphertextSize) {
+		s.abort(payload.FileID, senderID, payload.To)
+		return commonerrors.ErrInvalidChunkSize
+	}
+
+	ciphertext, err := base64.StdEncoding.Strict().DecodeString(payload.Ciphertext)
+	if err != nil || len(ciphertext) <= constants.AESGCMTagSizeBytes {
+		s.abort(payload.FileID, senderID, payload.To)
+		return commonerrors.ErrInvalidChunkSize
+	}
+
+	if payload.Nonce == "" || len(payload.Nonce) > base64.StdEncoding.EncodedLen(constants.AESGCMNonceSizeBytes) {
+		s.abort(payload.FileID, senderID, payload.To)
+		return commonerrors.ErrInvalidPayload
+	}
+
+	nonce, err := base64.StdEncoding.Strict().DecodeString(payload.Nonce)
+	if err != nil || len(nonce) != constants.AESGCMNonceSizeBytes {
+		s.abort(payload.FileID, senderID, payload.To)
+		return commonerrors.ErrInvalidPayload
+	}
+
+	return s.tracker.AcceptChunk(transfer.ChunkRequest{
+		FileID:      payload.FileID,
+		SenderID:    senderID,
+		RecipientID: payload.To,
+		ChunkIndex:  payload.ChunkIndex,
+		TotalChunks: payload.TotalChunks,
+		Size:        int64(len(ciphertext) - constants.AESGCMTagSizeBytes),
+	})
+}
+
+func (s *FileTransferService) Finalize(fileID string, senderID string, recipientID string) error {
+	return s.tracker.Finalize(fileID, senderID, recipientID)
+}
+
+func (s *FileTransferService) Abort(fileID string, senderID string, recipientID string) {
+	s.abort(fileID, senderID, recipientID)
+}
+
+func (s *FileTransferService) abort(fileID string, senderID string, recipientID string) {
+	if err := s.tracker.Abort(fileID, senderID, recipientID); err != nil && !errors.Is(err, commonerrors.ErrTransferNotFound) {
 		s.log.WithFields(s.ctx, logger.Fields{
-			"file_id":     fileID,
-			"chunk_index": chunkIndex,
-			"action":      "ws_file_progress_failed",
-		}).Warnf("websocket file transfer progress failed: %v", err)
+			"file_id": fileID,
+			"from":    senderID,
+			"to":      recipientID,
+			"action":  "ws_file_abort_failed",
+		}).Warnf("websocket failed to abort file transfer: %v", err)
 	}
 }
 

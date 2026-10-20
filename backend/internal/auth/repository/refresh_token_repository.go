@@ -166,12 +166,18 @@ func (t *pgRefreshTokenTx) FindByTokenHashWithUserForUpdate(ctx context.Context,
 
 func (t *pgRefreshTokenTx) DeleteByTokenHash(ctx context.Context, hash string) error {
 	start := time.Now()
-	_, err := t.tx.Exec(
+	result, err := t.tx.Exec(
 		ctx,
 		`DELETE FROM refresh_tokens WHERE token_hash = $1`,
 		hash,
 	)
-	return db.HandleExecError(err, "delete refresh token in tx", start)
+	if err := db.HandleExecError(err, "delete refresh token in tx", start); err != nil {
+		return err
+	}
+	if result.RowsAffected() == 0 {
+		return ErrRefreshTokenNotFound
+	}
+	return nil
 }
 
 func (t *pgRefreshTokenTx) Commit(ctx context.Context) error {

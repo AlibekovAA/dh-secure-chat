@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { MESSAGES } from '@/shared/messages';
-
-export type FileAccessMode = 'download_only' | 'view_only' | 'both';
+import type { FileAccessMode } from '@/shared/websocket/types';
 
 type Props = {
   filename: string;

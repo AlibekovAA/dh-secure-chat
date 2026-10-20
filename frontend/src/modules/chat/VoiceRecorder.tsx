@@ -3,6 +3,7 @@ import { AudioRecorder } from '@/shared/audio/audio-recorder';
 import { checkMediaRecorderSupport } from '@/shared/browser-support';
 import { MAX_VOICE_DURATION_SECONDS } from '@/shared/constants';
 import { MESSAGES } from '@/shared/messages';
+import { formatDuration } from '@/modules/chat/utils';
 
 type Props = {
   onRecorded: (file: File, duration: number) => void;
@@ -23,6 +24,8 @@ export function VoiceRecorder({
   const recorderRef = useRef<AudioRecorder | null>(null);
   const durationTimerRef = useRef<number | null>(null);
   const isRecordingRef = useRef(false);
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
 
   useEffect(() => {
     try {
@@ -34,7 +37,7 @@ export function VoiceRecorder({
         error instanceof Error
           ? error.message
           : MESSAGES.chat.voiceRecorder.errors.notSupported;
-      onError(message);
+      onErrorRef.current(message);
     }
 
     return () => {
@@ -170,12 +173,6 @@ export function VoiceRecorder({
     setDuration(0);
     onRecordingChange?.(false);
   }, [onRecordingChange]);
-
-  const formatDuration = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
 
   if (!isSupported) {
     return null;

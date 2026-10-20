@@ -4,7 +4,6 @@ import (
 	"context"
 
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
-	identitydomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/domain"
 	userdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
 	userrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/repository"
 )
@@ -36,15 +35,7 @@ func (m *mockUserRepo) SearchByUsername(ctx context.Context, query string, limit
 	return nil, nil
 }
 
-func (m *mockUserRepo) UpdateLastSeen(ctx context.Context, userID userdomain.ID) error {
-	return nil
-}
-
 func (m *mockUserRepo) UpdateLastSeenBatch(ctx context.Context, userIDs []userdomain.ID) error {
-	return nil
-}
-
-func (m *mockUserRepo) Delete(ctx context.Context, id userdomain.ID) error {
 	return nil
 }
 
@@ -65,10 +56,6 @@ func (m *mockIdentityService) GetPublicKey(ctx context.Context, userID string) (
 		return m.getPublicKeyFunc(ctx, userID)
 	}
 	return nil, commonerrors.ErrIdentityKeyNotFound
-}
-
-func (m *mockIdentityService) GetIdentityKey(ctx context.Context, userID string) (identitydomain.IdentityKey, error) {
-	return identitydomain.IdentityKey{}, commonerrors.ErrIdentityKeyNotFound
 }
 
 func (m *mockIdentityService) GetFingerprint(ctx context.Context, userID string) (string, error) {

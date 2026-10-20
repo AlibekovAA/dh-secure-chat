@@ -1,17 +1,11 @@
 import { useCallback } from 'react';
-import type { FileStartPayload } from '@/shared/websocket/types';
 import { decryptFile } from '@/shared/crypto/file-encryption';
 import type { SessionKey } from '@/shared/crypto/session';
-import type { ChatMessage } from '@/modules/chat/useChatSession';
-import { extractDurationFromFilename, isVideoFile } from '@/modules/chat/utils';
+import type { ChatMessage, FileBuffer } from '@/modules/chat/useChatSession';
+import { extractDurationFromFilename } from '@/modules/chat/utils';
 import type { WSMessage } from '@/shared/websocket/types';
 import { MESSAGES } from '@/shared/messages';
-
-type FileBuffer = {
-  chunks: Array<{ ciphertext: string; nonce: string }>;
-  metadata: FileStartPayload;
-  processing: boolean;
-};
+import { inspectFileContent } from '@/shared/utils/files';
 
 type UseFileTransferOptions = {
   sessionKeyRef: React.MutableRefObject<SessionKey | null>;
@@ -48,7 +42,10 @@ export function useFileTransfer({
       const { chunks, metadata } = buffer;
       const expectedChunks = metadata.total_chunks;
 
-      if (chunks.length < expectedChunks) {
+      if (
+        chunks.length < expectedChunks ||
+        buffer.receivedSize !== metadata.total_size
+      ) {
         return;
       }
 
@@ -75,13 +72,20 @@ export function useFileTransfer({
           sortedChunks
         );
 
-        if (!decryptedBlob || decryptedBlob.size === 0) {
-          setError(MESSAGES.chat.fileTransfer.errors.emptyFile);
+        if (!decryptedBlob || decryptedBlob.size !== metadata.total_size) {
+          setError(MESSAGES.chat.fileTransfer.errors.invalidTransfer);
           fileBuffersRef.current.delete(fileId);
           return;
         }
 
-        const mimeType = metadata.mime_type || 'application/octet-stream';
+        const inspection = await inspectFileContent(
+          decryptedBlob,
+          metadata.mime_type
+        );
+        const mimeType =
+          inspection.previewAllowed && inspection.detectedMimeType
+            ? inspection.detectedMimeType
+            : 'application/octet-stream';
         const blob = new Blob([decryptedBlob], { type: mimeType });
 
         if (!blob || blob.size === 0) {
@@ -90,9 +94,10 @@ export function useFileTransfer({
           return;
         }
 
-        const isVoice =
-          metadata.mime_type && metadata.mime_type.startsWith('audio/');
-        const isVideo = !isVoice && isVideoFile(metadata.mime_type || '');
+        const canPreview =
+          inspection.previewAllowed && metadata.access_mode !== 'download_only';
+        const isVoice = canPreview && inspection.kind === 'audio';
+        const isVideo = canPreview && inspection.kind === 'video';
         const extractedDuration = extractDurationFromFilename(
           metadata.filename
         );
@@ -126,6 +131,7 @@ export function useFileTransfer({
                     size: metadata.total_size,
                     blob,
                     accessMode: metadata.access_mode || 'both',
+                    previewAllowed: inspection.previewAllowed,
                   },
                 }),
           timestamp: Date.now(),

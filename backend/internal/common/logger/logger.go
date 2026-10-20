@@ -40,24 +40,6 @@ var levelNames = map[LogLevel]string{
 	CRITICAL: "CRITICAL",
 }
 
-type LoggerInterface interface {
-	Debug(msg string)
-	DebugSampled(prob float64, msg string)
-	Info(msg string)
-	Warn(msg string)
-	Error(msg string)
-	Critical(msg string)
-	Debugf(format string, args ...any)
-	Infof(format string, args ...any)
-	Warnf(format string, args ...any)
-	Errorf(format string, args ...any)
-	Criticalf(format string, args ...any)
-	Fatal(msg string)
-	Fatalf(format string, args ...any)
-	WithFields(ctx context.Context, fields Fields) *Entry
-	ShouldLog(level LogLevel) bool
-}
-
 type Logger struct {
 	level       LogLevel
 	out         *log.Logger
@@ -195,15 +177,9 @@ func getTraceIDFromContext(ctx context.Context) string {
 }
 
 func (l *Logger) Debug(msg string) { l.log(DEBUG, msg) }
-func (l *Logger) DebugSampled(prob float64, msg string) {
-	if l.sample(prob) {
-		l.log(DEBUG, msg)
-	}
-}
-func (l *Logger) Info(msg string)     { l.log(INFO, msg) }
-func (l *Logger) Warn(msg string)     { l.log(WARNING, msg) }
-func (l *Logger) Error(msg string)    { l.log(ERROR, msg) }
-func (l *Logger) Critical(msg string) { l.log(CRITICAL, msg) }
+func (l *Logger) Info(msg string)  { l.log(INFO, msg) }
+func (l *Logger) Warn(msg string)  { l.log(WARNING, msg) }
+func (l *Logger) Error(msg string) { l.log(ERROR, msg) }
 
 func (l *Logger) Debugf(format string, args ...any) {
 	l.log(DEBUG, fmt.Sprintf(format, args...))
@@ -223,11 +199,6 @@ func (l *Logger) Errorf(format string, args ...any) {
 
 func (l *Logger) Criticalf(format string, args ...any) {
 	l.log(CRITICAL, fmt.Sprintf(format, args...))
-}
-
-func (l *Logger) Fatal(msg string) {
-	l.log(CRITICAL, msg)
-	os.Exit(1)
 }
 
 func (l *Logger) Fatalf(format string, args ...any) {
@@ -260,15 +231,9 @@ type Entry struct {
 }
 
 func (e *Entry) Debug(msg string) { e.logger.logWithFields(DEBUG, e.ctx, msg, e.fields) }
-func (e *Entry) DebugSampled(prob float64, msg string) {
-	if e.logger.sample(prob) {
-		e.logger.logWithFields(DEBUG, e.ctx, msg, e.fields)
-	}
-}
-func (e *Entry) Info(msg string)     { e.logger.logWithFields(INFO, e.ctx, msg, e.fields) }
-func (e *Entry) Warn(msg string)     { e.logger.logWithFields(WARNING, e.ctx, msg, e.fields) }
-func (e *Entry) Error(msg string)    { e.logger.logWithFields(ERROR, e.ctx, msg, e.fields) }
-func (e *Entry) Critical(msg string) { e.logger.logWithFields(CRITICAL, e.ctx, msg, e.fields) }
+func (e *Entry) Info(msg string)  { e.logger.logWithFields(INFO, e.ctx, msg, e.fields) }
+func (e *Entry) Warn(msg string)  { e.logger.logWithFields(WARNING, e.ctx, msg, e.fields) }
+func (e *Entry) Error(msg string) { e.logger.logWithFields(ERROR, e.ctx, msg, e.fields) }
 
 func (e *Entry) Debugf(format string, args ...any) {
 	e.logger.logWithFields(DEBUG, e.ctx, fmt.Sprintf(format, args...), e.fields)
@@ -284,10 +249,6 @@ func (e *Entry) Warnf(format string, args ...any) {
 
 func (e *Entry) Errorf(format string, args ...any) {
 	e.logger.logWithFields(ERROR, e.ctx, fmt.Sprintf(format, args...), e.fields)
-}
-
-func (e *Entry) Criticalf(format string, args ...any) {
-	e.logger.logWithFields(CRITICAL, e.ctx, fmt.Sprintf(format, args...), e.fields)
 }
 
 func parseLevel(value string) LogLevel {

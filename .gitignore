@@ -36,3 +36,6 @@ db-data/
 
 # Python
 *.py
+
+# Agents
+AGENTS.md

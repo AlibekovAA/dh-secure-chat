@@ -16,10 +16,7 @@ export type MessageType =
   | 'message_read';
 
 export type ConnectionState =
-  | 'connecting'
-  | 'connected'
-  | 'disconnected'
-  | 'error';
+  'connecting' | 'connected' | 'disconnected' | 'error';
 
 export type WSMessage = {
   type: MessageType;

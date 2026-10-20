@@ -16,7 +16,6 @@ type Service interface {
 	CreateIdentityKey(ctx context.Context, userID string, publicKey []byte) error
 	UpdatePublicKey(ctx context.Context, userID string, publicKey []byte) error
 	GetPublicKey(ctx context.Context, userID string) ([]byte, error)
-	GetIdentityKey(ctx context.Context, userID string) (identitydomain.IdentityKey, error)
 	GetFingerprint(ctx context.Context, userID string) (string, error)
 }
 
@@ -149,26 +148,6 @@ func (s *IdentityService) GetPublicKey(ctx context.Context, userID string) ([]by
 	}
 
 	return key.PublicKey, nil
-}
-
-func (s *IdentityService) GetIdentityKey(ctx context.Context, userID string) (identitydomain.IdentityKey, error) {
-	key, err := s.repo.FindByUserID(ctx, userID)
-	if err != nil {
-		if errors.Is(err, commonerrors.ErrIdentityKeyNotFound) {
-			s.log.WithFields(ctx, logger.Fields{
-				"user_id": userID,
-				"action":  "get_identity_key_not_found",
-			}).Warn("get identity key failed: not found")
-			return identitydomain.IdentityKey{}, commonerrors.ErrIdentityKeyNotFound
-		}
-		s.log.WithFields(ctx, logger.Fields{
-			"user_id": userID,
-			"action":  "get_identity_key_failed",
-		}).Errorf("get identity key failed: %v", err)
-		return identitydomain.IdentityKey{}, commonerrors.ErrIdentityKeyGetFailed.WithCause(err)
-	}
-
-	return key, nil
 }
 
 func (s *IdentityService) GetFingerprint(ctx context.Context, userID string) (string, error) {

@@ -1,5 +1,4 @@
 import { apiClient } from '@/shared/api/client';
-import type { ApiErrorResponse } from '@/shared/api/error-handler';
 
 const API_BASE = '/api/chat';
 
@@ -13,17 +12,8 @@ export type UserSummary = {
   username: string;
 };
 
-export type ChatErrorResponse = ApiErrorResponse;
-
-export { SESSION_EXPIRED_ERROR } from '@/shared/constants';
-
 export async function fetchMe(): Promise<MeResponse> {
   return apiClient.get<MeResponse>(`${API_BASE}/me`);
-}
-
-export async function searchUsers(query: string): Promise<UserSummary[]> {
-  const params = new URLSearchParams({ username: query });
-  return apiClient.get<UserSummary[]>(`${API_BASE}/users?${params.toString()}`);
 }
 
 export type IdentityKeyResponse = {

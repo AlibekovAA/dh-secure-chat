@@ -20,20 +20,21 @@ async function importKey(keyData: ArrayBuffer): Promise<CryptoKey> {
 }
 
 async function handleEncrypt(
-  fileData: ArrayBuffer,
+  file: Blob,
   keyData: ArrayBuffer,
   requestId: string
 ): Promise<void> {
   try {
     const sessionKey = await importKey(keyData);
-    const totalSize = fileData.byteLength;
+    const totalSize = file.size;
     const chunks: EncryptedChunk[] = [];
     const totalChunks = Math.ceil(totalSize / FILE_CHUNK_SIZE);
 
     for (let offset = 0; offset < totalSize; offset += FILE_CHUNK_SIZE) {
       const chunkEnd = Math.min(offset + FILE_CHUNK_SIZE, totalSize);
-      const chunk = fileData.slice(offset, chunkEnd);
-      const chunkBytes = new Uint8Array(chunk);
+      const chunkBytes = new Uint8Array(
+        await file.slice(offset, chunkEnd).arrayBuffer()
+      );
 
       const encrypted = await encryptBinaryWithKey(sessionKey, chunkBytes);
       chunks.push(encrypted);
@@ -87,19 +88,7 @@ async function handleDecrypt(
       } as WorkerResponse);
     }
 
-    const totalLength = decryptedChunks.reduce(
-      (sum, chunk) => sum + chunk.length,
-      0
-    );
-    const result = new Uint8Array(totalLength);
-    let offset = 0;
-
-    for (const chunk of decryptedChunks) {
-      result.set(chunk, offset);
-      offset += chunk.length;
-    }
-
-    const blob = new Blob([result]);
+    const blob = new Blob(decryptedChunks as BlobPart[]);
 
     self.postMessage({
       type: 'decrypt-result',
@@ -119,7 +108,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
   const { type, requestId } = e.data;
 
   if (type === 'encrypt') {
-    await handleEncrypt(e.data.fileData, e.data.keyData, requestId);
+    await handleEncrypt(e.data.file, e.data.keyData, requestId);
   } else if (type === 'decrypt') {
     await handleDecrypt(e.data.chunks, e.data.keyData, requestId);
   }

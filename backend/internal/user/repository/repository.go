@@ -20,9 +20,7 @@ type Repository interface {
 	FindByUsername(ctx context.Context, username string) (domain.User, error)
 	FindByID(ctx context.Context, id domain.ID) (domain.User, error)
 	SearchByUsername(ctx context.Context, query string, limit int) ([]domain.Summary, error)
-	UpdateLastSeen(ctx context.Context, userID domain.ID) error
 	UpdateLastSeenBatch(ctx context.Context, userIDs []domain.ID) error
-	Delete(ctx context.Context, id domain.ID) error
 }
 
 type PgRepository struct {
@@ -133,19 +131,6 @@ func (r *PgRepository) SearchByUsername(ctx context.Context, query string, limit
 	return users, nil
 }
 
-func (r *PgRepository) UpdateLastSeen(ctx context.Context, userID domain.ID) error {
-	ctx, cancel := context.WithTimeout(ctx, constants.DBQueryTimeout)
-	defer cancel()
-
-	start := time.Now()
-	_, err := r.pool.Exec(
-		ctx,
-		`UPDATE users SET last_seen_at = NOW() WHERE id = $1`,
-		string(userID),
-	)
-	return db.HandleExecError(err, "update last_seen_at", start)
-}
-
 func (r *PgRepository) UpdateLastSeenBatch(ctx context.Context, userIDs []domain.ID) error {
 	ctx, cancel := context.WithTimeout(ctx, constants.DBQueryTimeout)
 	defer cancel()
@@ -163,19 +148,6 @@ func (r *PgRepository) UpdateLastSeenBatch(ctx context.Context, userIDs []domain
 		ids,
 	)
 	return db.HandleExecError(err, "batch update last_seen_at", start)
-}
-
-func (r *PgRepository) Delete(ctx context.Context, id domain.ID) error {
-	ctx, cancel := context.WithTimeout(ctx, constants.DBQueryTimeout)
-	defer cancel()
-
-	start := time.Now()
-	_, err := r.pool.Exec(
-		ctx,
-		`DELETE FROM users WHERE id = $1`,
-		string(id),
-	)
-	return db.HandleExecError(err, "delete user", start)
 }
 
 var ErrUserNotFound = pgx.ErrNoRows

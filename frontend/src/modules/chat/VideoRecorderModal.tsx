@@ -11,6 +11,7 @@ import {
   BYTES_PER_MB,
 } from '@/shared/constants';
 import { validateFileSize, getFileValidationError } from '@/shared/utils/files';
+import { formatDuration } from '@/modules/chat/utils';
 
 type Props = {
   onRecorded: (file: File, duration: number) => void;
@@ -299,12 +300,6 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
     setDuration(0);
     onCancel();
   }, [onCancel, cleanup]);
-
-  const formatDuration = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
 
   return (
     <div

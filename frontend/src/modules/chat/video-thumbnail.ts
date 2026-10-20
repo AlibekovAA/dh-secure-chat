@@ -10,46 +10,60 @@ import {
 interface CachedThumbnail {
   dataUrl: string;
   timestamp: number;
+  timeoutId: number;
 }
 
-function getCacheKey(fileId: string): string {
-  return `${VIDEO_THUMBNAIL_CACHE_PREFIX}${fileId}`;
+const thumbnailCache = new Map<string, CachedThumbnail>();
+
+function clearPersistedThumbnails(): void {
+  try {
+    for (let index = localStorage.length - 1; index >= 0; index--) {
+      const key = localStorage.key(index);
+      if (key?.startsWith(VIDEO_THUMBNAIL_CACHE_PREFIX)) {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    void 0;
+  }
 }
+
+clearPersistedThumbnails();
 
 export async function getCachedThumbnail(
   fileId: string
 ): Promise<string | null> {
-  try {
-    const cached = localStorage.getItem(getCacheKey(fileId));
-    if (!cached) return null;
-
-    const parsed: CachedThumbnail = JSON.parse(cached);
-    const now = Date.now();
-
-    if (now - parsed.timestamp > VIDEO_THUMBNAIL_CACHE_DURATION_MS) {
-      localStorage.removeItem(getCacheKey(fileId));
-      return null;
-    }
-
-    return parsed.dataUrl;
-  } catch {
+  const cached = thumbnailCache.get(fileId);
+  if (!cached) return null;
+  if (Date.now() - cached.timestamp > VIDEO_THUMBNAIL_CACHE_DURATION_MS) {
+    window.clearTimeout(cached.timeoutId);
+    thumbnailCache.delete(fileId);
     return null;
   }
+  return cached.dataUrl;
 }
 
 export async function cacheThumbnail(
   fileId: string,
   dataUrl: string
 ): Promise<void> {
-  try {
-    const cached: CachedThumbnail = {
-      dataUrl,
-      timestamp: Date.now(),
-    };
-    localStorage.setItem(getCacheKey(fileId), JSON.stringify(cached));
-  } catch (_err) {
-    void _err;
+  const existing = thumbnailCache.get(fileId);
+  if (existing) {
+    window.clearTimeout(existing.timeoutId);
   }
+
+  const timeoutId = window.setTimeout(() => {
+    thumbnailCache.delete(fileId);
+  }, VIDEO_THUMBNAIL_CACHE_DURATION_MS);
+  thumbnailCache.set(fileId, { dataUrl, timestamp: Date.now(), timeoutId });
+}
+
+export function clearVideoThumbnailCache(): void {
+  for (const cached of thumbnailCache.values()) {
+    window.clearTimeout(cached.timeoutId);
+  }
+  thumbnailCache.clear();
+  clearPersistedThumbnails();
 }
 
 export async function generateVideoThumbnail(

@@ -11,11 +11,7 @@ import { MESSAGES } from '@/shared/messages';
 
 export type ValidationError = {
   field:
-    | 'username'
-    | 'password'
-    | 'confirmPassword'
-    | 'message'
-    | 'searchQuery';
+    'username' | 'password' | 'confirmPassword' | 'message' | 'searchQuery';
   message: string;
 };
 

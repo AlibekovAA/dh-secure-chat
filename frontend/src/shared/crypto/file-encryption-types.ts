@@ -3,7 +3,7 @@ import type { EncryptedChunk } from '@/shared/crypto/file-encryption';
 export type WorkerMessage =
   | {
       type: 'encrypt';
-      fileData: ArrayBuffer;
+      file: Blob;
       keyData: ArrayBuffer;
       requestId: string;
     }

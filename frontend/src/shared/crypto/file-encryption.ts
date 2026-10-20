@@ -62,15 +62,15 @@ export async function encryptFile(
     }
   }
 
-  const arrayBuffer = await file.arrayBuffer();
-  const totalSize = arrayBuffer.byteLength;
+  const totalSize = file.size;
   const chunks: EncryptedChunk[] = [];
   const totalChunks = Math.ceil(totalSize / FILE_CHUNK_SIZE);
 
   for (let offset = 0; offset < totalSize; offset += FILE_CHUNK_SIZE) {
     const chunkEnd = Math.min(offset + FILE_CHUNK_SIZE, totalSize);
-    const chunk = arrayBuffer.slice(offset, chunkEnd);
-    const chunkBytes = new Uint8Array(chunk);
+    const chunkBytes = new Uint8Array(
+      await file.slice(offset, chunkEnd).arrayBuffer()
+    );
 
     const encrypted = await encryptBinary(sessionKey, chunkBytes);
     chunks.push(encrypted);
@@ -122,19 +122,7 @@ export async function decryptFile(
     }
   }
 
-  const totalLength = decryptedChunks.reduce(
-    (sum, chunk) => sum + chunk.length,
-    0
-  );
-  const result = new Uint8Array(totalLength);
-  let offset = 0;
-
-  for (const chunk of decryptedChunks) {
-    result.set(chunk, offset);
-    offset += chunk.length;
-  }
-
-  return new Blob([result]);
+  return new Blob(decryptedChunks as BlobPart[]);
 }
 
 export function calculateChunks(fileSize: number): number {

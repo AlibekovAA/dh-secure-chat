@@ -3,7 +3,6 @@ package websocket
 import (
 	"context"
 	"encoding/json"
-	"strconv"
 
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/websocket/middleware"
 )
@@ -32,13 +31,16 @@ func (h *incomingMessageHandler) HandleMessage(client *Client, msg *WSMessage) {
 		h.processor.Submit(ctx, client, msg)
 		return nil
 	}
-
 	middlewareMsg := &middleware.WSMessage{
 		Type:    string(msg.Type),
 		Payload: msg.Payload,
 	}
 
 	switch msg.Type {
+	case TypeFileStart, TypeFileChunk, TypeFileComplete:
+		h.processor.process(client.ctx, client, msg)
+		return
+
 	case TypeEphemeralKey:
 		if err := h.idempotencyMiddleware.Handle(client.ctx, client, middlewareMsg, handler); err != nil {
 			return
@@ -55,16 +57,6 @@ func (h *incomingMessageHandler) HandleMessage(client *Client, msg *WSMessage) {
 			return
 		}
 
-	case TypeFileChunk:
-		var payload FileChunkPayload
-		if err := json.Unmarshal(msg.Payload, &payload); err == nil && payload.FileID != "" {
-			chunkKey := client.userID + ":" + payload.FileID + ":" + strconv.Itoa(payload.ChunkIndex)
-			operationID := h.idempotency.GenerateOperationID(chunkKey, msg.Type, msg.Payload)
-			if err := h.idempotencyMiddleware.HandleWithOperationID(client.ctx, client, middlewareMsg, operationID, handler); err != nil {
-				return
-			}
-			return
-		}
 	}
 
 	h.processor.Submit(client.ctx, client, msg)

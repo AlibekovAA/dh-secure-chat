@@ -87,7 +87,6 @@ export async function encryptFileWithWorker(
   onProgress?: (progress: number) => void
 ): Promise<{ chunks: EncryptedChunk[]; totalSize: number }> {
   const requestId = `encrypt-${++requestCounter}`;
-  const fileData = await file.arrayBuffer();
   const keyData = await exportKey(sessionKey);
 
   return new Promise((resolve, reject) => {
@@ -97,11 +96,11 @@ export async function encryptFileWithWorker(
     worker.postMessage(
       {
         type: 'encrypt',
-        fileData,
+        file,
         keyData,
         requestId,
       } as WorkerMessage,
-      [fileData, keyData]
+      [keyData]
     );
   });
 }

@@ -34,7 +34,7 @@ function openDB(): Promise<IDBDatabase> {
 
 export async function saveKey(
   id: string,
-  keyData: string,
+  keyData: unknown,
   type: string
 ): Promise<void> {
   try {
@@ -56,23 +56,35 @@ export async function saveKey(
   }
 }
 
-export async function loadKey(id: string): Promise<string | null> {
+export async function loadKey<T = unknown>(id: string): Promise<T | null> {
   try {
     const db = await openDB();
     const transaction = db.transaction([DB_STORE_NAME], 'readonly');
     const store = transaction.objectStore(DB_STORE_NAME);
 
-    return new Promise<string | null>((resolve, reject) => {
+    return new Promise<T | null>((resolve, reject) => {
       const request = store.get(id);
       request.onsuccess = () => {
         const result = request.result;
-        resolve(result ? result.keyData : null);
+        resolve(result ? (result.keyData as T) : null);
       };
       request.onerror = () => reject(new Error('Failed to load key'));
     });
   } catch (err) {
     return null;
   }
+}
+
+export async function deleteKey(id: string): Promise<void> {
+  const db = await openDB();
+  const transaction = db.transaction([DB_STORE_NAME], 'readwrite');
+  const store = transaction.objectStore(DB_STORE_NAME);
+
+  await new Promise<void>((resolve, reject) => {
+    const request = store.delete(id);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(new Error('Failed to delete key'));
+  });
 }
 
 export async function clearAllKeys(): Promise<void> {

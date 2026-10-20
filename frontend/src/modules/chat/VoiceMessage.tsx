@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Spinner } from '@/shared/ui/Spinner';
+import { formatDuration } from '@/modules/chat/utils';
 type Props = {
   duration: number;
   blob?: Blob;
@@ -7,12 +8,6 @@ type Props = {
   onPlaybackChange?: (active: boolean) => void;
   onMarkAsRead?: () => void;
 };
-
-function formatDuration(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
-}
 
 export function VoiceMessage({
   duration,
@@ -27,21 +22,23 @@ export function VoiceMessage({
   const [metadataDuration, setMetadataDuration] = useState<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
   const readMarkedRef = useRef(false);
 
   useEffect(() => {
     const audio = audioRef.current;
 
     if (!blob) {
-      if (audioUrl) {
+      if (audioUrlRef.current) {
         if (audio) {
           audio.pause();
           audio.src = '';
           audio.load();
         }
-        URL.revokeObjectURL(audioUrl);
-        setAudioUrl(null);
+        URL.revokeObjectURL(audioUrlRef.current);
+        audioUrlRef.current = null;
       }
+      setAudioUrl(null);
       setCurrentTime(0);
       setIsPlaying(false);
       setMetadataDuration(null);
@@ -62,10 +59,11 @@ export function VoiceMessage({
 
     let url: string | null = null;
     try {
-      if (audioUrl) {
-        URL.revokeObjectURL(audioUrl);
+      if (audioUrlRef.current) {
+        URL.revokeObjectURL(audioUrlRef.current);
       }
       url = URL.createObjectURL(blob);
+      audioUrlRef.current = url;
       setAudioUrl(url);
     } catch {
       return;
@@ -81,6 +79,9 @@ export function VoiceMessage({
       }
       if (url) {
         URL.revokeObjectURL(url);
+        if (audioUrlRef.current === url) {
+          audioUrlRef.current = null;
+        }
       }
     };
   }, [blob, duration]);

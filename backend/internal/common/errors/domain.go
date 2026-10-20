@@ -10,7 +10,6 @@ type ErrorCategory string
 
 const (
 	CategoryValidation   ErrorCategory = "VALIDATION"
-	CategoryAuth         ErrorCategory = "AUTH"
 	CategoryNotFound     ErrorCategory = "NOT_FOUND"
 	CategoryConflict     ErrorCategory = "CONFLICT"
 	CategoryUnauthorized ErrorCategory = "UNAUTHORIZED"
@@ -178,6 +177,20 @@ var (
 		"invalid chunk index",
 	)
 
+	ErrInvalidChunkSize = NewDomainError(
+		"INVALID_CHUNK_SIZE",
+		CategoryValidation,
+		http.StatusBadRequest,
+		"invalid chunk size",
+	)
+
+	ErrTransferLimitExceeded = NewDomainError(
+		"TRANSFER_LIMIT_EXCEEDED",
+		CategoryValidation,
+		http.StatusTooManyRequests,
+		"too many concurrent file transfers",
+	)
+
 	ErrUsernameAlreadyExists = NewDomainError(
 		"USERNAME_ALREADY_EXISTS",
 		CategoryConflict,
@@ -309,13 +322,6 @@ var (
 		CategoryUnauthorized,
 		http.StatusUnauthorized,
 		"missing required token claims",
-	)
-
-	ErrDatabaseError = NewDomainError(
-		"DATABASE_ERROR",
-		CategoryInternal,
-		http.StatusInternalServerError,
-		"database operation failed",
 	)
 
 	ErrIdentityKeyCreateFailed = NewDomainError(

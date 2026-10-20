@@ -353,9 +353,12 @@ function MessageBubbleComponent({
                 blob={message.file.blob}
                 isOwn={message.isOwn}
                 accessMode={message.file.accessMode}
+                previewAllowed={message.file.previewAllowed}
                 onDownloadStateChange={onMediaActiveChange}
                 onView={
-                  message.file.blob && onViewFile
+                  message.file.blob &&
+                  message.file.previewAllowed === true &&
+                  onViewFile
                     ? () => {
                         if (!message.isOwn && onMarkAsRead) {
                           onMarkAsRead(message.id);
@@ -438,9 +441,7 @@ function MessageBubbleComponent({
                                 : 'bg-emerald-900/40 border border-emerald-600/40 text-emerald-50/90 hover:bg-emerald-900/55 shadow-emerald-900/30'
                           } hover:scale-[1.04] active:scale-[0.97]`}
                         >
-                          <span className="text-lg leading-none">
-                            {emoji}
-                          </span>
+                          <span className="text-lg leading-none">{emoji}</span>
                           <span className="text-[10px] font-semibold text-emerald-100/90">
                             {userIds.length}
                           </span>
@@ -487,36 +488,42 @@ function MessageBubbleComponent({
                   {message.deliveryStatus === 'delivered' && (
                     <svg
                       className="w-4 h-3.5 text-emerald-500/70"
-                      fill="currentColor"
-                      viewBox="0 0 20 20"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
                     >
                       <path
-                        fillRule="evenodd"
-                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                        clipRule="evenodd"
+                        d="m1 12 4 4L15 6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
                       />
                       <path
-                        fillRule="evenodd"
-                        d="M16.707 7.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 14.586l7.293-7.293a1 1 0 011.414 0z"
-                        clipRule="evenodd"
+                        d="m8 12 4 4L22 6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
                       />
                     </svg>
                   )}
                   {message.deliveryStatus === 'read' && (
                     <svg
                       className="w-4 h-3.5 text-blue-400"
-                      fill="currentColor"
-                      viewBox="0 0 20 20"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
                     >
                       <path
-                        fillRule="evenodd"
-                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                        clipRule="evenodd"
+                        d="m1 12 4 4L15 6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
                       />
                       <path
-                        fillRule="evenodd"
-                        d="M16.707 7.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 14.586l7.293-7.293a1 1 0 011.414 0z"
-                        clipRule="evenodd"
+                        d="m8 12 4 4L22 6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
                       />
                     </svg>
                   )}
@@ -606,6 +613,8 @@ export const MessageBubble = memo(
       prevProps.message.file?.size === nextProps.message.file?.size &&
       prevProps.message.file?.accessMode ===
         nextProps.message.file?.accessMode &&
+      prevProps.message.file?.previewAllowed ===
+        nextProps.message.file?.previewAllowed &&
       prevProps.message.file?.blob === nextProps.message.file?.blob &&
       prevProps.message.voice?.filename === nextProps.message.voice?.filename &&
       prevProps.message.voice?.mimeType === nextProps.message.voice?.mimeType &&

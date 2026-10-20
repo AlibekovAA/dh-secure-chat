@@ -7,6 +7,7 @@ import type {
   PeerOfflinePayload,
   PeerDisconnectedPayload,
   FileStartPayload,
+  FileAccessMode,
 } from '@/shared/websocket/types';
 import { generateEphemeralKeyPair } from '@/shared/crypto/ephemeral';
 import {
@@ -34,17 +35,14 @@ import {
   validateFileSize,
   validateVoiceSize,
   getFileValidationError,
+  inspectFileContent,
 } from '@/shared/utils/files';
 import { EDIT_TIMEOUT_MS } from '@/shared/constants';
 import { useAckManager } from '@/modules/chat/hooks/useAckManager';
 import { useFileTransfer } from '@/modules/chat/hooks/useFileTransfer';
 import { useMessageHandler } from '@/modules/chat/hooks/useMessageHandlers';
 import { useIncomingMessageHandlers } from '@/modules/chat/hooks/useIncomingMessageHandlers';
-import {
-  isVoiceFile,
-  isVideoFile,
-  extractDurationFromFilename,
-} from '@/modules/chat/utils';
+import { extractDurationFromFilename } from '@/modules/chat/utils';
 
 export type ChatSessionState =
   | 'idle'
@@ -66,7 +64,8 @@ export type ChatMessage = {
     mimeType: string;
     size: number;
     blob?: Blob;
-    accessMode?: 'download_only' | 'view_only' | 'both';
+    accessMode?: FileAccessMode;
+    previewAllowed?: boolean;
   };
   voice?: {
     filename: string;
@@ -99,6 +98,13 @@ export type ChatMessage = {
   };
 };
 
+export type FileBuffer = {
+  chunks: Array<{ ciphertext: string; nonce: string }>;
+  metadata: FileStartPayload;
+  processing: boolean;
+  receivedSize: number;
+};
+
 type UseChatSessionOptions = {
   token: string | null;
   peerId: string | null;
@@ -124,16 +130,7 @@ export function useChatSession({
   } | null>(null);
   const peerEphemeralKeyRef = useRef<CryptoKey | null>(null);
   const messageIdCounterRef = useRef(0);
-  const fileBuffersRef = useRef<
-    Map<
-      string,
-      {
-        chunks: Array<{ ciphertext: string; nonce: string }>;
-        metadata: FileStartPayload;
-        processing: boolean;
-      }
-    >
-  >(new Map());
+  const fileBuffersRef = useRef<Map<string, FileBuffer>>(new Map());
   const myIdentityPrivateKeyRef = useRef<CryptoKey | null>(null);
   const peerIdentityPublicKeyRef = useRef<string | null>(null);
   const sendRef = useRef<((message: WSMessage) => void) | null>(null);
@@ -336,6 +333,7 @@ export function useChatSession({
     },
     setState,
     setMessages,
+    setError,
     setPeerActivity,
     clearPendingAcks,
     clearSession,
@@ -556,6 +554,15 @@ export function useChatSession({
           .slice(2, 11)}`;
         const totalChunks = calculateChunks(file.size);
         const chunkSize = getChunkSize();
+        const inspection = await inspectFileContent(file, file.type);
+        const isVoice =
+          inspection.previewAllowed && inspection.kind === 'audio';
+        const isVideo =
+          inspection.previewAllowed && inspection.kind === 'video';
+        const mimeType =
+          inspection.previewAllowed && inspection.detectedMimeType
+            ? inspection.detectedMimeType
+            : 'application/octet-stream';
 
         let chunks: Array<{ ciphertext: string; nonce: string }>;
         let totalSize: number;
@@ -570,20 +577,6 @@ export function useChatSession({
               : MESSAGES.chat.session.errors.unknownError;
           setError(MESSAGES.chat.session.errors.fileEncryptionError(reason));
           return;
-        }
-
-        const isVoice = isVoiceFile(file.type || '');
-        const isVideo = !isVoice && isVideoFile(file.type || '');
-        let mimeType =
-          file.type ||
-          (isVoice
-            ? 'audio/webm'
-            : isVideo
-              ? 'video/webm'
-              : 'application/octet-stream');
-
-        if ((isVoice || isVideo) && mimeType.includes(';')) {
-          mimeType = mimeType.split(';')[0].trim();
         }
 
         send({
@@ -666,6 +659,7 @@ export function useChatSession({
                     size: file.size,
                     blob: blobClone,
                     accessMode,
+                    previewAllowed: inspection.previewAllowed,
                   },
                 }),
           timestamp: Date.now(),

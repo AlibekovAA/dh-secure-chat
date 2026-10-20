@@ -17,11 +17,11 @@ export async function generateIdentityKeyPair(): Promise<IdentityKeyPair> {
   try {
     const keyPair = await crypto.subtle.generateKey(
       {
-        name: 'ECDH',
+        name: 'ECDSA',
         namedCurve: 'P-256',
       },
-      true,
-      ['deriveKey', 'deriveBits']
+      false,
+      ['sign', 'verify']
     );
 
     return {
@@ -60,153 +60,58 @@ export async function importPublicKey(base64: string): Promise<CryptoKey> {
   );
 }
 
-async function getOrCreateMasterKey(): Promise<CryptoKey> {
-  const stored = localStorage.getItem(MASTER_KEY_STORAGE);
-  if (stored) {
-    const keyData = Uint8Array.from(atob(stored), (c) => c.charCodeAt(0));
-    return await crypto.subtle.importKey(
-      'raw',
-      keyData,
-      { name: 'AES-GCM' },
-      false,
-      ['encrypt', 'decrypt']
-    );
-  }
-
-  const masterKey = crypto.getRandomValues(new Uint8Array(32));
-  const key = await crypto.subtle.importKey(
-    'raw',
-    masterKey,
-    { name: 'AES-GCM' },
-    false,
-    ['encrypt', 'decrypt']
-  );
-
-  const exported = await crypto.subtle.exportKey('raw', key);
-  localStorage.setItem(
-    MASTER_KEY_STORAGE,
-    btoa(String.fromCharCode(...new Uint8Array(exported)))
-  );
-  return key;
-}
-
-async function encryptKeyData(data: string): Promise<string> {
+function clearLegacyIdentityStorage(): void {
   try {
-    const masterKey = await getOrCreateMasterKey();
-    const dataBytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
-    const nonce = crypto.getRandomValues(new Uint8Array(12));
-
-    const encrypted = await crypto.subtle.encrypt(
-      { name: 'AES-GCM', iv: nonce },
-      masterKey,
-      dataBytes
-    );
-
-    const encryptedArray = new Uint8Array(encrypted);
-    const combined = new Uint8Array(nonce.length + encryptedArray.length);
-    combined.set(nonce, 0);
-    combined.set(encryptedArray, nonce.length);
-
-    return btoa(String.fromCharCode(...combined));
-  } catch {
-    return data;
-  }
-}
-
-async function decryptKeyData(encryptedData: string): Promise<string | null> {
-  try {
-    const masterKey = await getOrCreateMasterKey();
-    const combined = Uint8Array.from(atob(encryptedData), (c) =>
-      c.charCodeAt(0)
-    );
-
-    if (combined.length < 13) {
-      return null;
-    }
-
-    const nonce = combined.slice(0, 12);
-    const encrypted = combined.slice(12);
-
-    const decrypted = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: nonce },
-      masterKey,
-      encrypted
-    );
-
-    return btoa(String.fromCharCode(...new Uint8Array(decrypted)));
-  } catch {
-    return null;
-  }
-}
-
-async function saveToIndexedDB(key: string, data: string): Promise<void> {
-  try {
-    if ('indexedDB' in window) {
-      const { saveKey } = await import('@/shared/storage/indexeddb');
-      await saveKey(key, data, 'identity');
-      return;
-    }
+    localStorage.removeItem(IDENTITY_KEY_STORAGE);
+    localStorage.removeItem(MASTER_KEY_STORAGE);
   } catch {
     void 0;
   }
-  localStorage.setItem(key, data);
 }
 
-async function loadFromIndexedDB(key: string): Promise<string | null> {
-  try {
-    if ('indexedDB' in window) {
-      const { loadKey } = await import('@/shared/storage/indexeddb');
-      const stored = await loadKey(key);
-      if (stored) {
-        return stored;
-      }
-    }
-  } catch {
-    void 0;
-  }
-  return localStorage.getItem(key);
+function isStoredIdentityPrivateKey(value: unknown): value is CryptoKey {
+  if (typeof CryptoKey === 'undefined' || !(value instanceof CryptoKey))
+    return false;
+  const algorithm = value.algorithm as EcKeyAlgorithm;
+  return (
+    value.type === 'private' &&
+    !value.extractable &&
+    algorithm.name === 'ECDSA' &&
+    algorithm.namedCurve === 'P-256' &&
+    value.usages.includes('sign')
+  );
 }
 
 export async function saveIdentityPrivateKey(
   privateKey: CryptoKey
 ): Promise<void> {
-  const exported = await crypto.subtle.exportKey('pkcs8', privateKey);
-  const base64 = btoa(String.fromCharCode(...new Uint8Array(exported)));
-  const encrypted = await encryptKeyData(base64);
-  await saveToIndexedDB(IDENTITY_KEY_STORAGE, encrypted);
+  clearLegacyIdentityStorage();
+
+  if (!isStoredIdentityPrivateKey(privateKey)) {
+    throw new Error(
+      MESSAGES.crypto.identity.errors.keygenFailed('invalid private key')
+    );
+  }
+
+  const { saveKey } = await import('@/shared/storage/indexeddb');
+  await saveKey(IDENTITY_KEY_STORAGE, privateKey, 'identity');
 }
 
 export async function loadIdentityPrivateKey(): Promise<CryptoKey | null> {
-  const stored = await loadFromIndexedDB(IDENTITY_KEY_STORAGE);
-  if (!stored) {
-    return null;
-  }
+  clearLegacyIdentityStorage();
 
   try {
-    let decrypted: string | null = null;
-
-    try {
-      decrypted = await decryptKeyData(stored);
-    } catch {
-      void 0;
+    const { deleteKey, loadKey } = await import('@/shared/storage/indexeddb');
+    const stored = await loadKey<CryptoKey>(IDENTITY_KEY_STORAGE);
+    if (isStoredIdentityPrivateKey(stored)) {
+      return stored;
     }
-
-    if (!decrypted) {
-      decrypted = stored;
+    if (stored !== null) {
+      await deleteKey(IDENTITY_KEY_STORAGE);
     }
-
-    const binary = Uint8Array.from(atob(decrypted), (c) => c.charCodeAt(0));
-    return await crypto.subtle.importKey(
-      'pkcs8',
-      binary,
-      {
-        name: 'ECDH',
-        namedCurve: 'P-256',
-      },
-      true,
-      ['deriveKey', 'deriveBits']
-    );
-  } catch (err) {
+  } catch {
     return null;
   }
+
+  return null;
 }

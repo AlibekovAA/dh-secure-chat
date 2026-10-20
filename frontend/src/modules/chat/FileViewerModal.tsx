@@ -1,12 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
-import {
-  VIDEO_MIME_TYPES,
-  IMAGE_MIME_TYPES,
-  PDF_MIME_TYPE,
-  TEXT_MIME_TYPES,
-} from '@/shared/constants';
+import { VIDEO_MIME_TYPES, IMAGE_MIME_TYPES } from '@/shared/constants';
 import { Spinner } from '@/shared/ui/Spinner';
 import { MESSAGES } from '@/shared/messages';
+import { inspectFileContent } from '@/shared/utils/files';
 
 type Props = {
   filename: string;
@@ -24,6 +20,7 @@ export function FileViewerModal({
   protected: isProtected = false,
 }: Props) {
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const [verifiedMimeType, setVerifiedMimeType] = useState<string | null>(null);
   const [textContent, setTextContent] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [videoLoading, setVideoLoading] = useState(true);
@@ -34,9 +31,38 @@ export function FileViewerModal({
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
-    const isVideo = VIDEO_MIME_TYPES.some((type) => mimeType.includes(type));
+    let cancelled = false;
+    setVerifiedMimeType(null);
+    setError(null);
 
-    if (isVideo && blob) {
+    void inspectFileContent(blob, mimeType)
+      .then((inspection) => {
+        if (cancelled) return;
+        if (!inspection.previewAllowed || !inspection.detectedMimeType) {
+          setError(MESSAGES.chat.fileViewerModal.errors.unsupportedType);
+          return;
+        }
+        setVerifiedMimeType(inspection.detectedMimeType);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setError(MESSAGES.chat.fileViewerModal.errors.unsupportedType);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [blob, mimeType]);
+
+  useEffect(() => {
+    if (!verifiedMimeType) return;
+
+    const isVideo = VIDEO_MIME_TYPES.includes(verifiedMimeType);
+
+    setTextContent(null);
+
+    if (isVideo || verifiedMimeType === 'application/pdf') {
       const url = URL.createObjectURL(blob);
       setObjectUrl(url);
       return () => {
@@ -44,14 +70,33 @@ export function FileViewerModal({
       };
     }
 
-    if (IMAGE_MIME_TYPES.includes(mimeType)) {
-      if (isProtected && canvasRef.current) {
+    if (verifiedMimeType === 'text/plain') {
+      let cancelled = false;
+      void blob
+        .text()
+        .then((content) => {
+          if (!cancelled) setTextContent(content);
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setError(MESSAGES.chat.fileViewerModal.errors.failedToReadFile);
+          }
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (IMAGE_MIME_TYPES.includes(verifiedMimeType)) {
+      if (isProtected) {
+        const canvas = canvasRef.current;
+        if (!canvas) {
+          setError(MESSAGES.chat.fileViewerModal.errors.failedToLoadImage);
+          return;
+        }
         const img = new Image();
         const url = URL.createObjectURL(blob);
         img.onload = () => {
-          const canvas = canvasRef.current;
-          if (!canvas) return;
-
           const ctx = canvas.getContext('2d');
           if (!ctx) return;
 
@@ -104,21 +149,10 @@ export function FileViewerModal({
         setObjectUrl(url);
         return () => URL.revokeObjectURL(url);
       }
-    } else if (mimeType === PDF_MIME_TYPE) {
-      const url = URL.createObjectURL(blob);
-      setObjectUrl(url);
-      return () => URL.revokeObjectURL(url);
-    } else if (TEXT_MIME_TYPES.includes(mimeType)) {
-      blob
-        .text()
-        .then((text: string) => setTextContent(text))
-        .catch((_err: unknown) => {
-          setError(MESSAGES.chat.fileViewerModal.errors.failedToReadFile);
-        });
     } else {
       setError(MESSAGES.chat.fileViewerModal.errors.unsupportedType);
     }
-  }, [blob, mimeType, isProtected]);
+  }, [blob, verifiedMimeType, isProtected]);
 
   useEffect(() => {
     if (!isProtected) return;
@@ -224,20 +258,22 @@ export function FileViewerModal({
                 <p className="text-sm font-medium text-red-300">{error}</p>
               </div>
             </div>
-            <button
-              onClick={handleDownload}
-              className="px-4 py-2 text-sm font-medium bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 text-black rounded-md transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg shadow-emerald-500/30"
-              style={{ willChange: 'transform' }}
-            >
-              {MESSAGES.chat.fileViewerModal.labels.downloadFile}
-            </button>
+            {!isProtected && (
+              <button
+                onClick={handleDownload}
+                className="px-4 py-2 text-sm font-medium bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 text-black rounded-md transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg shadow-emerald-500/30"
+                style={{ willChange: 'transform' }}
+              >
+                {MESSAGES.chat.fileViewerModal.labels.downloadFile}
+              </button>
+            )}
           </div>
         </div>
       );
     }
 
-    if (IMAGE_MIME_TYPES.includes(mimeType)) {
-      if (isProtected && canvasRef.current) {
+    if (verifiedMimeType && IMAGE_MIME_TYPES.includes(verifiedMimeType)) {
+      if (isProtected) {
         return (
           <div
             className="flex items-center justify-center h-full w-full bg-black/40 overflow-auto p-4"
@@ -268,29 +304,11 @@ export function FileViewerModal({
       }
     }
 
-    if (mimeType === PDF_MIME_TYPE && objectUrl) {
-      return (
-        <div className="w-full h-full">
-          <iframe
-            src={objectUrl}
-            className="w-full h-full border-0"
-            title={filename}
-          />
-        </div>
-      );
-    }
-
-    if (TEXT_MIME_TYPES.includes(mimeType) && textContent !== null) {
-      return (
-        <div className="h-full overflow-auto bg-black/40 p-4">
-          <pre className="text-sm text-emerald-100 whitespace-pre-wrap font-mono">
-            {textContent}
-          </pre>
-        </div>
-      );
-    }
-
-    if (VIDEO_MIME_TYPES.some((type) => mimeType.includes(type)) && objectUrl) {
+    if (
+      verifiedMimeType &&
+      VIDEO_MIME_TYPES.includes(verifiedMimeType) &&
+      objectUrl
+    ) {
       return (
         <div className="w-full h-full flex items-center justify-center bg-black/40 relative">
           {videoLoading && !videoError && (
@@ -392,6 +410,26 @@ export function FileViewerModal({
       );
     }
 
+    if (verifiedMimeType === 'application/pdf' && objectUrl) {
+      return (
+        <iframe
+          src={`${objectUrl}${isProtected ? '#toolbar=0' : ''}`}
+          title={filename}
+          className="w-full h-full border-0 bg-white"
+        />
+      );
+    }
+
+    if (verifiedMimeType === 'text/plain' && textContent !== null) {
+      return (
+        <div className="w-full h-full overflow-auto bg-black/40 p-6">
+          <pre className="whitespace-pre-wrap break-words font-mono text-sm text-emerald-50">
+            {textContent}
+          </pre>
+        </div>
+      );
+    }
+
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
@@ -423,7 +461,7 @@ export function FileViewerModal({
               {filename}
             </h3>
             <p className="text-xs text-emerald-400/80 mt-1 font-medium">
-              {mimeType}
+              {verifiedMimeType || 'application/octet-stream'}
             </p>
           </div>
           <div className="flex items-center gap-3 ml-4">

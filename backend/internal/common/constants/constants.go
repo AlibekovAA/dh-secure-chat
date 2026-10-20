@@ -10,20 +10,21 @@ const (
 	JWTSecretMinLength = 32
 	RefreshTokenSize   = 32
 
-	MaxFileSizeBytes      = 50 * 1024 * 1024
-	MaxVoiceSizeBytes     = 10 * 1024 * 1024
-	MaxMessageLength      = 4000
-	MaxSearchQueryLength  = 100
-	MaxSearchResultsLimit = 100
-	DefaultSearchLimit    = 20
-	DefaultMaxRequestSize = 1 << 20
-	MaxFileChunks         = 1000
+	MaxFileSizeBytes                  = 50 * 1024 * 1024
+	MaxVoiceSizeBytes                 = 10 * 1024 * 1024
+	MaxMessageLength                  = 4000
+	MaxSearchQueryLength              = 100
+	MaxSearchResultsLimit             = 100
+	DefaultSearchLimit                = 20
+	DefaultMaxRequestSize             = 1 << 20
+	MaxFileChunks                     = 1000
+	MaxFileChunkSizeBytes             = 1 * 1024 * 1024
+	MaxConcurrentFileTransfersPerUser = 5
+	AESGCMTagSizeBytes                = 16
+	AESGCMNonceSizeBytes              = 12
 
 	UserExistenceCacheTTL             = 5 * time.Minute
 	UserExistenceCacheCleanupInterval = 1 * time.Minute
-
-	RefreshTokenCacheTTL             = 1 * time.Minute
-	RefreshTokenCacheCleanupInterval = 30 * time.Second
 
 	FileTransferTimeout = 10 * time.Minute
 	IdempotencyTTL      = 5 * time.Minute

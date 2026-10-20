@@ -132,10 +132,3 @@ export function hasPeerFingerprintChanged(
 export function getVerifiedPeerFingerprint(userId: string): string | undefined {
   return getVerifiedPeers()[userId];
 }
-
-export function saveVerifiedPeerFingerprint(
-  userId: string,
-  fingerprint: string
-): void {
-  saveVerifiedPeer(userId, fingerprint);
-}

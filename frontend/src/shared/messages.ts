@@ -6,7 +6,7 @@ export const MESSAGES = {
     usernameMaxLength: (max: number) =>
       `Имя пользователя должно быть максимум ${max} символов`,
     usernameAllowedChars:
-      'Имя пользователя может содержать только латинские буквы, цифры, _ и -',
+      'Имя пользователя может содержать только латинские буквы (A–Z), цифры, _ и -',
     usernameCannotStartOrEnd:
       'Имя пользователя не может начинаться или заканчиваться на _ или -',
 
@@ -16,7 +16,7 @@ export const MESSAGES = {
     passwordMaxLength: (max: number) =>
       `Пароль должен быть максимум ${max} символов`,
     passwordMustContainLatinLetter:
-      'Пароль должен содержать хотя бы одну латинскую букву',
+      'Пароль должен содержать хотя бы одну латинскую букву (A–Z)',
     passwordMustContainDigit: 'Пароль должен содержать хотя бы одну цифру',
 
     confirmPasswordRequired: 'Подтвердите пароль',
@@ -59,7 +59,7 @@ export const MESSAGES = {
       usernameMin: (min: number) => `Минимум ${min} символа`,
       usernameMax: (max: number) => `Максимум ${max} символа`,
       usernameOk: '✓ Корректное имя',
-      usernameAllowed: 'Только латинские буквы, цифры, _ и -',
+      usernameAllowed: 'Только латинские буквы (A–Z), цифры, _ и -',
       noPasswordRecovery:
         'Восстановление пароля невозможно. Сохраните пароль в надёжном месте.',
       passwordsMatch: 'Пароли совпадают',
@@ -67,7 +67,7 @@ export const MESSAGES = {
     },
     passwordStrength: {
       min8: 'Минимум 8 символов',
-      addUppercaseLatin: 'Добавьте заглавные латинские буквы',
+      addUppercaseLatin: 'Добавьте заглавные латинские буквы (A–Z)',
       addDigits: 'Добавьте цифры',
       addSpecial: 'Добавьте спецсимволы (!@#$%...)',
       labels: {
@@ -123,10 +123,6 @@ export const MESSAGES = {
       },
       errors: {
         failedToLoadFingerprint: 'Не удалось загрузить отпечаток',
-      },
-      myFingerprintModal: {
-        title: 'Ваш отпечаток',
-        close: 'Закрыть',
       },
     },
     contextMenu: {
@@ -213,6 +209,9 @@ export const MESSAGES = {
           `Не все части файла получены (${received}/${expected})`,
         emptyFile: 'Получен пустой файл',
         decryptFailed: 'Не удалось расшифровать файл',
+        invalidTransfer: 'Получены некорректные данные файла',
+        transferLimitExceeded:
+          'Превышено количество одновременных передач файлов',
       },
     },
     incomingMessages: {
@@ -486,33 +485,15 @@ export const MESSAGES = {
     },
   },
 
-  files: {
-    validation: {
-      empty: {
-        file: 'Файл пустой. Выберите файл с содержимым.',
-        image: 'Файл пустой. Выберите файл с содержимым.',
-        voice: 'Голосовое сообщение пустое. Запишите сообщение с звуком.',
-      },
-      tooLarge: {
-        file: (maxSizeMB: number) =>
-          `Файл слишком большой. Максимальный размер: ${maxSizeMB.toFixed(0)}MB. Выберите файл меньшего размера.`,
-        image: (maxSizeMB: number) =>
-          `Изображение слишком большое. Максимальный размер: ${maxSizeMB.toFixed(0)}MB. Выберите изображение меньшего размера.`,
-        voice: (maxSizeMB: number) =>
-          `Голосовое сообщение слишком большое. Максимальный размер: ${maxSizeMB.toFixed(0)}MB. Запишите более короткое сообщение.`,
-      },
-    },
-  },
-
   apiErrors: {
     invalidCredentials: 'Неверное имя пользователя или пароль',
     usernameTaken: 'Имя пользователя уже занято',
     usernameBetween: 'Имя пользователя должно быть от 3 до 32 символов',
     passwordBetween: 'Пароль должен быть от 8 до 72 символов',
     usernameAllowedChars:
-      'Имя пользователя может содержать только латинские буквы, цифры, подчёркивание и дефис',
+      'Имя пользователя может содержать только латинские буквы (A–Z), цифры, подчёркивание и дефис',
     passwordMustContainLatinAndDigit:
-      'Пароль должен содержать хотя бы одну латинскую букву и одну цифру',
+      'Пароль должен содержать хотя бы одну латинскую букву (A–Z) и одну цифру',
     queryEmpty: 'Поисковый запрос не может быть пустым',
     queryTooLong: 'Поисковый запрос слишком длинный',
     sessionExpired: 'Сессия истекла. Войдите снова',

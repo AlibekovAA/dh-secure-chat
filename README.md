@@ -1,507 +1,347 @@
-# dh-secure-chat
+# DH Secure Chat
 
-> End-to-end зашифрованный real-time мессенджер 1-на-1 с использованием Diffie-Hellman для установления сессионного ключа и симметричного шифрования на клиенте.
+Защищённый браузерный мессенджер для общения один на один. Текст, файлы, голосовые и видеосообщения шифруются на стороне отправителя и расшифровываются только в браузере получателя. Сервер отвечает за регистрацию, авторизацию, поиск пользователей и доставку данных по WebSocket, но не получает ключ сессии.
 
-[![Go](https://img.shields.io/badge/Go-1.24-blue)](https://golang.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue)](https://www.typescriptlang.org/)
-[![React](https://img.shields.io/badge/React-18.3-blue)](https://react.dev/)
+## Возможности
 
----
-
-## Содержание
-
-- [Быстрый старт](#быстрый-старт)
-- [Архитектура](#архитектура)
-- [Основные возможности](#основные-возможности)
-- [Технический стек](#технический-стек)
-- [Криптография и безопасность](#криптография-и-безопасность)
-- [Развёртывание](#развёртывание)
-- [API](#api)
-- [Метрики и мониторинг](#метрики-и-мониторинг)
-- [Тестирование](#тестирование)
-- [Планы развития](#планы-развития)
-
----
+- регистрация и вход по имени пользователя и паролю;
+- поиск пользователей и личные чаты один на один;
+- обмен сообщениями в реальном времени через WebSocket;
+- статусы `sending`, `delivered` и `read`;
+- ответы, редактирование, удаление и реакции;
+- индикаторы набора текста, записи голоса и видео;
+- передача файлов размером до 50 МБ;
+- голосовые сообщения до 5 минут и 10 МБ;
+- видеосообщения и превью медиафайлов;
+- режимы доступа к файлам: просмотр, скачивание или оба варианта;
+- визуальная проверка fingerprint собеседника;
+- метрики Prometheus и готовый дашборд Grafana.
 
 ## Быстрый старт
 
+Для запуска нужны Git, Docker и Docker Compose.
+
 ```bash
-# 1. Клонируйте репозиторий
 git clone https://github.com/AlibekovAA/dh-secure-chat.git
 cd dh-secure-chat
-
-# 2. Настройте переменные окружения
 cp infra/env.example .env
-# Отредактируйте .env файл
-
-# 3. Запустите проект (режим разработки)
-make develop-up-build
-
-# 4. Откройте в браузере
-# http://localhost
+docker compose -f docker-compose.dev.yml up --build
 ```
 
-**Режимы запуска:**
+На Windows без `make` используется та же команда `docker compose`. Если `make` установлен, можно выполнить:
 
-- `make develop-up-build` — минимальный набор (без мониторинга)
-- `make prod-up-build` — полный стек (с Prometheus и Grafana)
-
----
-
-## Архитектура
-
-### Общая архитектура системы
-
-```mermaid
-graph TB
-    subgraph "Client"
-        FE[React Frontend<br/>TypeScript + Tailwind]
-    end
-
-    subgraph "Reverse Proxy"
-        NGINX[Nginx<br/>HTTPS Termination]
-    end
-
-    subgraph "Backend Services"
-        AUTH[Auth Service<br/>Go + JWT]
-        CHAT[Chat Service<br/>Go + WebSocket]
-        ID[Identity Service<br/>Go]
-    end
-
-    subgraph "Database"
-        PG[(PostgreSQL<br/>Users & Keys)]
-    end
-
-    subgraph "Monitoring"
-        PROM[Prometheus]
-        GRAF[Grafana]
-    end
-
-    FE -->|HTTPS| NGINX
-    NGINX -->|/api/auth| AUTH
-    NGINX -->|/api/chat<br/>/ws/| CHAT
-    NGINX -->|/api/identity| ID
-    AUTH --> PG
-    CHAT --> PG
-    ID --> PG
-    PROM -->|Scrape| AUTH
-    PROM -->|Scrape| CHAT
-    GRAF --> PROM
+```bash
+make up
 ```
 
-### Поток аутентификации
+После запуска откройте:
 
-```mermaid
-sequenceDiagram
-    participant C as Client
-    participant N as Nginx
-    participant A as Auth Service
-    participant DB as PostgreSQL
+- `https://localhost` — приложение по HTTPS;
+- `http://localhost` — перенаправление на HTTPS;
+- `http://localhost:8081/health` — состояние Auth Service;
+- `http://localhost:8082/health` — состояние Chat Service.
 
-    C->>N: POST /api/auth/register
-    N->>A: Forward request
-    A->>DB: Create user + identity key
-    DB-->>A: User created
-    A-->>C: JWT + Refresh Token (cookie)
+Локальный сертификат находится в `infra/proxy/certs`. Браузер может предупредить, что сертификат разработчика не является доверенным. HTTPS необходим для стабильной работы Web Crypto API и браузерных Media API.
 
-    C->>N: POST /api/auth/login
-    N->>A: Forward request
-    A->>DB: Verify credentials
-    DB-->>A: User verified
-    A-->>C: JWT + Refresh Token (cookie)
+Остановка dev-стека:
 
-    Note over C: JWT в памяти,<br/>Refresh Token в httpOnly cookie
+```bash
+docker compose -f docker-compose.dev.yml down
 ```
 
-### Поток установки защищённой сессии
+или:
 
-```mermaid
-sequenceDiagram
-    participant A as Client A
-    participant WS as WebSocket Hub
-    participant B as Client B
-
-    A->>WS: Connect + JWT auth
-    B->>WS: Connect + JWT auth
-
-    A->>A: Generate ephemeral key pair
-    A->>A: Sign ephemeral pub key<br/>with identity private key
-    A->>WS: ephemeral_key + signature
-    WS->>B: Forward ephemeral_key + signature
-
-    B->>B: Verify signature
-    B->>B: Generate ephemeral key pair
-    B->>B: Sign ephemeral pub key
-    B->>WS: ephemeral_key + signature + ack
-    WS->>A: Forward ephemeral_key + signature + ack
-
-    A->>A: Verify signature
-    A->>A: Derive session key (ECDH + HKDF)
-    B->>B: Derive session key (ECDH + HKDF)
-
-    A->>WS: session_established
-    WS->>B: Forward session_established
-    B->>WS: ack
-    WS->>A: Forward ack
-
-    Note over A,B: Защищённая сессия установлена<br/>Можно отправлять зашифрованные сообщения
+```bash
+make down
 ```
 
-### Поток отправки сообщения
+## Переменные окружения
+
+Создайте `.env` из файла `infra/env.example`:
+
+```dotenv
+POSTGRES_USER=dhchat
+POSTGRES_PASSWORD=dhchat
+POSTGRES_DB=dhchat
+JWT_SECRET=replace-with-a-random-secret-at-least-32-bytes
+LOG_DIR=/var/log/dh-secure-chat
+LOG_LEVEL=INFO
+```
+
+## Как устроен проект
+
+```text
+Browser
+  │ HTTPS / WSS
+  ▼
+Nginx
+  ├── Frontend: React SPA
+  ├── Auth Service: регистрация, вход и токены
+  └── Chat Service: пользователи, identity API и WebSocket
+          │
+          ▼
+      PostgreSQL
+```
+
+- **Frontend** генерирует ключи, устанавливает защищённую сессию и шифрует содержимое сообщений и файлов.
+- **Auth Service** создаёт пользователей, проверяет пароли, выдаёт access token и управляет refresh token.
+- **Chat Service** обслуживает REST API чата, identity API и WebSocket-соединения.
+- **PostgreSQL** хранит пользователей, публичные identity-ключи и серверные данные авторизации.
+- **Nginx** раздаёт frontend, завершает HTTPS и маршрутизирует запросы к backend.
+- **Prometheus и Grafana** подключаются только в полном стеке.
+
+Identity API является частью процесса Chat Service, а не отдельным контейнером.
+
+## Защищённая сессия
+
+Для identity и каждой сессии используются разные ключи.
+
+### Identity-ключ
+
+При регистрации браузер создаёт долгоживущую пару **ECDSA P-256**:
+
+- публичный ключ экспортируется и сохраняется на сервере;
+- приватный ключ сохраняется в IndexedDB как неэкспортируемый `CryptoKey`;
+- приватный ключ не отправляется на сервер и используется для подписи временных ключей.
+
+Приватный identity-ключ привязан к конкретному профилю браузера. Очистка данных сайта или вход с нового устройства создаёт новый ключ и обновляет публичный ключ пользователя на сервере.
+
+### Установка сессии
 
 ```mermaid
 sequenceDiagram
-    participant A as Client A
-    participant WS as WebSocket Hub
-    participant B as Client B
+    participant A as Клиент A
+    participant S as Chat Service
+    participant B as Клиент B
 
-    A->>A: Encrypt message<br/>(AES-GCM + session key)
-    A->>WS: message {ciphertext, nonce, metadata}
-    WS->>WS: Validate + route
-    WS->>B: Forward message
-
-    B->>B: Decrypt message<br/>(AES-GCM + session key)
-    B->>WS: ack {message_id}
-    WS->>A: Forward ack
-
-    Note over B: Message visible in viewport
-    B->>WS: message_read {message_id}
-    WS->>A: Forward message_read
+    A->>S: WebSocket + JWT
+    B->>S: WebSocket + JWT
+    A->>A: Создать ephemeral ECDH P-256
+    A->>A: Подписать public key ключом ECDSA
+    A->>S: ephemeral_key
+    S->>B: ephemeral_key
+    B->>B: Проверить подпись по identity public key
+    B->>B: Создать и подписать свой ephemeral key
+    B->>S: ephemeral_key
+    S->>A: ephemeral_key
+    A->>A: Проверить подпись
+    A->>A: ECDH → HKDF-SHA-256 → AES-256-GCM
+    B->>B: ECDH → HKDF-SHA-256 → AES-256-GCM
+    A->>S: session_established
+    S->>B: session_established
 ```
 
-### Поток передачи файла
+Для каждого открытия чата клиенты создают временные пары **ECDH P-256**. Их публичные части подписываются identity-ключами. После проверки подписи обе стороны независимо получают общий секрет через ECDH и выводят из него сессионный ключ **AES-256-GCM** через **HKDF-SHA-256**.
 
-```mermaid
-sequenceDiagram
-    participant A as Client A
-    participant WS as WebSocket Hub
-    participant B as Client B
+Обмен `ephemeral_key` подтверждается сообщениями `ack` и повторяется при отсутствии подтверждения. Сервер только проверяет структуру и маршрутизирует сообщения между подключёнными пользователями.
 
-    A->>A: Encrypt file chunk 1<br/>(1MB chunks)
-    A->>WS: file_start {metadata, access_mode}
-    WS->>B: Forward file_start
+### Шифрование данных
 
-    loop For each chunk
-        A->>A: Encrypt chunk
-        A->>WS: file_chunk {chunk_id, ciphertext, nonce}
-        WS->>B: Forward file_chunk
-        B->>B: Decrypt chunk
-    end
+- текст кодируется в браузере и шифруется AES-256-GCM;
+- для каждой операции создаётся отдельный 12-байтовый nonce;
+- файлы разбиваются на части по 1 МБ, каждая часть шифруется отдельно;
+- получатель проверяет метаданные, порядок, размер и полноту частей перед сборкой файла;
+- сервер видит служебные поля маршрутизации, ciphertext и nonce, но не ключ сессии и открытое содержимое.
 
-    A->>WS: file_complete {file_id}
-    WS->>B: Forward file_complete
-    B->>B: Reconstruct file
-    B->>WS: ack {file_id}
-    WS->>A: Forward ack
-```
+Fingerprint — это SHA-256 от публичного identity-ключа. Пользователи могут сравнить его вне приложения и отметить identity собеседника как проверенный. Это снижает риск подмены ключа, но не заменяет независимую проверку личности.
 
----
+## Ограничения безопасности
 
-## Основные возможности
+Проект демонстрирует клиентское шифрование, но ещё не проходил независимый аудит. Важно учитывать:
 
-### Безопасность
+- приватный identity-ключ хранится только в текущем профиле браузера;
+- история сообщений постоянно на сервере не хранится;
+- метаданные соединения и доставки доступны серверу;
+- безопасность зависит от целостности frontend-кода, который отдаёт сервер;
+- режим `view_only` ограничивает действия интерфейса, но не может гарантировать защиту от снимков экрана или модифицированного клиента;
 
-- **E2E шифрование** — все сообщения шифруются на клиенте (AES-GCM)
-- **Diffie-Hellman** — отдельный сессионный ключ для каждого чата
-- **Подпись ключей** — защита от MITM-атак через подпись ephemeral-ключей
-- **Fingerprint верификация** — визуальное сравнение ключей (TOFU)
-- **JWT с инвалидацией** — возможность отзыва токенов через JTI
-
-### Чат
-
-- **Real-time обмен** — WebSocket для мгновенной доставки
-- **1-на-1 диалоги** — только приватные чаты
-- **Статусы доставки** — `sending` → `delivered` → `read`
-- **Typing indicators** — индикатор набора текста
-- **Реакции на сообщения** — эмодзи-реакции
-
-### Файлы и медиа
-
-- **Файлы до 50MB** — передача по частям (1MB chunks)
-- **Голосовые сообщения** — запись через MediaRecorder API (до 5 мин, 10MB)
-- **Видео сообщения** — запись с камеры (до 50MB)
-- **Режимы доступа** — `both`, `view_only`, `download_only`
-- **Защита просмотра** — Canvas рендеринг с водяным знаком для `view_only`
-- **Видео-кружки** — круглые превью с воспроизведением в чате
-
-### Надёжность
-
-- **Circuit Breaker** — защита БД от перегрузки
-- **Idempotency** — предотвращение дублирования сообщений
-- **Graceful degradation** — продолжение работы при некритичных ошибках
-- **Метрики Prometheus** — полный мониторинг системы
-
----
-
-## Технический стек
+## Технологии
 
 ### Frontend
 
-- **React 18** + **TypeScript** — современный SPA
-- **Vite** — сборщик и dev-сервер
-- **Tailwind CSS** — стилизация
-- **Web Crypto API** — криптография на клиенте
-- **WebSocket** — real-time коммуникация
-- **MediaRecorder API** — запись аудио/видео
-- **ESLint** + **Prettier** — линтинг и форматирование кода
-- **Path Aliases** (`@/`) — удобные импорты
+- React 18;
+- TypeScript 5.9;
+- Vite 6;
+- Tailwind CSS 4;
+- Web Crypto API;
+- WebSocket, MediaRecorder и IndexedDB;
+- ESLint 10 и Prettier 3.
+
+Требования для локального запуска frontend без Docker:
+
+- Node.js `^22.22.2` или `>=24.15.0`;
+- npm `>=12.2.0`.
 
 ### Backend
 
-- **Go 1.24** — высокопроизводительный backend
-- **net/http** — стандартная библиотека (без фреймворков)
-- **PostgreSQL** — хранение пользователей и ключей
-- **JWT** — аутентификация
-- **WebSocket Hub** — управление соединениями
+- Go 1.24;
+- стандартный `net/http`;
+- Gorilla WebSocket;
+- PostgreSQL 16 и pgx;
+- JWT;
+- Prometheus client.
 
 ### Инфраструктура
 
-- **Docker** + **docker-compose** — контейнеризация
-- **Nginx** — reverse proxy и HTTPS
-- **Prometheus** — сбор метрик
-- **Grafana** — визуализация метрик
+- Docker Compose;
+- Nginx;
+- Prometheus;
+- Grafana.
 
----
+## Команды разработки
 
-## Криптография и безопасность
-
-### Ключевая архитектура
-
-```mermaid
-graph TB
-    subgraph "Identity Keys"
-        IKP[Identity Key Pair<br/>ECDSA P-256]
-        IPUB[Public Key → Server]
-        IPRIV[Private Key → Client Only]
-        IKP --> IPUB
-        IKP --> IPRIV
-    end
-
-    subgraph "Session Establishment"
-        EKP1[Ephemeral Key Pair A<br/>ECDH P-256]
-        EKP2[Ephemeral Key Pair B<br/>ECDH P-256]
-        SIG1[Sign with Identity A]
-        SIG2[Sign with Identity B]
-        EKP1 --> SIG1
-        EKP2 --> SIG2
-        SIG1 --> VERIFY[Verify Signatures]
-        SIG2 --> VERIFY
-        VERIFY --> DH[ECDH Key Exchange]
-        DH --> KDF[HKDF-SHA256]
-        KDF --> SK[Session Key<br/>AES-256-GCM]
-    end
-
-    subgraph "Message Encryption"
-        MSG[Plaintext Message]
-        SK --> ENC[AES-GCM Encrypt]
-        MSG --> ENC
-        ENC --> CT[Ciphertext + Nonce]
-    end
-```
-
-### Процесс установки сессии
-
-1. **Генерация identity-ключей** (при регистрации)
-   - Клиент генерирует долгоживущую пару ECDSA P-256
-   - Публичный ключ отправляется на сервер
-   - Приватный ключ остаётся только на клиенте
-
-2. **Генерация ephemeral-ключей** (для каждой сессии)
-   - Каждый клиент генерирует временную пару ECDH P-256
-   - Публичный ephemeral-ключ подписывается приватным identity-ключом
-
-3. **Обмен ключами**
-   - Клиенты обмениваются публичными ephemeral-ключами и подписями
-   - Подписи проверяются перед использованием ключей
-   - Используется acknowledge mechanism для подтверждения
-
-4. **Выработка сессионного ключа**
-   - Общий секрет вычисляется через ECDH
-   - Применяется HKDF-SHA256 для получения симметричного ключа AES-256-GCM
-
-### Шифрование сообщений
-
-- **Алгоритм**: AES-256-GCM
-- **Ключ**: сессионный ключ (256 бит)
-- **Nonce**: генерируется для каждого сообщения
-- **Аутентификация**: встроенная в GCM
-
-**На сервер уходят только:**
-
-- Ciphertext (зашифрованный текст)
-- Nonce (случайное число)
-- Метаданные (отправитель, получатель, ID)
-
-**Сервер не может расшифровать сообщения.**
-
-### Fingerprint верификация
-
-- **Fingerprint** = SHA-256 от публичного identity-ключа
-- **Визуализация** через эмодзи для удобного сравнения
-- **TOFU** (Trust On First Use) — автоматическое сохранение при первом контакте
-- **Блокировка** чата при изменении fingerprint у verified peer
-
----
-
-## Развёртывание
-
-### Режим DEVELOP (минимальный)
+### Docker Compose
 
 ```bash
-make develop-up           # Запуск
-make develop-up-build     # Запуск с пересборкой
-make develop-down         # Остановка
-make develop-down-volumes  # Остановка + удаление volumes
+make up          # dev-стек: приложение и база данных
+make down        # остановить dev-стек
+make prod-up     # полный стек с Prometheus и Grafana
+make prod-down   # остановить полный стек
+make help        # показать команды Makefile
 ```
 
-**Сервисы:**
+`make clean` останавливает и удаляет все Docker-контейнеры, образы и volumes в системе.
 
-- Frontend (React)
-- Auth Service
-- Chat Service
-- PostgreSQL
-- Nginx
-
-### Режим PROD (полный стек)
+### Frontend без Docker
 
 ```bash
-make prod-up           # Запуск
-make prod-up-build     # Запуск с пересборкой
-make prod-down         # Остановка
-make prod-down-volumes # Остановка + удаление volumes
+cd frontend
+npm install
+npm run dev
 ```
 
-**Дополнительно:**
-
-- Prometheus (порт 9090)
-- Grafana (порт 3000, логин: `admin`/`admin`)
-
-### Утилиты
+Доступные проверки:
 
 ```bash
-make help                      # Список всех команд
-make clean                     # Полная очистка Docker
-make backend                   # Запуск backend локально
-make frontend                  # Запуск frontend локально
-make format        # Форматирование и линтинг (Go + TypeScript/React)
-make backend-test  # Запуск всех тестов бэкенда
+npm run type-check
+npm run lint
+npm run format:check
+npm run build
 ```
 
----
+### Backend без Docker
 
-## API
+Для backend нужны Go 1.24, запущенный PostgreSQL и настроенные переменные окружения.
+
+```bash
+make backend
+```
+
+Команда запускает Auth Service и Chat Service. На Windows поведение фонового оператора `&` зависит от используемой оболочки, поэтому надёжнее запускать сервисы в отдельных терминалах:
+
+```bash
+cd backend
+go run ./cmd/auth
+```
+
+```bash
+cd backend
+go run ./cmd/chat
+```
+
+## REST API
+
+Все защищённые REST-запросы используют `Authorization: Bearer <access-token>`. Refresh token хранится в cookie `refresh_token` с флагами `HttpOnly` и `SameSite=Strict`; флаг `Secure` включается при HTTPS.
 
 ### Auth Service
 
-| Метод  | Endpoint             | Описание                          |
-| ------ | -------------------- | --------------------------------- |
-| `POST` | `/api/auth/register` | Регистрация пользователя          |
-| `POST` | `/api/auth/login`    | Вход в систему                    |
-| `POST` | `/api/auth/refresh`  | Обновление access token           |
-| `POST` | `/api/auth/logout`   | Выход (инвалидация токенов)       |
-| `POST` | `/api/auth/revoke`   | Инвалидация текущего access token |
+| Метод  | Endpoint             | Назначение                                                |
+| ------ | -------------------- | --------------------------------------------------------- |
+| `POST` | `/api/auth/register` | Регистрация пользователя и сохранение identity public key |
+| `POST` | `/api/auth/login`    | Вход и выдача новой пары токенов                          |
+| `POST` | `/api/auth/refresh`  | Ротация refresh token и выдача access token               |
+| `POST` | `/api/auth/logout`   | Отзыв токенов и удаление refresh cookie                   |
+| `POST` | `/api/auth/revoke`   | Отзыв текущего access token                               |
 
-### Chat Service (REST)
+### Chat и Identity API
 
-| Метод | Endpoint                       | Описание                          |
-| ----- | ------------------------------ | --------------------------------- |
-| `GET` | `/api/chat/me`                 | Информация о текущем пользователе |
-| `GET` | `/api/chat/users?username=...` | Поиск пользователя по username    |
+| Метод  | Endpoint                                 | Назначение                                                                     |
+| ------ | ---------------------------------------- | ------------------------------------------------------------------------------ |
+| `GET`  | `/api/chat/me`                           | Текущий пользователь                                                           |
+| `GET`  | `/api/chat/users?username=...&limit=...` | Поиск пользователей                                                            |
+| `GET`  | `/api/chat/users/{id}/identity-key`      | Identity public key пользователя для установки сессии                          |
+| `GET`  | `/api/identity/users/{id}/key`           | Identity public key пользователя                                               |
+| `GET`  | `/api/identity/users/{id}/fingerprint`   | Fingerprint identity-ключа                                                     |
+| `POST` | `/api/identity/update-public-key`        | Замена собственного identity public key после создания нового локального ключа |
 
-### Identity Service
+Сервисы также предоставляют `GET /health` и `GET /metrics` на портах 8081 и 8082.
 
-| Метод | Endpoint                               | Описание                            |
-| ----- | -------------------------------------- | ----------------------------------- |
-| `GET` | `/api/identity/users/{id}/key`         | Получение публичного identity-ключа |
-| `GET` | `/api/identity/users/{id}/fingerprint` | Получение fingerprint               |
+## WebSocket-протокол
 
-### WebSocket
+Подключение выполняется к `WSS /ws/`. Авторизация возможна заголовком `Authorization` или первым сообщением типа `auth`.
 
-| Endpoint  | Описание                                              |
-| --------- | ----------------------------------------------------- |
-| `WS /ws/` | WebSocket подключение (JWT в первом сообщении `auth`) |
+Основные типы сообщений:
 
-**Типы сообщений:**
+| Тип                   | Назначение                                       |
+| --------------------- | ------------------------------------------------ |
+| `auth`                | Авторизация WebSocket-соединения                 |
+| `ephemeral_key`       | Обмен подписанными временными публичными ключами |
+| `session_established` | Подтверждение готовности защищённой сессии       |
+| `message`             | Зашифрованное текстовое сообщение                |
+| `ack`                 | Подтверждение получения                          |
+| `message_read`        | Статус прочтения                                 |
+| `message_edit`        | Редактирование сообщения                         |
+| `message_delete`      | Удаление сообщения                               |
+| `reaction`            | Добавление или удаление реакции                  |
+| `typing`              | Активность пользователя: текст, голос или видео  |
+| `file_start`          | Метаданные передачи файла                        |
+| `file_chunk`          | Зашифрованная часть файла                        |
+| `file_complete`       | Завершение передачи файла                        |
+| `peer_offline`        | Собеседник не подключён                          |
+| `peer_disconnected`   | Собеседник отключился                            |
+| `error`               | Структурированная ошибка протокола               |
 
-- `auth` — аутентификация
-- `ephemeral_key` — обмен ephemeral-ключами
-- `session_established` — подтверждение установки сессии
-- `message` — текстовое сообщение
-- `file_start`, `file_chunk`, `file_complete` — передача файла
-- `ack` — подтверждение получения
-- `message_read` — сообщение прочитано
-- `typing` — индикатор набора текста
-- `reaction` — реакция на сообщение
+Backend валидирует типы, размеры и адресатов сообщений, ограничивает число одновременных передач и отслеживает состояние файловой передачи. Содержимое сообщений и файлов остаётся зашифрованным.
 
----
+## Мониторинг
 
-## Метрики и мониторинг
+Полный стек запускается командой:
 
-Все метрики экспортируются в формате **Prometheus** через `GET /metrics` на каждом сервисе.
+```bash
+make prod-up
+```
 
-### Auth Service (`:8081/metrics`)
+После запуска доступны:
 
-- **HTTP метрики**: `http_requests_total`, `http_request_duration_seconds`, `http_errors_total`
-- **Token метрики**: `access_tokens_issued_total`, `access_tokens_revoked_total`, `refresh_tokens_issued_total`, `refresh_tokens_revoked_total`
-- **JWT метрики**: `jwt_validations_total`, `jwt_validations_failed_total`
-- **Domain ошибки**: `domain_errors_total`
+- Prometheus: `http://localhost:9090`;
+- Grafana: `http://localhost:3000`;
+- стандартный вход Grafana для локальной разработки: `admin` / `admin`.
 
-### Chat Service (`:8082/metrics`)
-
-- **HTTP метрики**: `http_requests_total`, `http_request_duration_seconds`, `http_errors_total`
-- **WebSocket метрики**:
-  - `chat_websocket_connections_active` — активные соединения
-  - `chat_websocket_connections_rejected_total` — отклонённые соединения
-  - `chat_websocket_messages_total` — сообщения по типам
-  - `chat_websocket_errors_total` — ошибки по типам
-  - `chat_websocket_disconnections_total` — отключения по причинам
-  - `chat_websocket_dropped_messages_total` — потерянные сообщения
-  - `chat_websocket_message_send_duration_seconds` — длительность отправки (p95, p99)
-  - `chat_websocket_message_processing_duration_seconds` — длительность обработки
-  - `chat_websocket_message_processor_queue_size` — размер очереди обработки
-- **Database метрики**:
-  - `db_pool_acquired_connections`, `db_pool_idle_connections`, `db_pool_max_connections`, `db_pool_total_connections`
-  - `db_query_duration_seconds` — длительность запросов (p95, p99)
-  - `db_query_errors_total` — ошибки запросов
-- **Circuit Breaker**: `circuit_breaker_state` — состояние (0=closed, 1=open, 2=half-open)
-- **File Transfer**:
-  - `chat_websocket_files_total` — количество файлов
-  - `chat_websocket_files_chunks_total` — количество чанков
-  - `chat_websocket_file_transfer_failures_total` — ошибки передачи
-- **Idempotency**: `chat_websocket_idempotency_duplicates_total` — дубликаты сообщений
-- **Cache метрики**:
-  - `chat_websocket_user_existence_cache_hits_total`, `chat_websocket_user_existence_cache_misses_total`
-  - `chat_websocket_user_existence_cache_size` — размер кэша
-
-### Grafana Dashboard
-
-Автоматически загружается дашборд **"DH Secure Chat - Comprehensive Monitoring"** с панелями:
-
-- **WebSocket**: активные соединения, отклонённые соединения, размер очереди, сообщения по типам, ошибки, отключения
-- **HTTP**: rate запросов, длительность (p50, p95, p99), ошибки по статус-кодам
-- **Database**: пул соединений, длительность запросов (p95, p99)
-- **Circuit Breaker**: состояние (closed/open/half-open)
-- **JWT и Token**: валидации, выдача и отзыв токенов
-- **File Transfers**: количество файлов, чанков, ошибки передачи
-- **Idempotency**: дубликаты сообщений
-- **Domain Errors**: ошибки по категориям и кодам
-
-**Доступ:** http://localhost:3000 (логин: `admin` / пароль: `admin`)
-
----
+Готовый дашборд показывает HTTP-запросы, WebSocket-соединения, ошибки, задержки, состояние очереди, пул PostgreSQL, circuit breaker, токены и передачу файлов.
 
 ## Тестирование
 
-Тесты бэкенда находятся в `backend/test/`: пакеты `auth` (auth service, refresh token, validation, HTTP-хендлеры) и `chat` (chat service).
+Backend-тесты находятся в `backend/test`:
 
 ```bash
-make backend-test   # Запуск всех тестов
+make backend-test
 ```
 
----
+или:
 
-## Планы развития
+```bash
+cd backend
+go test -count=1 ./test/...
+```
 
-- [ ] Fallback библиотека для Web Crypto API
+Для frontend используются статические проверки и production-сборка:
 
----
+```bash
+cd frontend
+npm run type-check
+npm run lint
+npm run format:check
+npm run build
+```
+
+## Структура репозитория
+
+```text
+backend/                 Go-сервисы и backend-тесты
+frontend/                React-приложение
+infra/                   Nginx, сертификаты, PostgreSQL, Prometheus и Grafana
+yaml/                    Compose-фрагменты отдельных сервисов
+docker-compose.dev.yml   Dev-стек
+docker-compose.yml       Полный стек с мониторингом
+Makefile                 Основные команды разработки
+```

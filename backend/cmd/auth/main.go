@@ -86,11 +86,6 @@ func main() {
 			return nil
 		},
 		func(ctx context.Context) error {
-			app.Log.Infof("auth service: closing refresh token cache")
-			authService.CloseRefreshTokenCache()
-			return nil
-		},
-		func(ctx context.Context) error {
 			app.Log.Infof("auth service: closing database pool")
 			srv.ClosePoolWithTimeout(ctx, app.Pool, app.Log, "auth")
 			return nil

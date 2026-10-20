@@ -7,7 +7,6 @@ import (
 	authdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/domain"
 	authrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/repository"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
-	identitydomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/domain"
 	userdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
 	userrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/repository"
 )
@@ -17,9 +16,7 @@ type mockUserRepo struct {
 	findByUsernameFunc      func(ctx context.Context, username string) (userdomain.User, error)
 	findByIDFunc            func(ctx context.Context, id userdomain.ID) (userdomain.User, error)
 	searchByUsernameFunc    func(ctx context.Context, query string, limit int) ([]userdomain.Summary, error)
-	updateLastSeenFunc      func(ctx context.Context, userID userdomain.ID) error
 	updateLastSeenBatchFunc func(ctx context.Context, userIDs []userdomain.ID) error
-	deleteFunc              func(ctx context.Context, id userdomain.ID) error
 }
 
 func (m *mockUserRepo) Create(ctx context.Context, user userdomain.User) error {
@@ -50,23 +47,9 @@ func (m *mockUserRepo) SearchByUsername(ctx context.Context, query string, limit
 	return nil, nil
 }
 
-func (m *mockUserRepo) UpdateLastSeen(ctx context.Context, userID userdomain.ID) error {
-	if m.updateLastSeenFunc != nil {
-		return m.updateLastSeenFunc(ctx, userID)
-	}
-	return nil
-}
-
 func (m *mockUserRepo) UpdateLastSeenBatch(ctx context.Context, userIDs []userdomain.ID) error {
 	if m.updateLastSeenBatchFunc != nil {
 		return m.updateLastSeenBatchFunc(ctx, userIDs)
-	}
-	return nil
-}
-
-func (m *mockUserRepo) Delete(ctx context.Context, id userdomain.ID) error {
-	if m.deleteFunc != nil {
-		return m.deleteFunc(ctx, id)
 	}
 	return nil
 }
@@ -75,7 +58,6 @@ type mockIdentityService struct {
 	createIdentityKeyFunc func(ctx context.Context, userID string, publicKey []byte) error
 	updatePublicKeyFunc   func(ctx context.Context, userID string, publicKey []byte) error
 	getPublicKeyFunc      func(ctx context.Context, userID string) ([]byte, error)
-	getIdentityKeyFunc    func(ctx context.Context, userID string) (identitydomain.IdentityKey, error)
 	getFingerprintFunc    func(ctx context.Context, userID string) (string, error)
 }
 
@@ -98,13 +80,6 @@ func (m *mockIdentityService) GetPublicKey(ctx context.Context, userID string) (
 		return m.getPublicKeyFunc(ctx, userID)
 	}
 	return nil, commonerrors.ErrIdentityKeyNotFound
-}
-
-func (m *mockIdentityService) GetIdentityKey(ctx context.Context, userID string) (identitydomain.IdentityKey, error) {
-	if m.getIdentityKeyFunc != nil {
-		return m.getIdentityKeyFunc(ctx, userID)
-	}
-	return identitydomain.IdentityKey{}, commonerrors.ErrIdentityKeyNotFound
 }
 
 func (m *mockIdentityService) GetFingerprint(ctx context.Context, userID string) (string, error) {

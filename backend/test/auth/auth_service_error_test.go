@@ -152,8 +152,8 @@ func TestAuthService_RefreshAccessToken_ExpiredDeleteError(t *testing.T) {
 		t.Fatal("expected error")
 	}
 
-	if !errors.Is(err, service.ErrRefreshTokenExpired) {
-		t.Errorf("expected ErrRefreshTokenExpired, got %v", err)
+	if domainErr, ok := commonerrors.AsDomainError(err); !ok || domainErr.Code() != "REFRESH_TOKEN_TX_FAILED" {
+		t.Errorf("expected REFRESH_TOKEN_TX_FAILED error, got %v", err)
 	}
 }
 
@@ -433,14 +433,6 @@ func TestValidationError_DomainError(t *testing.T) {
 	if de.Category() != commonerrors.CategoryValidation {
 		t.Errorf("expected CategoryValidation, got %s", de.Category())
 	}
-}
-
-func TestAuthService_CloseRefreshTokenCache(t *testing.T) {
-	svc, _, _, _, _, _, _, _ := setupAuthService(t)
-
-	svc.CloseRefreshTokenCache()
-
-	svc.CloseRefreshTokenCache()
 }
 
 func TestAuthService_Register_IssueAccessTokenError(t *testing.T) {

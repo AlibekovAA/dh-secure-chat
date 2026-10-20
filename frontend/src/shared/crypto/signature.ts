@@ -9,26 +9,12 @@ export async function signEphemeralKey(
   );
 
   try {
-    const exported = await crypto.subtle.exportKey('pkcs8', identityPrivateKey);
-    const keyData = new Uint8Array(exported);
-
-    const ecdsaPrivateKey = await crypto.subtle.importKey(
-      'pkcs8',
-      keyData,
-      {
-        name: 'ECDSA',
-        namedCurve: 'P-256',
-      },
-      false,
-      ['sign']
-    );
-
     const signature = await crypto.subtle.sign(
       {
         name: 'ECDSA',
         hash: 'SHA-256',
       },
-      ecdsaPrivateKey,
+      identityPrivateKey,
       data
     );
 

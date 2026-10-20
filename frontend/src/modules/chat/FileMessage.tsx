@@ -1,4 +1,5 @@
 import { MESSAGES } from '@/shared/messages';
+import type { FileAccessMode } from '@/shared/websocket/types';
 
 type Props = {
   filename: string;
@@ -6,7 +7,8 @@ type Props = {
   size: number;
   blob?: Blob;
   isOwn: boolean;
-  accessMode?: 'download_only' | 'view_only' | 'both';
+  accessMode?: FileAccessMode;
+  previewAllowed?: boolean;
   onDownloadStateChange?: (active: boolean) => void;
   onView?: () => void;
 };
@@ -36,12 +38,15 @@ export function FileMessage({
   blob,
   isOwn,
   accessMode = 'both',
+  previewAllowed = false,
   onDownloadStateChange,
   onView,
 }: Props) {
   const canDownload =
     isOwn || accessMode === 'download_only' || accessMode === 'both';
-  const canView = isOwn || accessMode === 'view_only' || accessMode === 'both';
+  const canView =
+    previewAllowed &&
+    (isOwn || accessMode === 'view_only' || accessMode === 'both');
 
   const handleDownload = () => {
     if (!blob) return;
@@ -84,7 +89,7 @@ export function FileMessage({
       </div>
       {blob && (canView || canDownload) && (
         <div className="flex items-center gap-2 flex-shrink-0">
-          {canView && (
+          {canView && onView && (
             <button
               type="button"
               onClick={onView}

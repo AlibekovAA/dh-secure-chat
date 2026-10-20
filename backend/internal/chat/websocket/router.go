@@ -314,14 +314,22 @@ func (r *messageRouter) routeFileChunk(ctx context.Context, client *Client, msg 
 	if err := r.unmarshalAndValidate(ctx, client, msg, &payload, "file_chunk"); err != nil {
 		return err
 	}
+	if err := r.fileService.AcceptChunk(payload, client.userID); err != nil {
+		return r.handleFileTransferError(ctx, client, err, "file_chunk", payload.FileID, payload.To)
+	}
 
 	payload.From = client.userID
-	if err := r.marshalAndForward(ctx, client, msg, &payload, "file_chunk", true); err != nil {
+	forwarded, err := r.marshalAndForward(ctx, client, msg, &payload, "file_chunk", true)
+	if err != nil {
+		r.fileService.Abort(payload.FileID, client.userID, payload.To)
 		return err
+	}
+	if !forwarded {
+		r.fileService.Abort(payload.FileID, client.userID, payload.To)
+		return nil
 	}
 
 	observabilitymetrics.ChatWebSocketFilesChunksTotal.Inc()
-	r.fileService.UpdateProgress(payload.FileID, payload.ChunkIndex)
 	return nil
 }
 
@@ -330,14 +338,35 @@ func (r *messageRouter) routeFileComplete(ctx context.Context, client *Client, m
 	if err := r.unmarshalAndValidate(ctx, client, msg, &payload, "file_complete"); err != nil {
 		return err
 	}
+	if err := r.fileService.Finalize(payload.FileID, client.userID, payload.To); err != nil {
+		return r.handleFileTransferError(ctx, client, err, "file_complete", payload.FileID, payload.To)
+	}
 
 	payload.From = client.userID
-	if err := r.marshalAndForward(ctx, client, msg, &payload, "file_complete", true); err != nil {
+	if _, err := r.marshalAndForward(ctx, client, msg, &payload, "file_complete", true); err != nil {
 		return err
 	}
 
-	r.fileService.Complete(payload.FileID)
 	return nil
+}
+
+func (r *messageRouter) handleFileTransferError(ctx context.Context, client *Client, err error, msgType string, fileID string, recipientID string) error {
+	wsErr := commonerrors.ErrInvalidPayload
+	if de, ok := commonerrors.AsDomainError(err); ok {
+		wsErr = de
+	}
+
+	return r.handleError(ctx, client, err, msgType, errorHandlerConfig{
+		err:         wsErr,
+		action:      "ws_file_transfer_validation_failed",
+		metricLabel: "file_transfer_validation_failed",
+		sendToUser:  true,
+		logMessage:  "websocket file transfer validation failed: %v",
+		additionalFields: logger.Fields{
+			"file_id": fileID,
+			"to":      recipientID,
+		},
+	})
 }
 
 func (r *messageRouter) unmarshalAndValidate(ctx context.Context, client *Client, msg *WSMessage, payload payloadWithTo, msgType string) error {
@@ -347,17 +376,18 @@ func (r *messageRouter) unmarshalAndValidate(ctx context.Context, client *Client
 	return r.handleValidateUserIDError(ctx, client, payload.GetTo(), msgType)
 }
 
-func (r *messageRouter) marshalAndForward(ctx context.Context, client *Client, msg *WSMessage, payload payloadWithTo, msgType string, requireOnline bool) error {
+func (r *messageRouter) marshalAndForward(ctx context.Context, client *Client, msg *WSMessage, payload payloadWithTo, msgType string, requireOnline bool) (bool, error) {
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
-		return r.handleMarshalError(ctx, client, err, msgType)
+		return false, r.handleMarshalError(ctx, client, err, msgType)
 	}
 
 	msg.Payload = payloadBytes
-	if r.forwardMessage(ctx, msg, payload, requireOnline, client.userID) {
+	forwarded := r.forwardMessage(ctx, msg, payload, requireOnline, client.userID)
+	if forwarded {
 		observabilitymetrics.ChatWebSocketMessagesTotal.WithLabelValues(msgType).Inc()
 	}
-	return nil
+	return forwarded, nil
 }
 
 func (r *messageRouter) routeFileStart(ctx context.Context, client *Client, msg *WSMessage) error {
@@ -382,8 +412,27 @@ func (r *messageRouter) routeFileStart(ctx context.Context, client *Client, msg 
 	}
 
 	payload.From = client.userID
+	if err := r.fileService.Track(payload); err != nil {
+		wsErr := commonerrors.ErrTransferAlreadyExists
+		if de, ok := commonerrors.AsDomainError(err); ok {
+			wsErr = de
+		}
+		return r.handleError(ctx, client, err, "file_start", errorHandlerConfig{
+			err:         wsErr,
+			action:      "ws_file_track_failed",
+			metricLabel: "file_track_failed",
+			sendToUser:  true,
+			logMessage:  "websocket failed to register file transfer: %v",
+			additionalFields: logger.Fields{
+				"file_id": payload.FileID,
+				"to":      payload.To,
+			},
+		})
+	}
+
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
+		r.fileService.Complete(payload.FileID)
 		return r.handleMarshalError(ctx, client, err, "file_start")
 	}
 
@@ -401,7 +450,8 @@ func (r *messageRouter) routeFileStart(ctx context.Context, client *Client, msg 
 	if r.forwardMessage(ctx, forwardMsg, &payload, true, client.userID) {
 		observabilitymetrics.ChatWebSocketFilesTotal.Inc()
 		observabilitymetrics.ChatWebSocketMessagesTotal.WithLabelValues("file_start").Inc()
-		r.fileService.Track(payload)
+	} else {
+		r.fileService.Complete(payload.FileID)
 	}
 	return nil
 }

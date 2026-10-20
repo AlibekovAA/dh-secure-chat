@@ -105,6 +105,8 @@ const CODE_TO_USER_MESSAGE: Record<string, string> = {
   INVALID_AUTH_PAYLOAD: MESSAGES.apiErrors.sessionExpired,
   TRANSFER_ALREADY_EXISTS: MESSAGES.apiErrors.generalError,
   INVALID_CHUNK_INDEX: MESSAGES.apiErrors.badRequest,
+  INVALID_CHUNK_SIZE: MESSAGES.apiErrors.badRequest,
+  TRANSFER_LIMIT_EXCEEDED: MESSAGES.apiErrors.tooManyRequests,
 };
 
 const AUTH_ERROR_CODES = new Set([
@@ -245,11 +247,6 @@ export function getFriendlyErrorMessage(
   if (byStatus) return byStatus;
 
   return defaultMessage;
-}
-
-export function isUnauthorizedError(error: unknown): boolean {
-  const appError = parseError(error);
-  return appError.statusCode === 401 || isAuthErrorCode(appError.code);
 }
 
 export function isSessionExpiredError(error: unknown): boolean {

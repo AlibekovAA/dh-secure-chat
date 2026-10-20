@@ -22,7 +22,7 @@ import (
 )
 
 type Handler struct {
-	chat      *service.ChatService
+	chat      service.Service
 	hub       websocket.HubInterface
 	jwtSecret string
 	upgrader  gorillaWS.Upgrader
@@ -38,7 +38,7 @@ type userResponse struct {
 
 func NewHandler(chat service.Service, hub websocket.HubInterface, cfg config.ChatConfig, log *logger.Logger, pool *pgxpool.Pool) http.Handler {
 	h := &Handler{
-		chat:      chat.(*service.ChatService),
+		chat:      chat,
 		hub:       hub,
 		jwtSecret: cfg.JWTSecret,
 		cfg:       cfg,
