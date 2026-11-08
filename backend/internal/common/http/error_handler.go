@@ -1,11 +1,9 @@
 package http
 
 import (
-	"context"
 	"net/http"
 	"strconv"
 
-	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/httpmetrics"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
@@ -26,7 +24,7 @@ func (h *ErrorHandler) HandleError(w http.ResponseWriter, r *http.Request, err e
 	}
 
 	ctx := r.Context()
-	traceID := getTraceIDFromContext(ctx)
+	traceID := logger.TraceIDFromContext(ctx)
 
 	if domainErr, ok := commonerrors.AsDomainError(err); ok {
 		h.handleDomainError(w, r, domainErr)
@@ -55,7 +53,7 @@ func (h *ErrorHandler) HandleError(w http.ResponseWriter, r *http.Request, err e
 
 func (h *ErrorHandler) handleDomainError(w http.ResponseWriter, r *http.Request, err commonerrors.DomainError) {
 	ctx := r.Context()
-	traceID := getTraceIDFromContext(ctx)
+	traceID := logger.TraceIDFromContext(ctx)
 
 	var domainErr commonerrors.DomainError = err
 	if traceID != "" && err.TraceID() == "" {
@@ -101,19 +99,4 @@ func (h *ErrorHandler) handleDomainError(w http.ResponseWriter, r *http.Request,
 func HandleError(w http.ResponseWriter, r *http.Request, err error, log *logger.Logger) {
 	handler := NewErrorHandler(log)
 	handler.HandleError(w, r, err)
-}
-
-func getTraceIDFromContext(ctx context.Context) string {
-	if ctx == nil {
-		return ""
-	}
-	val := ctx.Value(constants.TraceIDKey)
-	if val == nil {
-		return ""
-	}
-	traceID, ok := val.(string)
-	if !ok || traceID == "" {
-		return ""
-	}
-	return traceID
 }

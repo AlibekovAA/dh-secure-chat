@@ -7,12 +7,14 @@ import {
   encryptFileWithWorker,
   decryptFileWithWorker,
 } from '@/shared/crypto/file-encryption-worker';
+import {
+  decryptFileChunks,
+  encryptFileChunks,
+} from '@/shared/crypto/file-chunks';
 import { FILE_CHUNK_SIZE, WORKER_THRESHOLD } from '@/shared/constants';
+import type { EncryptedChunk } from '@/shared/crypto/file-encryption-types';
 
-export interface EncryptedChunk {
-  ciphertext: string;
-  nonce: string;
-}
+export type { EncryptedChunk } from '@/shared/crypto/file-encryption-types';
 
 let workerSupported: boolean | null = null;
 
@@ -62,26 +64,12 @@ export async function encryptFile(
     }
   }
 
-  const totalSize = file.size;
-  const chunks: EncryptedChunk[] = [];
-  const totalChunks = Math.ceil(totalSize / FILE_CHUNK_SIZE);
-
-  for (let offset = 0; offset < totalSize; offset += FILE_CHUNK_SIZE) {
-    const chunkEnd = Math.min(offset + FILE_CHUNK_SIZE, totalSize);
-    const chunkBytes = new Uint8Array(
-      await file.slice(offset, chunkEnd).arrayBuffer()
-    );
-
-    const encrypted = await encryptBinary(sessionKey, chunkBytes);
-    chunks.push(encrypted);
-
-    if (onProgress && totalChunks > 1) {
-      const progress = Math.round((chunks.length / totalChunks) * 100);
-      onProgress(progress);
-    }
-  }
-
-  return { chunks, totalSize };
+  return encryptFileChunks(
+    sessionKey,
+    file,
+    (key, chunk) => encryptBinary(key as SessionKey, chunk),
+    onProgress
+  );
 }
 
 export async function decryptFile(
@@ -104,25 +92,13 @@ export async function decryptFile(
     }
   }
 
-  const decryptedChunks: Uint8Array[] = [];
-  const totalChunks = chunks.length;
-
-  for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i];
-    const decrypted = await decryptBinary(
-      sessionKey,
-      chunk.ciphertext,
-      chunk.nonce
-    );
-    decryptedChunks.push(decrypted);
-
-    if (onProgress && totalChunks > 1) {
-      const progress = Math.round(((i + 1) / totalChunks) * 100);
-      onProgress(progress);
-    }
-  }
-
-  return new Blob(decryptedChunks as BlobPart[]);
+  return decryptFileChunks(
+    sessionKey,
+    chunks,
+    (key, ciphertext, nonce) =>
+      decryptBinary(key as SessionKey, ciphertext, nonce),
+    onProgress
+  );
 }
 
 export function calculateChunks(fileSize: number): number {

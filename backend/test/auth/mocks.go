@@ -12,11 +12,10 @@ import (
 )
 
 type mockUserRepo struct {
-	createFunc              func(ctx context.Context, user userdomain.User) error
-	findByUsernameFunc      func(ctx context.Context, username string) (userdomain.User, error)
-	findByIDFunc            func(ctx context.Context, id userdomain.ID) (userdomain.User, error)
-	searchByUsernameFunc    func(ctx context.Context, query string, limit int) ([]userdomain.Summary, error)
-	updateLastSeenBatchFunc func(ctx context.Context, userIDs []userdomain.ID) error
+	createFunc           func(ctx context.Context, user userdomain.User) error
+	findByUsernameFunc   func(ctx context.Context, username string) (userdomain.User, error)
+	findByIDFunc         func(ctx context.Context, id userdomain.ID) (userdomain.User, error)
+	searchByUsernameFunc func(ctx context.Context, query string, limit int) ([]userdomain.Summary, error)
 }
 
 func (m *mockUserRepo) Create(ctx context.Context, user userdomain.User) error {
@@ -45,13 +44,6 @@ func (m *mockUserRepo) SearchByUsername(ctx context.Context, query string, limit
 		return m.searchByUsernameFunc(ctx, query, limit)
 	}
 	return nil, nil
-}
-
-func (m *mockUserRepo) UpdateLastSeenBatch(ctx context.Context, userIDs []userdomain.ID) error {
-	if m.updateLastSeenBatchFunc != nil {
-		return m.updateLastSeenBatchFunc(ctx, userIDs)
-	}
-	return nil
 }
 
 type mockIdentityService struct {

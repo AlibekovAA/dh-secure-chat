@@ -49,7 +49,6 @@ type Tracker interface {
 	Abort(fileID string, senderID string, recipientID string) error
 	Complete(fileID string) error
 	GetTransfersForUser(userID string) []*Transfer
-	GetTransferByID(fileID string) (*Transfer, bool)
 	CleanupStale() int
 }
 
@@ -59,19 +58,6 @@ type InMemoryTracker struct {
 	transfersByUser map[string]map[string]struct{}
 	timeout         time.Duration
 	clock           clock.Clock
-}
-
-func (t *InMemoryTracker) GetTransferByID(fileID string) (*Transfer, bool) {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-
-	transfer, ok := t.transfers[fileID]
-	if !ok {
-		return nil, false
-	}
-	copy := *transfer
-	copy.received = nil
-	return &copy, true
 }
 
 func NewTracker(timeout time.Duration, clock clock.Clock) Tracker {

@@ -100,11 +100,6 @@ func NewDomainError(code string, category ErrorCategory, status int, message str
 	}
 }
 
-func IsDomainError(err error) bool {
-	var de DomainError
-	return errors.As(err, &de)
-}
-
 func AsDomainError(err error) (DomainError, bool) {
 	var de DomainError
 	if errors.As(err, &de) {

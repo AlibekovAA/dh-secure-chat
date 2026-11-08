@@ -38,8 +38,6 @@ export const ErrorCode = {
   UNKNOWN_ERROR: 'UNKNOWN_ERROR',
 } as const;
 
-export type ApiErrorCode = keyof typeof ErrorCode | string;
-
 const CODE_TO_USER_MESSAGE: Record<string, string> = {
   UNKNOWN: MESSAGES.apiErrors.generalError,
   INVALID_CREDENTIALS: MESSAGES.apiErrors.invalidCredentials,

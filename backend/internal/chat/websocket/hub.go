@@ -76,19 +76,15 @@ type HubDeps struct {
 }
 
 type HubConfig struct {
-	SendTimeout             time.Duration
-	MaxConnections          int
-	MaxFileSize             int64
-	MaxVoiceSize            int64
-	ProcessorWorkers        int
-	ProcessorQueueSize      int
-	LastSeenUpdateInterval  time.Duration
-	CircuitBreakerThreshold int32
-	CircuitBreakerTimeout   time.Duration
-	CircuitBreakerReset     time.Duration
-	FileTransferTimeout     time.Duration
-	IdempotencyTTL          time.Duration
-	DebugSampleRate         float64
+	SendTimeout         time.Duration
+	MaxConnections      int
+	MaxFileSize         int64
+	MaxVoiceSize        int64
+	ProcessorWorkers    int
+	ProcessorQueueSize  int
+	FileTransferTimeout time.Duration
+	IdempotencyTTL      time.Duration
+	DebugSampleRate     float64
 }
 
 func NewHub(deps HubDeps, config HubConfig) *Hub {
@@ -177,10 +173,6 @@ func (h *Hub) Run(ctx context.Context) {
 				"total":    totalClients,
 				"action":   "ws_register",
 			}).Info("websocket client registered")
-			if h.presenceService != nil {
-				h.presenceService.UpdateLastSeenDebounced(client.userID)
-			}
-
 		case client := <-h.unregister:
 			h.handleUnregister(client)
 		}
@@ -397,9 +389,6 @@ func (h *Hub) handleUnregister(client *Client) {
 
 func (h *Hub) Shutdown() {
 	h.cancel()
-	if h.presenceService != nil {
-		h.presenceService.Stop()
-	}
 	if h.messageHandler != nil {
 		h.messageHandler.Shutdown()
 	}

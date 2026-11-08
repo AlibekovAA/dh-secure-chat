@@ -128,7 +128,7 @@ func (l *Logger) logJSON(level LogLevel, ctx context.Context, msg string, fields
 		logEntry["service"] = service
 	}
 
-	traceID := getTraceIDFromContext(ctx)
+	traceID := TraceIDFromContext(ctx)
 	if traceID != "" {
 		logEntry["trace_id"] = traceID
 	}
@@ -158,7 +158,7 @@ func (l *Logger) logJSON(level LogLevel, ctx context.Context, msg string, fields
 	_ = l.out.Output(0, string(jsonBytes))
 }
 
-func getTraceIDFromContext(ctx context.Context) string {
+func TraceIDFromContext(ctx context.Context) string {
 	if ctx == nil {
 		return ""
 	}
@@ -175,11 +175,6 @@ func getTraceIDFromContext(ctx context.Context) string {
 
 	return traceID
 }
-
-func (l *Logger) Debug(msg string) { l.log(DEBUG, msg) }
-func (l *Logger) Info(msg string)  { l.log(INFO, msg) }
-func (l *Logger) Warn(msg string)  { l.log(WARNING, msg) }
-func (l *Logger) Error(msg string) { l.log(ERROR, msg) }
 
 func (l *Logger) Debugf(format string, args ...any) {
 	l.log(DEBUG, fmt.Sprintf(format, args...))

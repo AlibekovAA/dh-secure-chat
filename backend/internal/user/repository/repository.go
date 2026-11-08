@@ -20,7 +20,6 @@ type Repository interface {
 	FindByUsername(ctx context.Context, username string) (domain.User, error)
 	FindByID(ctx context.Context, id domain.ID) (domain.User, error)
 	SearchByUsername(ctx context.Context, query string, limit int) ([]domain.Summary, error)
-	UpdateLastSeenBatch(ctx context.Context, userIDs []domain.ID) error
 }
 
 type PgRepository struct {
@@ -62,12 +61,12 @@ func (r *PgRepository) FindByUsername(ctx context.Context, username string) (dom
 	start := time.Now()
 	row := r.pool.QueryRow(
 		ctx,
-		`SELECT id, username, password_hash, created_at, last_seen_at FROM users WHERE username = $1`,
+		`SELECT id, username, password_hash FROM users WHERE username = $1`,
 		username,
 	)
 
 	var user domain.User
-	err := row.Scan(&user.ID, &user.Username, &user.PasswordHash, &user.CreatedAt, &user.LastSeenAt)
+	err := row.Scan(&user.ID, &user.Username, &user.PasswordHash)
 	if err := db.HandleQueryError(err, ErrUserNotFound, "find user by username", start); err != nil {
 		return domain.User{}, err
 	}
@@ -81,12 +80,12 @@ func (r *PgRepository) FindByID(ctx context.Context, id domain.ID) (domain.User,
 	start := time.Now()
 	row := r.pool.QueryRow(
 		ctx,
-		`SELECT id, username, password_hash, created_at, last_seen_at FROM users WHERE id = $1`,
+		`SELECT id, username, password_hash FROM users WHERE id = $1`,
 		string(id),
 	)
 
 	var user domain.User
-	err := row.Scan(&user.ID, &user.Username, &user.PasswordHash, &user.CreatedAt, &user.LastSeenAt)
+	err := row.Scan(&user.ID, &user.Username, &user.PasswordHash)
 	if err := db.HandleQueryError(err, ErrUserNotFound, "find user by id", start); err != nil {
 		return domain.User{}, err
 	}
@@ -101,7 +100,7 @@ func (r *PgRepository) SearchByUsername(ctx context.Context, query string, limit
 	searchPattern := "%" + query + "%"
 	rows, err := r.pool.Query(
 		ctx,
-		`SELECT id, username, created_at
+		`SELECT id, username
 		 FROM users
 		 WHERE username ILIKE $1
 		 ORDER BY username ASC
@@ -117,7 +116,7 @@ func (r *PgRepository) SearchByUsername(ctx context.Context, query string, limit
 	users := make([]domain.Summary, 0, limit)
 	for rows.Next() {
 		var u domain.Summary
-		if err := rows.Scan(&u.ID, &u.Username, &u.CreatedAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.Username); err != nil {
 			return nil, db.HandleQueryError(err, nil, "scan user", start)
 		}
 		users = append(users, u)
@@ -129,25 +128,6 @@ func (r *PgRepository) SearchByUsername(ctx context.Context, query string, limit
 
 	db.MeasureQueryDuration("search users", start)
 	return users, nil
-}
-
-func (r *PgRepository) UpdateLastSeenBatch(ctx context.Context, userIDs []domain.ID) error {
-	ctx, cancel := context.WithTimeout(ctx, constants.DBQueryTimeout)
-	defer cancel()
-
-	start := time.Now()
-
-	ids := make([]string, 0, len(userIDs))
-	for _, id := range userIDs {
-		ids = append(ids, string(id))
-	}
-
-	_, err := r.pool.Exec(
-		ctx,
-		`UPDATE users SET last_seen_at = NOW() WHERE id = ANY($1)`,
-		ids,
-	)
-	return db.HandleExecError(err, "batch update last_seen_at", start)
 }
 
 var ErrUserNotFound = pgx.ErrNoRows

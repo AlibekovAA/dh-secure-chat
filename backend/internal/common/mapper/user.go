@@ -7,18 +7,15 @@ import (
 
 func UserToDTO(user userdomain.User) dto.User {
 	return dto.User{
-		ID:         string(user.ID),
-		Username:   user.Username,
-		CreatedAt:  user.CreatedAt,
-		LastSeenAt: user.LastSeenAt,
+		ID:       string(user.ID),
+		Username: user.Username,
 	}
 }
 
 func UserSummaryToDTO(summary userdomain.Summary) dto.UserSummary {
 	return dto.UserSummary{
-		ID:        string(summary.ID),
-		Username:  summary.Username,
-		CreatedAt: summary.CreatedAt,
+		ID:       string(summary.ID),
+		Username: summary.Username,
 	}
 }
 

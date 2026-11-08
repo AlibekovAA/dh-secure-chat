@@ -19,7 +19,6 @@ import (
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	commonhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/http"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/jwtverify"
-	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/resilience"
 	srv "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/server"
 	identityhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/http"
 )
@@ -38,19 +37,15 @@ func main() {
 	})
 
 	hubConfig := websocket.HubConfig{
-		MaxFileSize:             constants.MaxFileSizeBytes,
-		MaxVoiceSize:            constants.MaxVoiceSizeBytes,
-		ProcessorWorkers:        constants.WebSocketProcessorWorkers,
-		ProcessorQueueSize:      constants.WebSocketProcessorQueueSize,
-		LastSeenUpdateInterval:  app.Config.LastSeenUpdateInterval,
-		CircuitBreakerThreshold: app.Config.CircuitBreakerThreshold,
-		CircuitBreakerTimeout:   app.Config.CircuitBreakerTimeout,
-		CircuitBreakerReset:     app.Config.CircuitBreakerReset,
-		FileTransferTimeout:     constants.FileTransferTimeout,
-		IdempotencyTTL:          constants.IdempotencyTTL,
-		SendTimeout:             app.Config.WebSocketSendTimeout,
-		MaxConnections:          app.Config.WebSocketMaxConnections,
-		DebugSampleRate:         constants.WebSocketDebugSampleRate,
+		MaxFileSize:         constants.MaxFileSizeBytes,
+		MaxVoiceSize:        constants.MaxVoiceSizeBytes,
+		ProcessorWorkers:    constants.WebSocketProcessorWorkers,
+		ProcessorQueueSize:  constants.WebSocketProcessorQueueSize,
+		FileTransferTimeout: constants.FileTransferTimeout,
+		IdempotencyTTL:      constants.IdempotencyTTL,
+		SendTimeout:         app.Config.WebSocketSendTimeout,
+		MaxConnections:      app.Config.WebSocketMaxConnections,
+		DebugSampleRate:     constants.WebSocketDebugSampleRate,
 	}
 
 	clk := clock.NewRealClock()
@@ -59,21 +54,11 @@ func main() {
 		Clock: clk,
 	}, hubConfig)
 
-	lastSeenCB := resilience.NewCircuitBreaker(resilience.CircuitBreakerConfig{
-		Threshold:  hubConfig.CircuitBreakerThreshold,
-		Timeout:    hubConfig.CircuitBreakerTimeout,
-		ResetAfter: hubConfig.CircuitBreakerReset,
-		Name:       "last_seen_update",
-		Logger:     app.Log,
-	})
 	presenceService := websocket.NewPresenceService(hub.Context(), websocket.PresenceServiceDeps{
 		Sender:   hub,
 		UserRepo: app.UserRepo,
 		Log:      app.Log,
 		Clock:    clk,
-	}, websocket.PresenceServiceConfig{
-		LastSeenUpdateInterval: hubConfig.LastSeenUpdateInterval,
-		CircuitBreaker:         lastSeenCB,
 	})
 
 	fileService := websocket.NewFileTransferService(hub, hubConfig.FileTransferTimeout, clk, app.Log, hub.Context())

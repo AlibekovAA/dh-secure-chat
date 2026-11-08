@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/chat/service"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
@@ -31,7 +30,6 @@ func TestChatService_GetMe_Success(t *testing.T) {
 	svc, mockRepo, _ := setupChatService(t)
 	userID := "user-123"
 	username := "testuser"
-	createdAt := time.Now()
 
 	mockRepo.findByIDFunc = func(ctx context.Context, id userdomain.ID) (userdomain.User, error) {
 		if string(id) != userID {
@@ -41,7 +39,6 @@ func TestChatService_GetMe_Success(t *testing.T) {
 			ID:           userdomain.ID(userID),
 			Username:     username,
 			PasswordHash: "hash",
-			CreatedAt:    createdAt,
 		}, nil
 	}
 
@@ -118,11 +115,10 @@ func TestChatService_SearchUsers_QueryTooLong(t *testing.T) {
 
 func TestChatService_SearchUsers_Success(t *testing.T) {
 	svc, mockRepo, _ := setupChatService(t)
-	createdAt := time.Now()
 	mockRepo.searchByUsernameFunc = func(ctx context.Context, query string, limit int) ([]userdomain.Summary, error) {
 		return []userdomain.Summary{
-			{ID: "u1", Username: "user1", CreatedAt: createdAt},
-			{ID: "u2", Username: "user2", CreatedAt: createdAt},
+			{ID: "u1", Username: "user1"},
+			{ID: "u2", Username: "user2"},
 		}, nil
 	}
 

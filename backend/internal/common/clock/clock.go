@@ -36,7 +36,3 @@ func (c *MockClock) Now() time.Time {
 func (c *MockClock) Since(t time.Time) time.Duration {
 	return c.time.Sub(t)
 }
-
-func (c *MockClock) SetTime(t time.Time) {
-	c.time = t
-}

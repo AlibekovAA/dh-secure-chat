@@ -47,12 +47,12 @@ func (r *PgRepository) FindByUserID(ctx context.Context, userID string) (domain.
 	start := time.Now()
 	row := r.pool.QueryRow(
 		ctx,
-		`SELECT user_id, public_key, created_at FROM identity_keys WHERE user_id = $1`,
+		`SELECT user_id, public_key FROM identity_keys WHERE user_id = $1`,
 		userID,
 	)
 
 	var key domain.IdentityKey
-	err := row.Scan(&key.UserID, &key.PublicKey, &key.CreatedAt)
+	err := row.Scan(&key.UserID, &key.PublicKey)
 	if err := db.HandleQueryError(err, commonerrors.ErrIdentityKeyNotFound, "find identity key", start); err != nil {
 		return domain.IdentityKey{}, err
 	}

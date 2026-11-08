@@ -1,10 +1,13 @@
-import { FILE_CHUNK_SIZE } from '@/shared/constants';
 import {
   encryptBinaryWithKey,
   decryptBinaryWithKey,
 } from '@/shared/crypto/binary-encryption';
-import type { EncryptedChunk } from '@/shared/crypto/file-encryption';
+import {
+  decryptFileChunks,
+  encryptFileChunks,
+} from '@/shared/crypto/file-chunks';
 import type {
+  EncryptedChunk,
   WorkerMessage,
   WorkerResponse,
 } from '@/shared/crypto/file-encryption-types';
@@ -26,31 +29,24 @@ async function handleEncrypt(
 ): Promise<void> {
   try {
     const sessionKey = await importKey(keyData);
-    const totalSize = file.size;
-    const chunks: EncryptedChunk[] = [];
-    const totalChunks = Math.ceil(totalSize / FILE_CHUNK_SIZE);
-
-    for (let offset = 0; offset < totalSize; offset += FILE_CHUNK_SIZE) {
-      const chunkEnd = Math.min(offset + FILE_CHUNK_SIZE, totalSize);
-      const chunkBytes = new Uint8Array(
-        await file.slice(offset, chunkEnd).arrayBuffer()
-      );
-
-      const encrypted = await encryptBinaryWithKey(sessionKey, chunkBytes);
-      chunks.push(encrypted);
-
-      const progress = Math.round((chunks.length / totalChunks) * 100);
-      self.postMessage({
-        type: 'progress',
-        requestId,
-        progress,
-      } as WorkerResponse);
-    }
+    const result = await encryptFileChunks(
+      sessionKey,
+      file,
+      encryptBinaryWithKey,
+      (progress) => {
+        self.postMessage({
+          type: 'progress',
+          requestId,
+          progress,
+        } as WorkerResponse);
+      },
+      true
+    );
 
     self.postMessage({
       type: 'encrypt-result',
       requestId,
-      result: { chunks, totalSize },
+      result,
     } as WorkerResponse);
   } catch (error) {
     self.postMessage({
@@ -68,32 +64,24 @@ async function handleDecrypt(
 ): Promise<void> {
   try {
     const sessionKey = await importKey(keyData);
-    const decryptedChunks: Uint8Array[] = [];
-    const totalChunks = chunks.length;
-
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i];
-      const decrypted = await decryptBinaryWithKey(
-        sessionKey,
-        chunk.ciphertext,
-        chunk.nonce
-      );
-      decryptedChunks.push(decrypted);
-
-      const progress = Math.round(((i + 1) / totalChunks) * 100);
-      self.postMessage({
-        type: 'progress',
-        requestId,
-        progress,
-      } as WorkerResponse);
-    }
-
-    const blob = new Blob(decryptedChunks as BlobPart[]);
+    const result = await decryptFileChunks(
+      sessionKey,
+      chunks,
+      decryptBinaryWithKey,
+      (progress) => {
+        self.postMessage({
+          type: 'progress',
+          requestId,
+          progress,
+        } as WorkerResponse);
+      },
+      true
+    );
 
     self.postMessage({
       type: 'decrypt-result',
       requestId,
-      result: blob,
+      result,
     } as WorkerResponse);
   } catch (error) {
     self.postMessage({

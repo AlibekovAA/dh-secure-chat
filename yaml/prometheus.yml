@@ -3,7 +3,7 @@ services:
     image: prom/prometheus:latest
     container_name: dh-secure-chat-prometheus
     ports:
-      - '9090:9090'
+      - '127.0.0.1:9090:9090'
     volumes:
       - ../infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
@@ -12,7 +12,6 @@ services:
       - '--storage.tsdb.path=/prometheus'
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
-      - '--web.enable-lifecycle'
       - '--log.level=warn'
     restart: unless-stopped
     depends_on:

@@ -42,7 +42,6 @@ func NewHandler(auth service.Service, cfg config.AuthConfig, log *logger.Logger)
 	mux.HandleFunc("/api/auth/login", commonhttp.RequireMethod(http.MethodPost)(commonhttp.WithTimeout(cfg.RequestTimeout)(h.login)))
 	mux.HandleFunc("/api/auth/refresh", commonhttp.RequireMethod(http.MethodPost)(commonhttp.WithTimeout(cfg.RequestTimeout)(h.refresh)))
 	mux.HandleFunc("/api/auth/logout", commonhttp.RequireMethod(http.MethodPost)(commonhttp.WithTimeout(cfg.RequestTimeout)(h.logout)))
-	mux.HandleFunc("/api/auth/revoke", commonhttp.RequireMethod(http.MethodPost)(commonhttp.WithTimeout(cfg.RequestTimeout)(h.revoke)))
 	return mux
 }
 
@@ -153,39 +152,6 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	clearRefreshCookie(w, r)
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (h *Handler) revoke(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	var claims jwtverify.Claims
-	var err error
-	if ctxClaims, ok := jwtverify.FromContext(ctx); ok {
-		claims = ctxClaims
-	} else {
-		tokenString, ok := jwtverify.ExtractTokenFromHeader(r)
-		if !ok {
-			commonhttp.WriteErrorEnvelope(w, http.StatusUnauthorized, commonhttp.CodeMissingAuthorization, "missing authorization", nil, "")
-			return
-		}
-
-		claims, err = h.auth.ParseTokenForRevoke(ctx, tokenString)
-		if err != nil {
-			commonhttp.WriteErrorEnvelope(w, http.StatusUnauthorized, commonhttp.CodeInvalidToken, "invalid token", nil, "")
-			return
-		}
-	}
-
-	if claims.JTI == "" {
-		commonhttp.WriteErrorEnvelope(w, http.StatusBadRequest, commonhttp.CodeTokenMissingJTI, "token does not have jti", nil, "")
-		return
-	}
-
-	if err := h.auth.RevokeAccessToken(ctx, claims.JTI, claims.UserID); err != nil {
-		commonhttp.HandleError(w, r, err, h.log)
-		return
-	}
-
 	w.WriteHeader(http.StatusNoContent)
 }
 

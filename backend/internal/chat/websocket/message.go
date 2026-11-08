@@ -23,10 +23,6 @@ const (
 	TypeError              MessageType = "error"
 )
 
-func (mt MessageType) String() string {
-	return string(mt)
-}
-
 func (mt MessageType) IsValid() bool {
 	switch mt {
 	case TypeAuth, TypeEphemeralKey, TypeMessage, TypeSessionEstablished,

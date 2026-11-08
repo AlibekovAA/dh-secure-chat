@@ -35,10 +35,6 @@ func (m *mockUserRepo) SearchByUsername(ctx context.Context, query string, limit
 	return nil, nil
 }
 
-func (m *mockUserRepo) UpdateLastSeenBatch(ctx context.Context, userIDs []userdomain.ID) error {
-	return nil
-}
-
 type mockIdentityService struct {
 	getPublicKeyFunc func(ctx context.Context, userID string) ([]byte, error)
 }

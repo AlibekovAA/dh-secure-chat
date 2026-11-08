@@ -41,6 +41,8 @@ make up
 - `http://localhost:8081/health` — состояние Auth Service;
 - `http://localhost:8082/health` — состояние Chat Service.
 
+Служебные порты PostgreSQL, Auth Service, Chat Service, Prometheus и Grafana доступны только с этого компьютера. Для внешнего доступа публикуйте только Nginx на портах `80` и `443`.
+
 Локальный сертификат находится в `infra/proxy/certs`. Браузер может предупредить, что сертификат разработчика не является доверенным. HTTPS необходим для стабильной работы Web Crypto API и браузерных Media API.
 
 Остановка dev-стека:
@@ -251,7 +253,6 @@ go run ./cmd/chat
 | `POST` | `/api/auth/login`    | Вход и выдача новой пары токенов                          |
 | `POST` | `/api/auth/refresh`  | Ротация refresh token и выдача access token               |
 | `POST` | `/api/auth/logout`   | Отзыв токенов и удаление refresh cookie                   |
-| `POST` | `/api/auth/revoke`   | Отзыв текущего access token                               |
 
 ### Chat и Identity API
 
@@ -260,7 +261,6 @@ go run ./cmd/chat
 | `GET`  | `/api/chat/me`                           | Текущий пользователь                                                           |
 | `GET`  | `/api/chat/users?username=...&limit=...` | Поиск пользователей                                                            |
 | `GET`  | `/api/chat/users/{id}/identity-key`      | Identity public key пользователя для установки сессии                          |
-| `GET`  | `/api/identity/users/{id}/key`           | Identity public key пользователя                                               |
 | `GET`  | `/api/identity/users/{id}/fingerprint`   | Fingerprint identity-ключа                                                     |
 | `POST` | `/api/identity/update-public-key`        | Замена собственного identity public key после создания нового локального ключа |
 

@@ -1,5 +1,4 @@
 import { apiClient } from '@/shared/api/client';
-import type { ApiErrorResponse } from '@/shared/api/error-handler';
 
 const API_BASE = '/api/auth';
 
@@ -8,8 +7,6 @@ export type AuthToken = string;
 export type AuthResponse = {
   token: AuthToken;
 };
-
-export type AuthErrorResponse = ApiErrorResponse;
 
 export async function register(
   username: string,

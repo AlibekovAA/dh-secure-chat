@@ -10,7 +10,6 @@ import (
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
-	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/resilience"
 	observabilitymetrics "github.com/AlibekovAA/dh-secure-chat/backend/internal/observability/metrics"
 	userdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
 	userrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/repository"
@@ -24,7 +23,6 @@ type presenceCacheEntry struct {
 type PresenceService struct {
 	sender         MessageSender
 	userRepo       userrepo.Repository
-	lastSeen       *LastSeenUpdater
 	existenceCache sync.Map
 	log            *logger.Logger
 	clock          clock.Clock
@@ -38,30 +36,13 @@ type PresenceServiceDeps struct {
 	Clock    clock.Clock
 }
 
-type PresenceServiceConfig struct {
-	LastSeenUpdateInterval time.Duration
-	CircuitBreaker         *resilience.CircuitBreaker
-}
-
-func NewPresenceService(ctx context.Context, deps PresenceServiceDeps, config PresenceServiceConfig) *PresenceService {
-	var lastSeen *LastSeenUpdater
-	if deps.UserRepo != nil && config.LastSeenUpdateInterval > 0 {
-		lastSeen = NewLastSeenUpdater(ctx, deps.UserRepo, deps.Log, config.LastSeenUpdateInterval, config.CircuitBreaker, deps.Clock)
-	}
-
+func NewPresenceService(ctx context.Context, deps PresenceServiceDeps) *PresenceService {
 	return &PresenceService{
 		sender:   deps.Sender,
 		userRepo: deps.UserRepo,
-		lastSeen: lastSeen,
 		log:      deps.Log,
 		clock:    deps.Clock,
 		ctx:      ctx,
-	}
-}
-
-func (s *PresenceService) UpdateLastSeenDebounced(userID string) {
-	if s.lastSeen != nil {
-		s.lastSeen.Enqueue(userID)
 	}
 }
 
@@ -100,12 +81,6 @@ func (s *PresenceService) SendPeerOffline(ctx context.Context, fromUserID, peerI
 		return err
 	}
 	return nil
-}
-
-func (s *PresenceService) Stop() {
-	if s.lastSeen != nil {
-		s.lastSeen.Stop()
-	}
 }
 
 func (s *PresenceService) StartCleanup() {

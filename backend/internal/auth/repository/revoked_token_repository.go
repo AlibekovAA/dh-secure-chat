@@ -33,8 +33,8 @@ func (r *PgRevokedTokenRepository) Revoke(ctx context.Context, jti string, userI
 	start := time.Now()
 	_, err := r.pool.Exec(
 		ctx,
-		`INSERT INTO revoked_tokens (jti, user_id, expires_at, revoked_at)
-		 VALUES ($1, $2, $3, NOW())
+		`INSERT INTO revoked_tokens (jti, user_id, expires_at)
+		 VALUES ($1, $2, $3)
 		 ON CONFLICT (jti) DO NOTHING`,
 		jti,
 		userID,

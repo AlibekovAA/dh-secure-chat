@@ -1,4 +1,7 @@
-import type { EncryptedChunk } from '@/shared/crypto/file-encryption';
+export interface EncryptedChunk {
+  ciphertext: string;
+  nonce: string;
+}
 
 export type WorkerMessage =
   | {

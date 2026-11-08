@@ -112,19 +112,11 @@ func TestInMemoryTrackerAcceptsValidChunksAndFinalizes(t *testing.T) {
 		}
 	}
 
-	tracked, ok := tracker.GetTransferByID(req.FileID)
-	if !ok {
-		t.Fatal("expected tracked transfer")
-	}
-	if tracked.ReceivedChunks != 2 || tracked.ReceivedSize != 3 {
-		t.Fatalf("unexpected progress: chunks=%d size=%d", tracked.ReceivedChunks, tracked.ReceivedSize)
-	}
-
 	if err := tracker.Finalize(req.FileID, req.From, req.To); err != nil {
 		t.Fatalf("finalize transfer: %v", err)
 	}
-	if _, ok := tracker.GetTransferByID(req.FileID); ok {
-		t.Fatal("expected finalized transfer to be removed")
+	if err := tracker.Validate(req.FileID, req.From, req.To); !errors.Is(err, commonerrors.ErrTransferNotFound) {
+		t.Fatalf("expected finalized transfer to be removed, got %v", err)
 	}
 }
 
@@ -188,8 +180,8 @@ func TestInMemoryTrackerRejectsInvalidChunkAndAborts(t *testing.T) {
 			if err := tracker.AcceptChunk(test.chunk); !errors.Is(err, test.expected) {
 				t.Fatalf("expected %v, got %v", test.expected, err)
 			}
-			if _, ok := tracker.GetTransferByID(req.FileID); ok {
-				t.Fatal("expected invalid transfer to be removed")
+			if err := tracker.Validate(req.FileID, req.From, req.To); !errors.Is(err, commonerrors.ErrTransferNotFound) {
+				t.Fatalf("expected invalid transfer to be removed, got %v", err)
 			}
 		})
 	}
@@ -305,7 +297,7 @@ func TestInMemoryTrackerIncompleteFinalizeAbortsTransfer(t *testing.T) {
 	if err := tracker.Finalize(req.FileID, req.From, req.To); !errors.Is(err, commonerrors.ErrInvalidTotalChunks) {
 		t.Fatalf("expected ErrInvalidTotalChunks, got %v", err)
 	}
-	if _, ok := tracker.GetTransferByID(req.FileID); ok {
-		t.Fatal("expected incomplete transfer to be removed")
+	if err := tracker.Validate(req.FileID, req.From, req.To); !errors.Is(err, commonerrors.ErrTransferNotFound) {
+		t.Fatalf("expected incomplete transfer to be removed, got %v", err)
 	}
 }

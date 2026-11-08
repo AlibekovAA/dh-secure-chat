@@ -10,7 +10,6 @@ import (
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/db"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
-	identityrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/repository"
 	identityservice "github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/service"
 	userrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/repository"
 )
@@ -19,7 +18,6 @@ type App struct {
 	Log             *logger.Logger
 	Pool            *pgxpool.Pool
 	UserRepo        userrepo.Repository
-	IdentityRepo    identityrepo.Repository
 	IdentityService identityservice.Service
 }
 
@@ -98,7 +96,6 @@ func initializeApp(log *logger.Logger, databaseURL string) (*App, error) {
 		Log:             log,
 		Pool:            pool,
 		UserRepo:        userRepo,
-		IdentityRepo:    identityRepo,
 		IdentityService: identityService,
 	}, nil
 }

@@ -1,8 +1,8 @@
 import type {
+  EncryptedChunk,
   WorkerMessage,
   WorkerResponse,
 } from '@/shared/crypto/file-encryption-types';
-import type { EncryptedChunk } from '@/shared/crypto/file-encryption';
 
 let worker: Worker | null = null;
 let requestCounter = 0;

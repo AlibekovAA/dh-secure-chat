@@ -144,7 +144,7 @@ func (t *pgRefreshTokenTx) FindByTokenHashWithUserForUpdate(ctx context.Context,
 	row := t.tx.QueryRow(
 		ctx,
 		`SELECT rt.id, rt.token_hash, rt.user_id, rt.expires_at, rt.created_at,
-		        u.id, u.username, u.password_hash, u.created_at, u.last_seen_at
+		        u.id, u.username, u.password_hash
 		 FROM refresh_tokens rt
 		 INNER JOIN users u ON rt.user_id = u.id
 		 WHERE rt.token_hash = $1
@@ -156,7 +156,7 @@ func (t *pgRefreshTokenTx) FindByTokenHashWithUserForUpdate(ctx context.Context,
 	var user userdomain.User
 	err := row.Scan(
 		&token.ID, &token.TokenHash, &token.UserID, &token.ExpiresAt, &token.CreatedAt,
-		&user.ID, &user.Username, &user.PasswordHash, &user.CreatedAt, &user.LastSeenAt,
+		&user.ID, &user.Username, &user.PasswordHash,
 	)
 	if err := db.HandleQueryError(err, ErrRefreshTokenNotFound, "find refresh token with user in tx", start); err != nil {
 		return authdomain.RefreshToken{}, userdomain.User{}, err

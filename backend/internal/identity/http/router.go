@@ -98,23 +98,7 @@ func (h *Handler) handleIdentityRoutes(w http.ResponseWriter, r *http.Request) {
 		h.getFingerprint(w, r)
 		return
 	}
-	if strings.HasSuffix(urlPath, "/key") {
-		h.getPublicKey(w, r)
-		return
-	}
 	commonhttp.WriteErrorEnvelope(w, http.StatusBadRequest, commonhttp.CodeInvalidPath, "invalid path", nil, "")
-}
-
-func (h *Handler) getPublicKey(w http.ResponseWriter, r *http.Request) {
-	h.handleIdentityRequest(w, r, "/key", "get-public-key", func(ctx context.Context, userID string) (map[string]string, error) {
-		pubKey, err := h.identity.GetPublicKey(ctx, userID)
-		if err != nil {
-			return nil, err
-		}
-		return map[string]string{
-			"public_key": base64.StdEncoding.EncodeToString(pubKey),
-		}, nil
-	})
 }
 
 func (h *Handler) getFingerprint(w http.ResponseWriter, r *http.Request) {

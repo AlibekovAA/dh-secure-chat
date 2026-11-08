@@ -8,10 +8,6 @@ import (
 	"time"
 )
 
-type ErrorResponse struct {
-	Error string `json:"error"`
-}
-
 type ErrorEnvelope struct {
 	Code    string         `json:"code"`
 	Message string         `json:"message"`

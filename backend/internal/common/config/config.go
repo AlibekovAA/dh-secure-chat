@@ -37,7 +37,6 @@ type ChatConfig struct {
 	WebSocketSendBufSize    int           `validate:"gt=0"`
 	WebSocketAuthTimeout    time.Duration `validate:"gt=0"`
 	WebSocketSendTimeout    time.Duration `validate:"gt=0"`
-	LastSeenUpdateInterval  time.Duration `validate:"gt=0"`
 	RequestTimeout          time.Duration `validate:"gt=0"`
 	SearchTimeout           time.Duration `validate:"gt=0"`
 	WebSocketMaxConnections int           `validate:"gt=0"`
@@ -106,7 +105,6 @@ func LoadChatConfig() (ChatConfig, error) {
 		WebSocketSendBufSize:    getIntEnv("CHAT_WS_SEND_BUF_SIZE", constants.DefaultWebSocketSendBufSize),
 		WebSocketAuthTimeout:    getDurationEnv("CHAT_WS_AUTH_TIMEOUT", constants.DefaultWebSocketAuthTimeout),
 		WebSocketSendTimeout:    getDurationEnv("CHAT_WS_SEND_TIMEOUT", constants.DefaultWebSocketSendTimeout),
-		LastSeenUpdateInterval:  getDurationEnv("CHAT_LAST_SEEN_INTERVAL", constants.DefaultLastSeenUpdateInterval),
 		RequestTimeout:          getDurationEnv("CHAT_REQUEST_TIMEOUT", constants.DefaultChatRequestTimeout),
 		SearchTimeout:           getDurationEnv("CHAT_SEARCH_TIMEOUT", constants.DefaultSearchTimeout),
 		WebSocketMaxConnections: getIntEnv("CHAT_WS_MAX_CONNECTIONS", constants.DefaultWebSocketMaxConnections),

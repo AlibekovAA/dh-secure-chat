@@ -79,12 +79,10 @@ func (t *IdempotencyTracker) cleanup() {
 			return
 		case <-ticker.C:
 			now := t.clock.Now()
-			removed := 0
 			t.operations.Range(func(key, value interface{}) bool {
 				res := value.(*idempotencyResult)
 				if now.After(res.expiresAt) {
 					t.operations.Delete(key)
-					removed++
 				}
 				return true
 			})

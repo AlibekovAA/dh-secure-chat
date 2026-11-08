@@ -12,7 +12,6 @@ const (
 
 	MaxFileSizeBytes                  = 50 * 1024 * 1024
 	MaxVoiceSizeBytes                 = 10 * 1024 * 1024
-	MaxMessageLength                  = 4000
 	MaxSearchQueryLength              = 100
 	MaxSearchResultsLimit             = 100
 	DefaultSearchLimit                = 20
@@ -38,11 +37,6 @@ const (
 	WebSocketClientShutdownTimeout       = 2 * time.Second
 	WebSocketClientShutdownTimeoutLong   = 5 * time.Second
 	WebSocketFileTrackerCleanupInterval  = 1 * time.Minute
-
-	LastSeenQueueSize     = 100
-	LastSeenBatchSize     = 100
-	LastSeenFlushEvery    = 500 * time.Millisecond
-	LastSeenUpdateTimeout = 3 * time.Second
 
 	DBPoolMaxOpenConns    = 50
 	DBPoolMinOpenConns    = 10
@@ -86,7 +80,6 @@ const (
 	DefaultWebSocketSendBufSize    = 256
 	DefaultWebSocketAuthTimeout    = 10 * time.Second
 	DefaultWebSocketSendTimeout    = 2 * time.Second
-	DefaultLastSeenUpdateInterval  = 1 * time.Minute
 	DefaultChatRequestTimeout      = 5 * time.Second
 	DefaultSearchTimeout           = 10 * time.Second
 	DefaultWebSocketMaxConnections = 10000

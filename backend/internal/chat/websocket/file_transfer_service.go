@@ -56,10 +56,6 @@ func (s *FileTransferService) Track(payload FileStartPayload) error {
 	return nil
 }
 
-func (s *FileTransferService) Validate(fileID string, senderID string, recipientID string) error {
-	return s.tracker.Validate(fileID, senderID, recipientID)
-}
-
 func (s *FileTransferService) AcceptChunk(payload FileChunkPayload, senderID string) error {
 	if err := s.tracker.Validate(payload.FileID, senderID, payload.To); err != nil {
 		return err
