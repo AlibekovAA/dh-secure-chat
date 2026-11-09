@@ -19,6 +19,7 @@ import {
 } from '@/shared/crypto/fingerprint';
 import { getFriendlyErrorMessage } from '@/shared/api/error-handler';
 import { Spinner } from '@/shared/ui/Spinner';
+import { useDialogFocus } from '@/shared/ui/useDialogFocus';
 import { useToast } from '@/shared/ui/useToast';
 import {
   MAX_MESSAGE_LENGTH,
@@ -63,6 +64,7 @@ export function ChatWindow({
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [showAccessDialog, setShowAccessDialog] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<number | null>(null);
   const { showToast } = useToast();
   const [activeMediaCount, setActiveMediaCount] = useState(0);
@@ -147,6 +149,7 @@ export function ChatWindow({
       isSessionActive &&
       !isSending &&
       !isMediaActive &&
+      !showFingerprintModal &&
       !showAccessDialog &&
       !viewerFile &&
       !isEditingMessage
@@ -170,6 +173,7 @@ export function ChatWindow({
     isSessionActive,
     isSending,
     isMediaActive,
+    showFingerprintModal,
     showAccessDialog,
     viewerFile,
     isEditingMessage,
@@ -347,6 +351,7 @@ export function ChatWindow({
       !isSending &&
       inputRef.current &&
       !isMediaActive &&
+      !showFingerprintModal &&
       !showAccessDialog &&
       !viewerFile &&
       !isEditingMessage
@@ -371,6 +376,7 @@ export function ChatWindow({
     isSending,
     isMediaActive,
     sendTyping,
+    showFingerprintModal,
     showAccessDialog,
     viewerFile,
     isEditingMessage,
@@ -456,18 +462,7 @@ export function ChatWindow({
     });
   }, []);
 
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !showFingerprintModal) {
-        onClose();
-      }
-    };
-
-    window.addEventListener('keydown', handleEscape);
-    return () => {
-      window.removeEventListener('keydown', handleEscape);
-    };
-  }, [onClose, showFingerprintModal]);
+  useDialogFocus(dialogRef, onClose);
 
   return (
     <div
@@ -475,13 +470,18 @@ export function ChatWindow({
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
-        className="w-full max-w-2xl flex flex-col bg-black border border-emerald-700 rounded-xl overflow-hidden animate-[modalEnter_0.3s_cubic-bezier(0.4,0,0.2,1)] glow-emerald"
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="chat-window-title"
+        tabIndex={-1}
+        className="w-full max-w-2xl flex flex-col bg-[var(--color-canvas)] border border-slate-700/80 rounded-lg overflow-hidden animate-[modalEnter_0.3s_cubic-bezier(0.4,0,0.2,1)] glow-emerald"
         style={{
-          willChange: 'transform, opacity',
           height: `${MODAL_MAX_HEIGHT_VH}vh`,
+          maxHeight: `${MODAL_MAX_HEIGHT_VH}dvh`,
         }}
       >
-        <div className="flex items-center justify-between px-4 py-3 border-b border-emerald-700/60 bg-black/80">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/80 bg-[var(--color-surface)]">
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -504,7 +504,10 @@ export function ChatWindow({
               </svg>
             </button>
             <div>
-              <h2 className="text-sm font-semibold text-emerald-300 tracking-tight">
+              <h2
+                id="chat-window-title"
+                className="text-sm font-semibold text-emerald-300 tracking-tight"
+              >
                 {peer.username}
               </h2>
               <div className="flex items-center gap-2 mt-0.5">
@@ -768,7 +771,7 @@ export function ChatWindow({
             className="hidden"
             disabled={!isSessionActive || isChatBlocked}
           />
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <VoiceRecorder
               onRecorded={async (file, duration) => {
                 if (!isSessionActive || isChatBlocked) return;
@@ -808,7 +811,7 @@ export function ChatWindow({
               onError={(error) => showToast(error, 'error')}
               disabled={!isSessionActive || isChatBlocked || isVoiceRecording}
             />
-            <div className="flex-1 relative flex items-center">
+            <div className="order-last sm:order-none basis-full sm:basis-auto flex-1 min-w-0 min-h-11 relative flex items-center">
               <textarea
                 ref={inputRef}
                 value={messageText}
@@ -830,7 +833,8 @@ export function ChatWindow({
                       : MESSAGES.chat.window.placeholders.waitingForSession
                 }
                 rows={1}
-                className="w-full resize-none rounded-md bg-black border border-emerald-700 px-3 pr-10 py-2.5 text-sm text-emerald-50 placeholder-emerald-500/50 outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all scrollbar-custom"
+                aria-label={MESSAGES.chat.window.aria.message}
+                className="w-full min-w-0 resize-none rounded-md bg-black border border-emerald-700 px-3 pr-12 py-2.5 text-sm text-emerald-50 placeholder-emerald-500/50 outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all scrollbar-custom"
                 style={{
                   maxHeight: '120px',
                   minHeight: `${INPUT_MIN_HEIGHT_PX}px`,
@@ -847,9 +851,10 @@ export function ChatWindow({
                 type="button"
                 onClick={handleFileButtonClick}
                 disabled={!isSessionActive || isSendingFile || isChatBlocked}
-                className="absolute right-2 rounded-md bg-emerald-900/40 hover:bg-emerald-900/60 disabled:bg-emerald-900/20 disabled:cursor-not-allowed text-emerald-300 p-1.5 smooth-transition button-press flex items-center justify-center h-7 w-7"
+                className="absolute right-0 rounded-md bg-emerald-900/40 hover:bg-emerald-900/60 disabled:bg-emerald-900/20 disabled:cursor-not-allowed text-emerald-300 smooth-transition button-press flex items-center justify-center h-11 w-11"
                 style={{ top: '50%', transform: 'translateY(-50%)' }}
                 title={MESSAGES.chat.window.actions.attachFileTitle}
+                aria-label={MESSAGES.chat.window.actions.attachFileTitle}
               >
                 {isSendingFile ? (
                   <Spinner size="xs" borderColorClass="border-emerald-300" />
@@ -878,7 +883,8 @@ export function ChatWindow({
                 isSending ||
                 isVoiceRecording
               }
-              className="rounded-md bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-700 disabled:cursor-not-allowed text-sm font-medium px-4 h-10 text-black smooth-transition button-press glow-emerald-hover flex items-center justify-center min-w-[80px]"
+              className="rounded-md bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-700 disabled:cursor-not-allowed text-sm font-medium px-4 h-11 text-black smooth-transition button-press glow-emerald-hover flex items-center justify-center min-w-[80px]"
+              aria-label={MESSAGES.chat.window.actions.send}
             >
               {isSending ? (
                 <Spinner size="sm" borderColorClass="border-black" />

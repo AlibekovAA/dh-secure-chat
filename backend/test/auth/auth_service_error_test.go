@@ -233,15 +233,14 @@ func TestAuthService_RefreshAccessToken_IssueTokensError(t *testing.T) {
 	mockTx.deleteByTokenHashFunc = func(ctx context.Context, h string) error {
 		return nil
 	}
+	mockTx.createFunc = func(ctx context.Context, token authdomain.RefreshToken) error {
+		return errors.New("refresh token error")
+	}
 
 	mockRefreshTokenRepo.txManagerFunc = func() authrepo.RefreshTokenTxManagerInterface {
 		return newTestRefreshTokenTxManagerWithFunc(func(ctx context.Context, fn func(context.Context, authrepo.RefreshTokenTx) error) error {
 			return fn(ctx, mockTx)
 		})
-	}
-
-	mockRefreshTokenRepo.deleteExcessByUserIDFunc = func(ctx context.Context, uid string, maxTokens int) error {
-		return errors.New("refresh token error")
 	}
 
 	_, err := svc.RefreshAccessToken(context.Background(), refreshToken, "127.0.0.1")

@@ -28,8 +28,7 @@ func NewIncomingMessageHandler(idempotency *IdempotencyTracker, idempotencyMiddl
 
 func (h *incomingMessageHandler) HandleMessage(client *Client, msg *WSMessage) {
 	handler := func(ctx context.Context, c middleware.Client, m *middleware.WSMessage) error {
-		h.processor.Submit(ctx, client, msg)
-		return nil
+		return h.processor.Submit(ctx, client, msg)
 	}
 	middlewareMsg := &middleware.WSMessage{
 		Type:    string(msg.Type),
@@ -38,7 +37,7 @@ func (h *incomingMessageHandler) HandleMessage(client *Client, msg *WSMessage) {
 
 	switch msg.Type {
 	case TypeFileStart, TypeFileChunk, TypeFileComplete:
-		h.processor.process(client.ctx, client, msg)
+		_ = h.processor.Submit(client.ctx, client, msg)
 		return
 
 	case TypeEphemeralKey:
@@ -59,7 +58,7 @@ func (h *incomingMessageHandler) HandleMessage(client *Client, msg *WSMessage) {
 
 	}
 
-	h.processor.Submit(client.ctx, client, msg)
+	_ = h.processor.Submit(client.ctx, client, msg)
 }
 
 func (h *incomingMessageHandler) Shutdown() {

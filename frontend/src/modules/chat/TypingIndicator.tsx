@@ -13,22 +13,22 @@ function TypingIndicatorComponent({ isVisible }: Props) {
   return (
     <div
       className="flex justify-start animate-[fadeIn_0.2s_ease-out]"
-      style={{ willChange: 'opacity' }}
+      role="status"
     >
-      <div className="max-w-[75%] rounded-lg px-4 py-2.5 bg-gradient-to-r from-emerald-900/20 via-emerald-900/15 to-emerald-900/20 border border-emerald-700/40 smooth-transition shadow-sm">
+      <div className="max-w-[75%] rounded-lg px-4 py-2.5 bg-[var(--color-surface-raised)] border border-slate-700/70 smooth-transition">
         <div className="flex items-center gap-2">
           <div className="flex gap-1.5 px-1">
             <div
-              className="w-2 h-2 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-500 animate-typing shadow-sm shadow-emerald-400/30"
-              style={{ animationDelay: '0ms', willChange: 'transform' }}
+              className="w-2 h-2 rounded-full bg-emerald-400 animate-typing"
+              style={{ animationDelay: '0ms' }}
             />
             <div
-              className="w-2 h-2 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-500 animate-typing shadow-sm shadow-emerald-400/30"
-              style={{ animationDelay: '150ms', willChange: 'transform' }}
+              className="w-2 h-2 rounded-full bg-emerald-400 animate-typing"
+              style={{ animationDelay: '150ms' }}
             />
             <div
-              className="w-2 h-2 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-500 animate-typing shadow-sm shadow-emerald-400/30"
-              style={{ animationDelay: '300ms', willChange: 'transform' }}
+              className="w-2 h-2 rounded-full bg-emerald-400 animate-typing"
+              style={{ animationDelay: '300ms' }}
             />
           </div>
           <span className="text-xs text-emerald-300/90 italic leading-relaxed font-medium">

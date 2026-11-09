@@ -8,13 +8,14 @@ services:
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
       JWT_SECRET: ${JWT_SECRET}
+      AUTH_SECURE_COOKIES: ${AUTH_SECURE_COOKIES:-true}
       LOG_LEVEL: ${LOG_LEVEL}
       LOG_DIR: ${LOG_DIR}
     depends_on:
       db:
         condition: service_healthy
     healthcheck:
-      test: ['CMD', '/app/healthcheck', 'http://localhost:8081/health']
+      test: ['CMD', '/app/healthcheck', 'http://localhost:8081/ready']
       interval: 10s
       timeout: 5s
       retries: 3

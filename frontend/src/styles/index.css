@@ -1,10 +1,25 @@
 @import 'tailwindcss';
 @config "../../tailwind.config.cjs";
 
+:root {
+  --color-canvas: #070a0d;
+  --color-surface: #0c1116;
+  --color-surface-raised: #111820;
+  --color-border: rgba(148, 163, 184, 0.18);
+  --radius-control: 0.5rem;
+  --radius-panel: 0.875rem;
+  --motion-fast: 150ms;
+  --motion-normal: 200ms;
+}
+
 @layer base {
   * {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background: var(--color-canvas);
   }
 
   input:-webkit-autofill,
@@ -33,12 +48,6 @@
 
   to {
     opacity: 1;
-  }
-}
-
-@supports (will-change: opacity) {
-  .animate-\[fadeIn_0\.2s_ease-out\] {
-    will-change: opacity;
   }
 }
 
@@ -81,12 +90,10 @@
 @keyframes backdropEnter {
   from {
     opacity: 0;
-    backdrop-filter: blur(0px);
   }
 
   to {
     opacity: 1;
-    backdrop-filter: blur(4px);
   }
 }
 
@@ -142,6 +149,40 @@
 }
 
 @layer utilities {
+  .control-radius {
+    border-radius: var(--radius-control);
+  }
+
+  .app-min-height {
+    min-height: 100vh;
+  }
+
+  .chat-dialog-height {
+    height: 90vh;
+  }
+
+  .file-viewer-height {
+    max-height: 90vh;
+  }
+
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  @supports (height: 100dvh) {
+    .app-min-height {
+      min-height: 100dvh;
+    }
+
+    .chat-dialog-height {
+      height: 90dvh;
+    }
+
+    .file-viewer-height {
+      max-height: 90dvh;
+    }
+  }
+
   .scrollbar-custom {
     scrollbar-width: thin;
     scrollbar-color: rgba(16, 185, 129, 0.4) transparent;
@@ -179,41 +220,30 @@
   }
 
   .glass-effect {
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    border: 1px solid rgba(16, 185, 129, 0.2);
-    will-change: backdrop-filter;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
   }
 
   .glow-emerald {
-    box-shadow:
-      0 0 10px rgba(16, 185, 129, 0.3),
-      0 0 20px rgba(16, 185, 129, 0.1);
+    box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.28);
   }
 
   .glow-emerald-hover:hover {
-    box-shadow:
-      0 0 15px rgba(16, 185, 129, 0.4),
-      0 0 30px rgba(16, 185, 129, 0.2);
-    transition: box-shadow 0.3s ease;
+    box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.38);
+    transition: box-shadow var(--motion-normal) ease;
   }
 
   .smooth-transition {
     transition-property:
       background-color, border-color, color, opacity, box-shadow, transform;
-    transition-duration: 0.2s;
+    transition-duration: var(--motion-normal);
     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-    will-change: transform, background-color, border-color, opacity;
-  }
-
-  .button-press {
-    will-change: transform;
   }
 
   .button-press:active {
     transform: scale(0.98);
-    transition: transform 0.1s ease;
+    transition: transform var(--motion-fast) ease;
   }
 
   .animate-toast-enter {
@@ -221,18 +251,26 @@
   }
 
   .hover-lift {
-    transition:
-      transform 0.2s ease,
-      box-shadow 0.2s ease;
+    transition: border-color var(--motion-normal) ease;
   }
 
   .hover-lift:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+    border-color: rgba(52, 211, 153, 0.42);
   }
 
   .press-scale:active {
     transform: scale(0.96);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getFingerprint } from '@/modules/chat/api';
 import {
   fingerprintToEmojis,
@@ -9,6 +9,7 @@ import {
 } from '@/shared/crypto/fingerprint';
 import { Spinner } from '@/shared/ui/Spinner';
 import { MESSAGES } from '@/shared/messages';
+import { useDialogFocus } from '@/shared/ui/useDialogFocus';
 
 type Props = {
   token: string;
@@ -31,6 +32,9 @@ export function FingerprintVerificationModal({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isVerified, setIsVerified] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useDialogFocus(dialogRef, onClose);
 
   useEffect(() => {
     const loadFingerprint = async () => {
@@ -93,16 +97,22 @@ export function FingerprintVerificationModal({
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-[backdropEnter_0.2s_ease-out]"
       onClick={onClose}
-      style={{ willChange: 'opacity' }}
     >
       <div
-        className="w-full max-w-lg mx-4 bg-black border border-emerald-700 rounded-xl overflow-hidden shadow-lg shadow-emerald-900/20 animate-[modalEnter_0.2s_ease-out]"
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="fingerprint-dialog-title"
+        tabIndex={-1}
+        className="w-full max-w-lg mx-4 bg-[var(--color-surface)] border border-slate-700/80 rounded-lg overflow-hidden animate-[modalEnter_0.2s_ease-out]"
         onClick={(e) => e.stopPropagation()}
-        style={{ willChange: 'transform, opacity' }}
       >
         <div className="px-6 py-4 border-b border-emerald-700/60 bg-black/80">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-emerald-300">
+            <h2
+              id="fingerprint-dialog-title"
+              className="text-lg font-semibold text-emerald-300"
+            >
               {MESSAGES.chat.fingerprintModal.title}
             </h2>
             <button

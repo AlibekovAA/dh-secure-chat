@@ -3,7 +3,7 @@ import { login, register, updatePublicKey } from '@/modules/auth/api';
 import { apiClient } from '@/shared/api/client';
 import { useToast } from '@/shared/ui/useToast';
 import { getFriendlyErrorMessage } from '@/shared/api/error-handler';
-import { validateAuthForm } from '@/shared/validation';
+import { validateAuthForm, type ValidationError } from '@/shared/validation';
 import { MESSAGES } from '@/shared/messages';
 import {
   generateIdentityKeyPair,
@@ -68,7 +68,11 @@ export function AuthForm({ onAuthenticated }: Props) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [validationError, setValidationError] =
+    useState<ValidationError | null>(null);
   const usernameInputRef = useRef<HTMLInputElement>(null);
+  const passwordInputRef = useRef<HTMLInputElement>(null);
+  const confirmPasswordInputRef = useRef<HTMLInputElement>(null);
 
   const passwordStrength = useMemo(
     () => calculatePasswordStrength(password),
@@ -101,6 +105,7 @@ export function AuthForm({ onAuthenticated }: Props) {
 
   const switchMode = (next: Mode, resetFields: boolean) => {
     setMode(next);
+    setValidationError(null);
     if (resetFields) {
       setUsername('');
       setPassword('');
@@ -121,10 +126,20 @@ export function AuthForm({ onAuthenticated }: Props) {
     );
 
     if (validationError) {
+      setValidationError(validationError);
       showToast(validationError.message, 'error');
+      const fieldRefs = {
+        username: usernameInputRef,
+        password: passwordInputRef,
+        confirmPassword: confirmPasswordInputRef,
+      };
+      fieldRefs[
+        validationError.field as keyof typeof fieldRefs
+      ]?.current?.focus();
       return;
     }
 
+    setValidationError(null);
     setSubmitting(true);
 
     try {
@@ -189,14 +204,14 @@ export function AuthForm({ onAuthenticated }: Props) {
 
   return (
     <div className="w-full max-w-sm mx-auto">
-      <div className="flex mb-4 rounded-lg overflow-hidden border border-emerald-600">
+      <div className="flex mb-4 overflow-hidden rounded-lg border border-slate-700 bg-[var(--color-surface)]">
         <button
           type="button"
           onClick={() => switchMode('login', true)}
           className={`flex-1 py-2 text-sm font-medium smooth-transition button-press ${
             mode === 'login'
               ? 'bg-emerald-600 text-black'
-              : 'bg-black text-emerald-400 hover:bg-emerald-900/40'
+              : 'text-slate-300 hover:bg-slate-800/80 hover:text-emerald-300'
           }`}
         >
           {MESSAGES.auth.tabs.login}
@@ -207,7 +222,7 @@ export function AuthForm({ onAuthenticated }: Props) {
           className={`flex-1 py-2 text-sm font-medium smooth-transition button-press ${
             mode === 'register'
               ? 'bg-emerald-600 text-black'
-              : 'bg-black text-emerald-400 hover:bg-emerald-900/40'
+              : 'text-slate-300 hover:bg-slate-800/80 hover:text-emerald-300'
           }`}
         >
           {MESSAGES.auth.tabs.register}
@@ -216,27 +231,49 @@ export function AuthForm({ onAuthenticated }: Props) {
 
       <form
         onSubmit={handleSubmit}
-        className="space-y-4 rounded-xl bg-black/80 px-5 py-4 border border-emerald-700"
+        className="space-y-4 rounded-lg bg-[var(--color-surface)] px-5 py-4 border border-slate-700/80 border-l-2 border-l-emerald-500/70"
       >
         <div className="space-y-1">
-          <label className="block text-sm text-emerald-300">
+          <label
+            htmlFor="auth-username"
+            className="block text-sm text-emerald-300"
+          >
             {MESSAGES.auth.labels.username}
           </label>
           <input
             ref={usernameInputRef}
+            id="auth-username"
             type="text"
             value={username}
-            onChange={(event) => setUsername(event.target.value)}
-            className={`w-full rounded-md bg-black border px-3 py-2 text-sm text-emerald-50 outline-none focus:ring-2 ${
+            onChange={(event) => {
+              setUsername(event.target.value);
+              if (validationError?.field === 'username') {
+                setValidationError(null);
+              }
+            }}
+            className={`w-full rounded-md bg-[var(--color-surface-raised)] border px-3 py-2 text-sm text-slate-100 outline-none focus:ring-2 ${
               mode === 'register' && username
                 ? isUsernameValid
                   ? 'border-emerald-500/70 focus:ring-emerald-500'
                   : 'border-red-500/60 focus:ring-red-500'
-                : 'border-emerald-700 focus:ring-emerald-500'
+                : 'border-slate-700 focus:ring-emerald-500'
             }`}
             autoComplete="username"
             disabled={submitting}
+            aria-invalid={validationError?.field === 'username'}
+            aria-describedby={
+              validationError?.field === 'username'
+                ? 'auth-username-error'
+                : mode === 'register' && username
+                  ? 'auth-username-hint'
+                  : undefined
+            }
           />
+          {validationError?.field === 'username' && (
+            <p id="auth-username-error" className="sr-only">
+              {validationError.message}
+            </p>
+          )}
           {mode === 'register' && (
             <div
               className="overflow-hidden transition-all duration-300 ease-out"
@@ -246,6 +283,7 @@ export function AuthForm({ onAuthenticated }: Props) {
               }}
             >
               <p
+                id="auth-username-hint"
                 className={`text-xs mt-1 transition-colors ${
                   username && !isUsernameValid
                     ? 'text-red-400'
@@ -267,23 +305,42 @@ export function AuthForm({ onAuthenticated }: Props) {
         </div>
 
         <div className="space-y-1">
-          <label className="block text-sm text-emerald-300">
+          <label
+            htmlFor="auth-password"
+            className="block text-sm text-emerald-300"
+          >
             {MESSAGES.auth.labels.password}
           </label>
           <div className="relative">
             <input
+              ref={passwordInputRef}
+              id="auth-password"
               type={showPassword ? 'text' : 'password'}
               value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="w-full rounded-md bg-black border border-emerald-700 pr-16 px-3 py-2 text-sm text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500"
+              onChange={(event) => {
+                setPassword(event.target.value);
+                if (validationError?.field === 'password') {
+                  setValidationError(null);
+                }
+              }}
+              className="w-full rounded-md bg-[var(--color-surface-raised)] border border-slate-700 pr-16 px-3 py-2 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500"
               autoComplete={
                 mode === 'login' ? 'current-password' : 'new-password'
               }
               disabled={submitting}
+              aria-invalid={validationError?.field === 'password'}
+              aria-describedby={
+                validationError?.field === 'password'
+                  ? 'auth-password-error'
+                  : mode === 'register' && password
+                    ? 'auth-password-strength'
+                    : undefined
+              }
             />
             <button
               type="button"
               onClick={() => setShowPassword((current) => !current)}
+              aria-pressed={showPassword}
               className="absolute inset-y-0 right-0 flex items-center px-3 text-xs text-emerald-400 hover:text-emerald-200 hover:bg-emerald-900/40 rounded-r-md"
             >
               {showPassword
@@ -291,6 +348,11 @@ export function AuthForm({ onAuthenticated }: Props) {
                 : MESSAGES.auth.actions.show}
             </button>
           </div>
+          {validationError?.field === 'password' && (
+            <p id="auth-password-error" className="sr-only">
+              {validationError.message}
+            </p>
+          )}
           {mode === 'register' && (
             <div
               className="overflow-hidden transition-all duration-300 ease-out"
@@ -299,7 +361,7 @@ export function AuthForm({ onAuthenticated }: Props) {
                 opacity: password ? 1 : 0,
               }}
             >
-              <div className="space-y-1.5 mt-1">
+              <div id="auth-password-strength" className="space-y-1.5 mt-1">
                 <div className="flex gap-1 h-1.5">
                   {[1, 2, 3, 4].map((level) => {
                     const isActive =
@@ -364,15 +426,25 @@ export function AuthForm({ onAuthenticated }: Props) {
 
         {mode === 'register' && (
           <div className="space-y-1">
-            <label className="block text-sm text-emerald-300">
+            <label
+              htmlFor="auth-confirm-password"
+              className="block text-sm text-emerald-300"
+            >
               {MESSAGES.auth.labels.confirmPassword}
             </label>
             <div className="relative">
               <input
+                ref={confirmPasswordInputRef}
+                id="auth-confirm-password"
                 type={showConfirmPassword ? 'text' : 'password'}
                 value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-                className={`w-full rounded-md bg-black border pr-16 px-3 py-2 text-sm text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500 ${
+                onChange={(event) => {
+                  setConfirmPassword(event.target.value);
+                  if (validationError?.field === 'confirmPassword') {
+                    setValidationError(null);
+                  }
+                }}
+                className={`w-full rounded-md bg-[var(--color-surface-raised)] border pr-16 px-3 py-2 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500 ${
                   confirmPassword && password !== confirmPassword
                     ? 'border-red-500/60 focus:ring-red-500'
                     : confirmPassword && password === confirmPassword
@@ -381,10 +453,19 @@ export function AuthForm({ onAuthenticated }: Props) {
                 }`}
                 autoComplete="new-password"
                 disabled={submitting}
+                aria-invalid={validationError?.field === 'confirmPassword'}
+                aria-describedby={
+                  validationError?.field === 'confirmPassword'
+                    ? 'auth-confirm-password-error'
+                    : confirmPassword
+                      ? 'auth-confirm-password-hint'
+                      : undefined
+                }
               />
               <button
                 type="button"
                 onClick={() => setShowConfirmPassword((current) => !current)}
+                aria-pressed={showConfirmPassword}
                 className="absolute inset-y-0 right-0 flex items-center px-3 text-xs text-emerald-400 hover:text-emerald-200 hover:bg-emerald-900/40 rounded-r-md"
               >
                 {showConfirmPassword
@@ -392,6 +473,11 @@ export function AuthForm({ onAuthenticated }: Props) {
                   : MESSAGES.auth.actions.show}
               </button>
             </div>
+            {validationError?.field === 'confirmPassword' && (
+              <p id="auth-confirm-password-error" className="sr-only">
+                {validationError.message}
+              </p>
+            )}
             <div
               className="overflow-hidden transition-all duration-300 ease-out"
               style={{
@@ -400,6 +486,7 @@ export function AuthForm({ onAuthenticated }: Props) {
               }}
             >
               <p
+                id="auth-confirm-password-hint"
                 className={`text-xs mt-1 ${
                   password === confirmPassword
                     ? 'text-emerald-400'
@@ -417,7 +504,7 @@ export function AuthForm({ onAuthenticated }: Props) {
         <button
           type="submit"
           disabled={submitting}
-          className="w-full rounded-md bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-700 text-sm font-medium py-2 text-black smooth-transition button-press glow-emerald-hover"
+          className="w-full rounded-md bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-700 disabled:text-slate-400 text-sm font-semibold py-2.5 text-slate-950 smooth-transition button-press"
         >
           {submitting
             ? mode === 'login'

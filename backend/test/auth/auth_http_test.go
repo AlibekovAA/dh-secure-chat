@@ -7,11 +7,16 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
+
+	authdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/domain"
 	authhttp "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/http"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/config"
+	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 	userdomain "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/domain"
 )
@@ -205,5 +210,69 @@ func TestAuthHTTP_MethodNotAllowed(t *testing.T) {
 	}
 	if env.Code != "METHOD_NOT_ALLOWED" {
 		t.Errorf("expected code METHOD_NOT_ALLOWED, got %s", env.Code)
+	}
+}
+
+func TestAuthHTTP_LogoutAttemptsBothRevocationsAndClearsSecureCookie(t *testing.T) {
+	svc, _, _, refreshRepo, revokedRepo, _, _, _ := setupAuthService(t)
+	var accessCalled, refreshCalled bool
+	revokedRepo.revokeFunc = func(context.Context, string, string, time.Time) error {
+		accessCalled = true
+		return errors.New("access revoke failed")
+	}
+	refreshRepo.findByTokenHashFunc = func(context.Context, string) (authdomain.RefreshToken, error) {
+		return authdomain.RefreshToken{UserID: "user-123"}, nil
+	}
+	refreshRepo.deleteByTokenHashFunc = func(context.Context, string) error {
+		refreshCalled = true
+		return errors.New("refresh revoke failed")
+	}
+	now := time.Now()
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub": "user-123", "usr": "testuser", "jti": "token-id", "iat": now.Unix(), "exp": now.Add(time.Hour).Unix(),
+	}).SignedString([]byte(constants.TestJWTSecret))
+	if err != nil {
+		t.Fatal(err)
+	}
+	log, err := logger.New(t.TempDir(), "test", "error")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = log.Close() })
+	handler := authhttp.NewHandler(svc, config.AuthConfig{RequestTimeout: time.Second, SecureCookies: true}, log)
+	request := httptest.NewRequest(http.MethodPost, "/api/auth/logout", nil)
+	request.Header.Set("Authorization", "Bearer "+token)
+	request.AddCookie(&http.Cookie{Name: "refresh_token", Value: "refresh"})
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", recorder.Code)
+	}
+	if !accessCalled || !refreshCalled {
+		t.Fatalf("revocations called: access=%v refresh=%v", accessCalled, refreshCalled)
+	}
+	cookies := recorder.Result().Cookies()
+	if len(cookies) == 0 || cookies[0].Name != "refresh_token" || cookies[0].MaxAge != -1 || !cookies[0].Secure {
+		t.Fatalf("refresh cookie was not securely cleared: %#v", cookies)
+	}
+}
+
+func TestAuthHTTP_RegisterSetsSecureRefreshCookie(t *testing.T) {
+	svc, _, _, _, _, _, _, _ := setupAuthService(t)
+	log, err := logger.New(t.TempDir(), "test", "error")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = log.Close() })
+	handler := authhttp.NewHandler(svc, config.AuthConfig{RequestTimeout: time.Second, SecureCookies: true}, log)
+	request := httptest.NewRequest(http.MethodPost, "/api/auth/register", strings.NewReader(`{"username":"testuser","password":"password123"}`))
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", recorder.Code)
+	}
+	cookies := recorder.Result().Cookies()
+	if len(cookies) == 0 || !cookies[0].Secure || !cookies[0].HttpOnly || cookies[0].SameSite != http.SameSiteStrictMode {
+		t.Fatalf("refresh cookie attributes are unsafe: %#v", cookies)
 	}
 }

@@ -69,6 +69,6 @@ format:
 
 backend-test:
 	@echo "=== Backend: all tests ==="
-	cd backend && go test -count=1 ./test/...
+	cd backend && go test -race -count=1 ./...
 	@echo ""
 	@echo "Backend tests OK"

@@ -14,18 +14,22 @@ type RefreshTokenTxManagerInterface interface {
 }
 
 type RefreshTokenTxManager struct {
-	pool *pgxpool.Pool
+	beginTx func(context.Context) (pgx.Tx, error)
 }
 
 func NewRefreshTokenTxManager(pool *pgxpool.Pool) *RefreshTokenTxManager {
-	return &RefreshTokenTxManager{pool: pool}
+	return &RefreshTokenTxManager{
+		beginTx: func(ctx context.Context) (pgx.Tx, error) {
+			return pool.BeginTx(ctx, pgx.TxOptions{})
+		},
+	}
 }
 
 func (m *RefreshTokenTxManager) WithTx(ctx context.Context, fn func(context.Context, RefreshTokenTx) error) error {
 	ctx, cancel := context.WithTimeout(ctx, constants.DBQueryTimeout)
 	defer cancel()
 
-	tx, err := m.pool.BeginTx(ctx, pgx.TxOptions{})
+	tx, err := m.beginTx(ctx)
 	if err != nil {
 		return err
 	}
@@ -33,15 +37,19 @@ func (m *RefreshTokenTxManager) WithTx(ctx context.Context, fn func(context.Cont
 	refreshTokenTx := &pgRefreshTokenTx{tx: tx}
 	defer func() {
 		if p := recover(); p != nil {
-			_ = tx.Rollback(ctx)
+			rollbackCtx, rollbackCancel := context.WithTimeout(context.Background(), constants.DBQueryTimeout)
+			defer rollbackCancel()
+			_ = tx.Rollback(rollbackCtx)
 			panic(p)
-		} else if err != nil {
-			_ = tx.Rollback(ctx)
-		} else {
-			err = tx.Commit(ctx)
 		}
 	}()
 
-	err = fn(ctx, refreshTokenTx)
-	return err
+	if err := fn(ctx, refreshTokenTx); err != nil {
+		rollbackCtx, rollbackCancel := context.WithTimeout(context.Background(), constants.DBQueryTimeout)
+		defer rollbackCancel()
+		_ = tx.Rollback(rollbackCtx)
+		return err
+	}
+
+	return tx.Commit(ctx)
 }

@@ -85,7 +85,8 @@ func main() {
 	handler := chathttp.NewHandler(chatSvc, hub, app.Config, app.Log, app.Pool)
 
 	restMux := http.NewServeMux()
-	restMux.HandleFunc("/health", commonhttp.HealthHandler(app.Log))
+	restMux.HandleFunc("/health", commonhttp.HealthHandler())
+	restMux.HandleFunc("/ready", commonhttp.ReadyHandler(app.Log, app.Pool))
 	restMux.Handle("/metrics", promhttp.Handler())
 
 	identityHandler := identityhttp.NewHandler(app.IdentityService, app.Log)

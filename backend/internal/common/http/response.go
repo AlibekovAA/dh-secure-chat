@@ -3,6 +3,9 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -38,22 +41,48 @@ func WriteErrorEnvelope(w http.ResponseWriter, status int, code, message string,
 
 func DecodeJSON(r *http.Request, v any) error {
 	defer r.Body.Close()
-	return json.NewDecoder(r.Body).Decode(v)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(v); err != nil {
+		return err
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return errors.New("request body must contain a single JSON value")
+		}
+		return err
+	}
+	return nil
+}
+
+func WriteDecodeJSONError(w http.ResponseWriter, err error) {
+	var maxBytesError *http.MaxBytesError
+	if errors.As(err, &maxBytesError) {
+		WriteErrorEnvelope(w, http.StatusRequestEntityTooLarge, CodeRequestBodyTooLarge, "request body too large", nil, "")
+		return
+	}
+	WriteErrorEnvelope(w, http.StatusBadRequest, CodeInvalidJSON, "invalid json", nil, "")
 }
 
 func GetClientIP(r *http.Request) string {
+	remoteIP := r.RemoteAddr
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		remoteIP = host
+	}
+	parsedRemoteIP := net.ParseIP(remoteIP)
+	if parsedRemoteIP == nil || (!parsedRemoteIP.IsPrivate() && !parsedRemoteIP.IsLoopback()) {
+		return remoteIP
+	}
+
 	ip := r.Header.Get("X-Real-IP")
-	if ip == "" {
+	if net.ParseIP(ip) == nil {
 		ip = r.Header.Get("X-Forwarded-For")
 		if idx := strings.Index(ip, ","); idx != -1 {
 			ip = strings.TrimSpace(ip[:idx])
 		}
 	}
-	if ip == "" {
-		ip = r.RemoteAddr
-		if idx := strings.LastIndex(ip, ":"); idx != -1 {
-			ip = ip[:idx]
-		}
+	if net.ParseIP(ip) == nil {
+		return remoteIP
 	}
 	return ip
 }

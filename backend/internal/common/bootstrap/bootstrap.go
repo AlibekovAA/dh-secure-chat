@@ -10,6 +10,7 @@ import (
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/db"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
+	identityrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/repository"
 	identityservice "github.com/AlibekovAA/dh-secure-chat/backend/internal/identity/service"
 	userrepo "github.com/AlibekovAA/dh-secure-chat/backend/internal/user/repository"
 )

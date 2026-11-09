@@ -4,6 +4,7 @@ type SpinnerProps = {
   size?: SpinnerSize;
   borderColorClass?: string;
   className?: string;
+  label?: string;
 };
 
 const sizeClassMap: Record<SpinnerSize, string> = {
@@ -17,12 +18,16 @@ export function Spinner({
   size = 'md',
   borderColorClass = 'border-emerald-400',
   className = '',
+  label,
 }: SpinnerProps) {
   const sizeClass = sizeClassMap[size];
 
   return (
     <div
       className={`border-2 border-t-transparent rounded-full animate-spin ${sizeClass} ${borderColorClass} ${className}`}
+      role={label ? 'status' : undefined}
+      aria-label={label}
+      aria-hidden={label ? undefined : true}
     />
   );
 }

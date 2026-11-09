@@ -3,9 +3,12 @@ package resilience
 import (
 	"context"
 	"errors"
+	"net"
+	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/jackc/pgconn"
 	pgx "github.com/jackc/pgx/v4"
 
 	commonerrors "github.com/AlibekovAA/dh-secure-chat/backend/internal/common/errors"
@@ -112,7 +115,7 @@ func (breaker *CircuitBreaker) CallWithFallback(ctx context.Context, fn func(con
 
 	err := fn(callCtx)
 	if err != nil {
-		if !errors.Is(err, pgx.ErrNoRows) {
+		if shouldRecordFailure(ctx, err) {
 			breaker.recordFailure()
 		}
 		if fallback != nil {
@@ -126,4 +129,22 @@ func (breaker *CircuitBreaker) CallWithFallback(ctx context.Context, fn func(con
 
 	breaker.reset()
 	return nil
+}
+
+func shouldRecordFailure(ctx context.Context, err error) bool {
+	if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, context.Canceled) {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return ctx.Err() == nil
+	}
+	var networkError net.Error
+	if errors.As(err, &networkError) {
+		return true
+	}
+	var postgresError *pgconn.PgError
+	if errors.As(err, &postgresError) {
+		return strings.HasPrefix(postgresError.Code, "08") || strings.HasPrefix(postgresError.Code, "53") || postgresError.Code == "57P01" || postgresError.Code == "57P02" || postgresError.Code == "57P03"
+	}
+	return pgconn.SafeToRetry(err)
 }

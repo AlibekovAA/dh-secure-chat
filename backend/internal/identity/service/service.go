@@ -2,7 +2,10 @@ package service
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/hex"
 	"errors"
 
@@ -37,20 +40,11 @@ func NewIdentityService(deps IdentityServiceDeps) *IdentityService {
 }
 
 func (s *IdentityService) CreateIdentityKey(ctx context.Context, userID string, publicKey []byte) error {
-	if len(publicKey) == 0 {
+	if !isValidPublicKey(publicKey) {
 		s.log.WithFields(ctx, logger.Fields{
 			"user_id": userID,
 			"action":  "create_identity_key_empty",
 		}).Warn("create identity key failed: empty public key")
-		return commonerrors.ErrInvalidPublicKey
-	}
-
-	if len(publicKey) < 50 || len(publicKey) > 200 {
-		s.log.WithFields(ctx, logger.Fields{
-			"user_id":    userID,
-			"key_length": len(publicKey),
-			"action":     "create_identity_key_invalid_length",
-		}).Warnf("create identity key failed: invalid public key length %d bytes (expected SPKI format 50-200 bytes)", len(publicKey))
 		return commonerrors.ErrInvalidPublicKey
 	}
 
@@ -75,22 +69,13 @@ func (s *IdentityService) CreateIdentityKey(ctx context.Context, userID string, 
 }
 
 func (s *IdentityService) UpdatePublicKey(ctx context.Context, userID string, publicKey []byte) error {
-	if len(publicKey) == 0 {
+	if !isValidPublicKey(publicKey) {
 		s.log.WithFields(ctx, logger.Fields{
 			"user_id": userID,
 			"action":  "update_identity_key_empty",
 		}).Warn("update identity key failed: empty public key")
 		return commonerrors.ErrInvalidPublicKey
 	}
-	if len(publicKey) < 50 || len(publicKey) > 200 {
-		s.log.WithFields(ctx, logger.Fields{
-			"user_id":    userID,
-			"key_length": len(publicKey),
-			"action":     "update_identity_key_invalid_length",
-		}).Warnf("update identity key failed: invalid public key length %d bytes (expected SPKI format 50-200 bytes)", len(publicKey))
-		return commonerrors.ErrInvalidPublicKey
-	}
-
 	err := s.repo.Update(ctx, userID, publicKey)
 	if err != nil {
 		if errors.Is(err, commonerrors.ErrIdentityKeyNotFound) {
@@ -123,6 +108,15 @@ func (s *IdentityService) UpdatePublicKey(ctx context.Context, userID string, pu
 		"action":  "identity_key_updated",
 	}).Info("identity key updated")
 	return nil
+}
+
+func isValidPublicKey(encoded []byte) bool {
+	parsed, err := x509.ParsePKIXPublicKey(encoded)
+	if err != nil {
+		return false
+	}
+	publicKey, ok := parsed.(*ecdsa.PublicKey)
+	return ok && publicKey.Curve == elliptic.P256()
 }
 
 func (s *IdentityService) GetPublicKey(ctx context.Context, userID string) ([]byte, error) {

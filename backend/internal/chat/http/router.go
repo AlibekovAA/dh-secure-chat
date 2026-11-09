@@ -210,7 +210,10 @@ func (h *Handler) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			h.cfg.WebSocketMaxMsgSize,
 			h.cfg.WebSocketSendBufSize,
 		)
-		h.hub.Register(client)
+		if err := h.hub.Register(r.Context(), client); err != nil {
+			client.Close()
+			return
+		}
 		h.log.WithFields(ctx, logger.Fields{
 			"user_id":  claims.UserID,
 			"username": claims.Username,

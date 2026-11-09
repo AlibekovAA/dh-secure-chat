@@ -34,26 +34,33 @@ func StartWithGracefulShutdownAndHooks(
 	<-quit
 
 	log.Infof("shutting down %s service...", serviceName)
+	shutdownServer(server, log, serviceName, hooks)
+}
 
+func shutdownServer(server *http.Server, log *logger.Logger, serviceName string, hooks []ShutdownHook) {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), constants.ShutdownTimeout)
 	defer shutdownCancel()
 
-	drainCtx, drainCancel := context.WithTimeout(shutdownCtx, constants.DrainTimeout)
-	defer drainCancel()
-
 	log.Infof("%s service: stopping accepting new connections (drain period: %v)", serviceName, constants.DrainTimeout)
 	server.SetKeepAlivesEnabled(false)
+	shutdownDone := make(chan error, 1)
+	go func() {
+		shutdownDone <- server.Shutdown(shutdownCtx)
+	}()
 
 	if len(hooks) > 0 {
 		log.Infof("%s service: executing shutdown hooks", serviceName)
 		for i, hook := range hooks {
-			if err := hook(drainCtx); err != nil {
+			hookCtx, hookCancel := context.WithTimeout(shutdownCtx, constants.DrainTimeout)
+			err := hook(hookCtx)
+			hookCancel()
+			if err != nil {
 				log.Errorf("%s service: shutdown hook %d failed: %v", serviceName, i, err)
 			}
 		}
 	}
 
-	if err := server.Shutdown(shutdownCtx); err != nil {
+	if err := <-shutdownDone; err != nil {
 		log.Errorf("%s service forced to shutdown: %v", serviceName, err)
 	} else {
 		log.Infof("%s service stopped gracefully", serviceName)

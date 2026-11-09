@@ -22,6 +22,7 @@ import (
 
 type RefreshTokenRotatorInterface interface {
 	IssueRefreshToken(ctx context.Context, user userdomain.User) (authdomain.RefreshToken, error)
+	NewRefreshToken(user userdomain.User) (authdomain.RefreshToken, error)
 }
 
 type RefreshTokenRotator struct {
@@ -81,26 +82,9 @@ func (rtr *RefreshTokenRotator) IssueRefreshToken(ctx context.Context, user user
 		return authdomain.RefreshToken{}, err
 	}
 
-	rawToken, err := GenerateRefreshToken()
+	stored, err := rtr.NewRefreshToken(user)
 	if err != nil {
 		return authdomain.RefreshToken{}, err
-	}
-
-	hash := HashRefreshToken(rawToken)
-
-	id, err := rtr.idGenerator.NewID()
-	if err != nil {
-		return authdomain.RefreshToken{}, err
-	}
-
-	expiresAt := rtr.clock.Now().Add(rtr.refreshTokenTTL)
-
-	stored := authdomain.RefreshToken{
-		ID:        id,
-		TokenHash: hash,
-		UserID:    string(user.ID),
-		ExpiresAt: expiresAt,
-		CreatedAt: rtr.clock.Now(),
 	}
 
 	err = rtr.dbCircuitBreaker.Call(ctx, func(ctx context.Context) error {
@@ -118,12 +102,27 @@ func (rtr *RefreshTokenRotator) IssueRefreshToken(ctx context.Context, user user
 
 	metrics.RefreshTokensIssued.Inc()
 
+	return stored, nil
+}
+
+func (rtr *RefreshTokenRotator) NewRefreshToken(user userdomain.User) (authdomain.RefreshToken, error) {
+	rawToken, err := GenerateRefreshToken()
+	if err != nil {
+		return authdomain.RefreshToken{}, err
+	}
+
+	id, err := rtr.idGenerator.NewID()
+	if err != nil {
+		return authdomain.RefreshToken{}, err
+	}
+
+	now := rtr.clock.Now()
 	return authdomain.RefreshToken{
-		ID:        stored.ID,
-		TokenHash: stored.TokenHash,
-		UserID:    stored.UserID,
-		ExpiresAt: stored.ExpiresAt,
-		CreatedAt: stored.CreatedAt,
+		ID:        id,
+		TokenHash: HashRefreshToken(rawToken),
+		UserID:    string(user.ID),
+		ExpiresAt: now.Add(rtr.refreshTokenTTL),
+		CreatedAt: now,
 		RawToken:  rawToken,
 	}, nil
 }

@@ -12,6 +12,7 @@ import {
 } from '@/shared/constants';
 import { validateFileSize, getFileValidationError } from '@/shared/utils/files';
 import { formatDuration } from '@/modules/chat/utils';
+import { useDialogFocus } from '@/shared/ui/useDialogFocus';
 
 type Props = {
   onRecorded: (file: File, duration: number) => void;
@@ -301,15 +302,22 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
     onCancel();
   }, [onCancel, cleanup]);
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, cancelRecording);
+
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]"
-      style={{ willChange: 'opacity' }}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]">
       <div
-        className="relative w-full max-w-2xl mx-4 bg-emerald-950/95 border border-emerald-700/50 rounded-lg shadow-2xl overflow-hidden animate-[scaleIn_0.2s_ease-out]"
-        style={{ willChange: 'transform, opacity' }}
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="video-recorder-dialog-title"
+        tabIndex={-1}
+        className="relative w-full max-w-2xl mx-4 bg-[var(--color-surface)] border border-slate-700/80 rounded-lg overflow-hidden animate-[scaleIn_0.2s_ease-out]"
       >
+        <h2 id="video-recorder-dialog-title" className="sr-only">
+          {MESSAGES.chat.videoRecorderModal.labels.readyTitle}
+        </h2>
         <div className="relative aspect-video bg-black">
           {isInitializing ? (
             <div className="absolute inset-0 flex items-center justify-center">
@@ -380,7 +388,7 @@ export function VideoRecorderModal({ onRecorded, onCancel, onError }: Props) {
                 }}
               />
               {!isVideoReady && !isRecording && (
-                <div className="absolute inset-0 bg-gradient-to-br from-emerald-900/90 via-emerald-950/90 to-emerald-900/90 flex flex-col items-center justify-center gap-4 transition-opacity duration-500">
+                <div className="absolute inset-0 bg-slate-950/95 flex flex-col items-center justify-center gap-4 transition-opacity duration-500">
                   <div className="relative">
                     <div className="w-20 h-20 rounded-full bg-emerald-600/30 flex items-center justify-center animate-pulse">
                       <svg

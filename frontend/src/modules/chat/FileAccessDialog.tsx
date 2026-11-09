@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { MESSAGES } from '@/shared/messages';
 import type { FileAccessMode } from '@/shared/websocket/types';
+import { useDialogFocus } from '@/shared/ui/useDialogFocus';
 
 type Props = {
   filename: string;
@@ -10,6 +11,9 @@ type Props = {
 
 export function FileAccessDialog({ filename, onSelect, onCancel }: Props) {
   const [selectedMode, setSelectedMode] = useState<FileAccessMode>('both');
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useDialogFocus(dialogRef, onCancel);
 
   const handleConfirm = () => {
     onSelect(selectedMode);
@@ -38,15 +42,21 @@ export function FileAccessDialog({ filename, onSelect, onCancel }: Props) {
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]"
       onClick={onCancel}
-      style={{ willChange: 'opacity' }}
     >
       <div
-        className="w-full max-w-md mx-4 bg-black border border-emerald-700 rounded-xl overflow-hidden animate-[scaleIn_0.2s_ease-out] shadow-2xl shadow-emerald-900/30"
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="file-access-dialog-title"
+        tabIndex={-1}
+        className="w-full max-w-md mx-4 bg-[var(--color-surface)] border border-slate-700/80 rounded-lg overflow-hidden animate-[scaleIn_0.2s_ease-out]"
         onClick={(e) => e.stopPropagation()}
-        style={{ willChange: 'transform, opacity' }}
       >
-        <div className="px-6 py-4 border-b border-emerald-700/60 bg-gradient-to-r from-black via-emerald-950/20 to-black">
-          <h3 className="text-lg font-semibold bg-gradient-to-r from-emerald-300 to-emerald-400 bg-clip-text text-transparent">
+        <div className="px-6 py-4 border-b border-slate-700/80 border-l-2 border-l-emerald-500/70 bg-[var(--color-surface-raised)]">
+          <h3
+            id="file-access-dialog-title"
+            className="text-lg font-semibold text-slate-100"
+          >
             {MESSAGES.chat.fileAccessDialog.title}
           </h3>
           <p className="text-sm text-emerald-400/90 mt-1 truncate font-medium">
@@ -65,13 +75,10 @@ export function FileAccessDialog({ filename, onSelect, onCancel }: Props) {
                   transition-all duration-200 ease-out
                   ${
                     isSelected
-                      ? 'border-emerald-500/80 bg-gradient-to-r from-emerald-500/20 via-emerald-500/15 to-emerald-500/20 shadow-lg shadow-emerald-500/20 scale-[1.02]'
-                      : 'border-emerald-700/40 bg-emerald-900/10 hover:bg-emerald-900/20 hover:border-emerald-700/60 hover:scale-[1.01]'
+                      ? 'border-emerald-500/70 bg-emerald-500/10'
+                      : 'border-slate-700/70 bg-slate-900/40 hover:bg-slate-800/60 hover:border-slate-600'
                   }
                 `}
-                style={{
-                  willChange: 'transform, background-color, border-color',
-                }}
               >
                 <div className="relative flex-shrink-0 mt-0.5">
                   <input
@@ -125,20 +132,18 @@ export function FileAccessDialog({ filename, onSelect, onCancel }: Props) {
           })}
         </div>
 
-        <div className="px-6 py-4 border-t border-emerald-700/60 bg-black/80 flex items-center justify-end gap-3">
+        <div className="px-6 py-4 border-t border-slate-700/80 bg-[var(--color-surface-raised)] flex items-center justify-end gap-3">
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 text-sm font-medium rounded-md bg-emerald-900/40 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-700/60 transition-all duration-200 hover:scale-105 active:scale-95"
-            style={{ willChange: 'transform' }}
+            className="px-4 py-2 text-sm font-medium rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors duration-200"
           >
             {MESSAGES.chat.fileAccessDialog.actions.cancel}
           </button>
           <button
             type="button"
             onClick={handleConfirm}
-            className="px-4 py-2 text-sm font-medium rounded-md bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 text-black transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg shadow-emerald-500/30"
-            style={{ willChange: 'transform' }}
+            className="px-4 py-2 text-sm font-semibold rounded-md bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition-colors duration-200"
           >
             {MESSAGES.chat.fileAccessDialog.actions.send}
           </button>

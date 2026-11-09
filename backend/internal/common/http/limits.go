@@ -1,33 +1,10 @@
 package http
 
 import (
-	"io"
 	"net/http"
 
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 )
-
-type maxBytesReader struct {
-	reader io.ReadCloser
-	limit  int64
-	read   int64
-}
-
-func (r *maxBytesReader) Read(p []byte) (n int, err error) {
-	if r.read >= r.limit {
-		return 0, http.ErrBodyReadAfterClose
-	}
-	n, err = r.reader.Read(p)
-	r.read += int64(n)
-	if r.read > r.limit {
-		return n, http.ErrBodyReadAfterClose
-	}
-	return n, err
-}
-
-func (r *maxBytesReader) Close() error {
-	return r.reader.Close()
-}
 
 func MaxRequestSizeMiddleware(maxBytes int64) func(http.Handler) http.Handler {
 	if maxBytes <= 0 {
@@ -41,10 +18,7 @@ func MaxRequestSizeMiddleware(maxBytes int64) func(http.Handler) http.Handler {
 				return
 			}
 
-			r.Body = &maxBytesReader{
-				reader: r.Body,
-				limit:  maxBytes,
-			}
+			r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
 
 			next.ServeHTTP(w, r)
 		})

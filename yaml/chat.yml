@@ -1,5 +1,8 @@
 services:
   chat:
+    # shortcut: in-memory chat state requires one replica, add broker-backed coordination before scaling
+    deploy:
+      replicas: 1
     ports:
       - '127.0.0.1:8082:8082'
     build:
@@ -14,7 +17,7 @@ services:
       db:
         condition: service_healthy
     healthcheck:
-      test: ['CMD', '/app/healthcheck', 'http://localhost:8082/health']
+      test: ['CMD', '/app/healthcheck', 'http://localhost:8082/ready']
       interval: 10s
       timeout: 5s
       retries: 3

@@ -7,8 +7,8 @@ export function LoadingSpinner({
   message?: string;
 }) {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-black text-emerald-50">
-      <div className="flex flex-col items-center gap-3">
+    <div className="app-min-height flex items-center justify-center bg-[var(--color-canvas)] text-emerald-50">
+      <div className="flex flex-col items-center gap-3" role="status">
         <Spinner size="lg" borderColorClass="border-emerald-400" />
         <p className="text-xs text-emerald-500/80">{message}</p>
       </div>

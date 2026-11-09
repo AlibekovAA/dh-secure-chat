@@ -2,6 +2,7 @@ package logger
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -40,6 +41,15 @@ var levelNames = map[LogLevel]string{
 	CRITICAL: "CRITICAL",
 }
 
+var rawFieldAllowlist = map[string]struct{}{
+	"action": {}, "type": {}, "current": {}, "max": {}, "total": {}, "clients": {},
+	"operation": {}, "status": {},
+}
+
+var pseudonymizedFieldAllowlist = map[string]struct{}{
+	"user_id": {}, "file_id": {},
+}
+
 type Logger struct {
 	level       LogLevel
 	out         *log.Logger
@@ -47,6 +57,7 @@ type Logger struct {
 	mu          sync.RWMutex
 	sampler     *rand.Rand
 	samplerMu   sync.Mutex
+	closer      io.Closer
 }
 
 func New(logDir, serviceName, level string) (*Logger, error) {
@@ -89,11 +100,23 @@ func (l *Logger) initialize(logDir, serviceName, level string) error {
 	defer l.mu.Unlock()
 
 	l.out = log.New(multiWriter, "", 0)
+	l.closer = fileWriter
 	l.level = parseLevel(level)
 	l.serviceName = serviceName
 	l.sampler = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	return nil
+}
+
+func (l *Logger) Close() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.closer == nil {
+		return nil
+	}
+	err := l.closer.Close()
+	l.closer = nil
+	return err
 }
 
 func (l *Logger) log(level LogLevel, msg string) {
@@ -139,7 +162,14 @@ func (l *Logger) logJSON(level LogLevel, ctx context.Context, msg string, fields
 
 	if len(fields) > 0 {
 		for k, v := range fields {
-			logEntry[k] = v
+			if _, ok := pseudonymizedFieldAllowlist[k]; ok {
+				value := sha256.Sum256([]byte(fmt.Sprint(v)))
+				logEntry[k] = fmt.Sprintf("%x", value[:8])
+				continue
+			}
+			if _, ok := rawFieldAllowlist[k]; ok {
+				logEntry[k] = v
+			}
 		}
 	}
 

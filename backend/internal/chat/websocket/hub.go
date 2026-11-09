@@ -64,6 +64,7 @@ type Hub struct {
 	clock          clock.Clock
 	ctx            context.Context
 	cancel         context.CancelFunc
+	shutdownOnce   sync.Once
 
 	messageHandler  IncomingMessageHandler
 	presenceService *PresenceService
@@ -117,12 +118,26 @@ func (h *Hub) Wire(messageHandler IncomingMessageHandler, presenceService *Prese
 	go fileService.StartCleanup()
 }
 
-func (h *Hub) Register(client *Client) {
-	h.register <- client
+func (h *Hub) Register(ctx context.Context, client *Client) error {
+	select {
+	case h.register <- client:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-h.ctx.Done():
+		return h.ctx.Err()
+	}
 }
 
-func (h *Hub) Unregister(client *Client) {
-	h.unregister <- client
+func (h *Hub) Unregister(ctx context.Context, client *Client) error {
+	select {
+	case h.unregister <- client:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-h.ctx.Done():
+		return h.ctx.Err()
+	}
 }
 
 func (h *Hub) Run(ctx context.Context) {
@@ -140,9 +155,7 @@ func (h *Hub) Run(ctx context.Context) {
 					"username": existingClient.username,
 					"action":   "ws_close_existing",
 				}).Info("websocket closing existing connection")
-				existingClient.Stop()
 				existingClient.Close()
-				existingClient.WaitForShutdown(constants.WebSocketClientShutdownTimeout)
 				h.clients.Delete(client.userID)
 				observabilitymetrics.ChatWebSocketConnectionsActive.Dec()
 				h.clientCount.Add(-1)
@@ -157,10 +170,7 @@ func (h *Hub) Run(ctx context.Context) {
 					"max":     h.maxConnections,
 					"action":  "ws_register_rejected",
 				}).Warn("websocket connection rejected: max connections limit reached")
-				client.Stop()
 				client.Close()
-				client.WaitForShutdown(constants.WebSocketClientShutdownTimeout)
-				client.conn.Close()
 				continue
 			}
 
@@ -180,6 +190,10 @@ func (h *Hub) Run(ctx context.Context) {
 }
 
 func (h *Hub) shutdown() {
+	h.shutdownOnce.Do(h.shutdownClients)
+}
+
+func (h *Hub) shutdownClients() {
 	clients := make([]*Client, 0)
 	h.clients.Range(func(key, value interface{}) bool {
 		clients = append(clients, value.(*Client))
@@ -194,7 +208,6 @@ func (h *Hub) shutdown() {
 	}
 
 	for _, client := range clients {
-		client.Stop()
 		if err == nil {
 			ctx, cancel := context.WithTimeout(context.Background(), constants.WebSocketShutdownNotificationTimeout)
 			select {
@@ -207,8 +220,8 @@ func (h *Hub) shutdown() {
 			}
 			cancel()
 		}
-		client.Close()
-		client.WaitForShutdown(constants.WebSocketClientShutdownTimeoutLong)
+		client.Stop()
+		client.WaitForShutdown(constants.WebSocketClientShutdownTimeout)
 	}
 
 	h.clients.Range(func(key, value interface{}) bool {
@@ -268,7 +281,7 @@ func (h *Hub) SendToUserWithContext(ctx context.Context, userID string, message 
 	messageBytesCopy := make([]byte, len(messageBytes))
 	copy(messageBytesCopy, messageBytes)
 
-	if err := h.sendWithTimeout(client.send, messageBytesCopy, userID, string(message.Type), ctx); err != nil {
+	if err := h.sendWithTimeout(client, messageBytesCopy, userID, string(message.Type), ctx); err != nil {
 		return err
 	}
 
@@ -311,16 +324,20 @@ func (h *Hub) SendErrorToUser(userID string, err error) {
 	h.SendToUser(userID, errorMsg)
 }
 
-func (h *Hub) sendWithTimeout(sendChan chan []byte, messageBytes []byte, userID, messageType string, ctx context.Context) error {
+func (h *Hub) sendWithTimeout(client *Client, messageBytes []byte, userID, messageType string, ctx context.Context) error {
 	sendCtx, cancel := context.WithTimeout(ctx, h.sendTimeout)
 	defer cancel()
 	select {
-	case sendChan <- messageBytes:
+	case client.send <- messageBytes:
 		return nil
+	case <-client.ctx.Done():
+		return commonerrors.ErrUserNotConnected
 	case <-sendCtx.Done():
 		select {
-		case sendChan <- messageBytes:
+		case client.send <- messageBytes:
 			return nil
+		case <-client.ctx.Done():
+			return commonerrors.ErrUserNotConnected
 		default:
 			observabilitymetrics.ChatWebSocketDroppedMessages.WithLabelValues(messageType).Inc()
 			h.log.WithFields(ctx, logger.Fields{
@@ -345,7 +362,8 @@ func (h *Hub) HandleMessage(client *Client, msg *WSMessage) {
 }
 
 func (h *Hub) handleUnregister(client *Client) {
-	if _, ok := h.clients.Load(client.userID); !ok {
+	current, ok := h.clients.Load(client.userID)
+	if !ok || current.(*Client) != client {
 		return
 	}
 
@@ -356,9 +374,7 @@ func (h *Hub) handleUnregister(client *Client) {
 		h.fileService.OnUserDisconnected(client.userID)
 	}
 
-	client.Stop()
 	client.Close()
-	client.WaitForShutdown(constants.WebSocketClientShutdownTimeout)
 	observabilitymetrics.ChatWebSocketConnectionsActive.Dec()
 	observabilitymetrics.ChatWebSocketDisconnections.WithLabelValues("unregister").Inc()
 	h.log.WithFields(client.ctx, logger.Fields{
@@ -381,6 +397,7 @@ func (h *Hub) handleUnregister(client *Client) {
 		otherClient := value.(*Client)
 		select {
 		case otherClient.send <- msgBytes:
+		case <-otherClient.ctx.Done():
 		default:
 		}
 		return true

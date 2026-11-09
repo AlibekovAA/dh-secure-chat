@@ -61,14 +61,14 @@ export class ErrorBoundary extends Component<
         this.state.error.message?.includes('404');
 
       return (
-        <div className="min-h-screen flex items-center justify-center bg-black text-emerald-50">
-          <div className="flex flex-col items-center gap-4 p-6 max-w-md">
+        <div className="app-min-height flex items-center justify-center bg-[var(--color-canvas)] text-slate-100 px-4">
+          <div className="glass-effect flex flex-col items-center gap-4 p-6 max-w-md border-t-red-400/50">
             <div className="text-red-400 text-xl font-semibold">
               {isModuleLoadError
                 ? MESSAGES.common.errorBoundary.staleTitle
                 : MESSAGES.common.errorBoundary.errorTitle}
             </div>
-            <div className="text-sm text-gray-400 text-center">
+            <div className="text-sm text-slate-400 text-center">
               {isModuleLoadError
                 ? MESSAGES.common.errorBoundary.staleDescription
                 : this.state.error.message ||
@@ -78,14 +78,14 @@ export class ErrorBoundary extends Component<
               {isModuleLoadError ? (
                 <button
                   onClick={() => window.location.reload()}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded transition-colors"
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-medium control-radius smooth-transition button-press"
                 >
                   {MESSAGES.common.errorBoundary.actions.reload}
                 </button>
               ) : (
                 <button
                   onClick={this.reset}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded transition-colors"
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-medium control-radius smooth-transition button-press"
                 >
                   {MESSAGES.common.errorBoundary.actions.retry}
                 </button>

@@ -24,6 +24,7 @@ type RefreshTokenRepository interface {
 
 type RefreshTokenTx interface {
 	FindByTokenHashWithUserForUpdate(ctx context.Context, hash string) (authdomain.RefreshToken, userdomain.User, error)
+	Create(ctx context.Context, token authdomain.RefreshToken) error
 	DeleteByTokenHash(ctx context.Context, hash string) error
 	Commit(ctx context.Context) error
 	Rollback(ctx context.Context) error
@@ -178,6 +179,21 @@ func (t *pgRefreshTokenTx) DeleteByTokenHash(ctx context.Context, hash string) e
 		return ErrRefreshTokenNotFound
 	}
 	return nil
+}
+
+func (t *pgRefreshTokenTx) Create(ctx context.Context, token authdomain.RefreshToken) error {
+	start := time.Now()
+	_, err := t.tx.Exec(
+		ctx,
+		`INSERT INTO refresh_tokens (id, token_hash, user_id, expires_at, created_at)
+		 VALUES ($1, $2, $3, $4, $5)`,
+		token.ID,
+		token.TokenHash,
+		token.UserID,
+		token.ExpiresAt,
+		token.CreatedAt,
+	)
+	return db.HandleExecError(err, "create refresh token in tx", start)
 }
 
 func (t *pgRefreshTokenTx) Commit(ctx context.Context) error {

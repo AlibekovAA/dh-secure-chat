@@ -179,13 +179,13 @@ export function VoiceRecorder({
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className={`flex items-center gap-2 ${isRecording ? 'w-full' : ''}`}>
       {isRecording ? (
         <>
           <button
             type="button"
             onClick={stopRecording}
-            className="flex-shrink-0 w-10 h-10 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center transition-colors"
+            className="flex-shrink-0 w-11 h-11 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center transition-colors"
             title={MESSAGES.chat.voiceRecorder.titles.stop}
           >
             <div className="w-4 h-4 bg-white rounded-sm" />
@@ -199,7 +199,7 @@ export function VoiceRecorder({
           <button
             type="button"
             onClick={cancelRecording}
-            className="flex-shrink-0 px-2 py-1 text-xs text-emerald-400 hover:text-emerald-200 transition-colors"
+            className="flex-shrink-0 min-h-11 px-2 py-1 text-xs text-emerald-400 hover:text-emerald-200 transition-colors"
             title={MESSAGES.chat.voiceRecorder.titles.cancel}
           >
             {MESSAGES.chat.voiceRecorder.labels.cancel}
@@ -210,7 +210,7 @@ export function VoiceRecorder({
           type="button"
           onClick={startRecording}
           disabled={disabled}
-          className="flex-shrink-0 w-10 h-10 rounded-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-900/40 disabled:cursor-not-allowed text-white flex items-center justify-center transition-colors"
+          className="flex-shrink-0 w-11 h-11 rounded-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-900/40 disabled:cursor-not-allowed text-white flex items-center justify-center transition-colors"
           title={MESSAGES.chat.voiceRecorder.titles.record}
         >
           <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">

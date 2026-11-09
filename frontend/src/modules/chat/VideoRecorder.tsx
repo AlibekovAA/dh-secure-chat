@@ -48,7 +48,8 @@ export function VideoRecorder({ onRecorded, onError, disabled }: Props) {
         type="button"
         onClick={handleClick}
         disabled={disabled}
-        className="flex-shrink-0 w-10 h-10 rounded-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-900/40 disabled:cursor-not-allowed text-white flex items-center justify-center transition-colors"
+        className="flex-shrink-0 w-11 h-11 rounded-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-900/40 disabled:cursor-not-allowed text-white flex items-center justify-center transition-colors"
+        aria-label={MESSAGES.chat.videoRecorder.titles.record}
         title={MESSAGES.chat.videoRecorder.titles.record}
       >
         <svg

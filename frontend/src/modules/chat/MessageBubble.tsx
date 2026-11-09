@@ -87,6 +87,19 @@ function MessageBubbleComponent({
     });
   };
 
+  const openContextMenuFromKeyboard = () => {
+    const bubbleRect = messageRef.current?.getBoundingClientRect();
+    if (!bubbleRect) return;
+    setContextMenuAnchor({
+      left: bubbleRect.left,
+      right: bubbleRect.right,
+      top: bubbleRect.top,
+      bottom: bubbleRect.bottom,
+      width: bubbleRect.width,
+      height: bubbleRect.height,
+    });
+  };
+
   const handleCopy = () => {
     if (message.text) {
       navigator.clipboard.writeText(message.text);
@@ -178,13 +191,12 @@ function MessageBubbleComponent({
     return (
       <div
         className={`flex ${message.isOwn ? 'justify-end' : 'justify-start'} animate-[fadeIn_0.2s_ease-out]`}
-        style={{ willChange: 'opacity' }}
       >
         <div
           className={`rounded-lg px-3 py-2.5 border-dashed ${
             message.isOwn
-              ? 'bg-gradient-to-br from-emerald-500/5 to-emerald-500/10 border border-emerald-500/30 text-emerald-400/60'
-              : 'bg-gradient-to-br from-emerald-900/5 to-emerald-900/10 border border-emerald-700/30 text-emerald-500/60'
+              ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400/60'
+              : 'bg-slate-900/70 border border-slate-700/60 text-slate-400'
           }`}
           style={{ maxWidth: `${MESSAGE_MAX_WIDTH_PERCENT}%` }}
         >
@@ -219,15 +231,23 @@ function MessageBubbleComponent({
       <div
         ref={messageRef}
         className={`flex ${message.isOwn ? 'justify-end' : 'justify-start'} animate-[fadeIn_0.2s_ease-out] group`}
-        style={{ willChange: 'opacity' }}
+        tabIndex={0}
+        onKeyDown={(event) => {
+          if (
+            event.key === 'ContextMenu' ||
+            (event.shiftKey && event.key === 'F10')
+          ) {
+            event.preventDefault();
+            openContextMenuFromKeyboard();
+          }
+        }}
       >
         <div
           className={`max-w-[75%] rounded-lg overflow-hidden smooth-transition ${
             message.isOwn
               ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-50 hover:bg-emerald-500/25 hover:border-emerald-500/50'
               : 'bg-emerald-900/20 border border-emerald-700/40 text-emerald-100 hover:bg-emerald-900/25 hover:border-emerald-700/50'
-          } ${contextMenuAnchor ? 'relative z-[120] scale-[1.02] shadow-2xl shadow-emerald-900/40' : ''}`}
-          style={{ willChange: 'background-color, border-color' }}
+          } ${contextMenuAnchor ? 'relative z-[120] ring-1 ring-emerald-400/60' : ''}`}
           onContextMenu={handleContextMenu}
           data-message-id={message.id}
         >
@@ -434,12 +454,12 @@ function MessageBubbleComponent({
                           className={`group/reaction inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium shadow-sm transition-all duration-150 animate-[fadeIn_0.18s_ease-out] ${
                             hasReacted
                               ? message.isOwn
-                                ? 'bg-gradient-to-br from-emerald-400 to-emerald-500 text-black shadow-emerald-900/40 ring-1 ring-emerald-300/80'
-                                : 'bg-gradient-to-br from-emerald-500/80 to-emerald-400/80 text-black shadow-emerald-900/30 ring-1 ring-emerald-300/70'
+                                ? 'bg-emerald-400 text-black ring-1 ring-emerald-300/80'
+                                : 'bg-emerald-500/80 text-black ring-1 ring-emerald-300/70'
                               : message.isOwn
                                 ? 'bg-emerald-500/15 border border-emerald-400/50 text-emerald-50/90 hover:bg-emerald-500/20 shadow-emerald-900/20'
                                 : 'bg-emerald-900/40 border border-emerald-600/40 text-emerald-50/90 hover:bg-emerald-900/55 shadow-emerald-900/30'
-                          } hover:scale-[1.04] active:scale-[0.97]`}
+                          }`}
                         >
                           <span className="text-lg leading-none">{emoji}</span>
                           <span className="text-[10px] font-semibold text-emerald-100/90">
@@ -558,7 +578,10 @@ function MessageBubbleComponent({
           onDeleteForAll={
             message.isOwn ? () => onDelete?.(message.id, 'all') : undefined
           }
-          onClose={() => setContextMenuAnchor(null)}
+          onClose={() => {
+            setContextMenuAnchor(null);
+            messageRef.current?.focus();
+          }}
         />
       )}
 
@@ -567,7 +590,10 @@ function MessageBubbleComponent({
           anchorRect={emojiPickerAnchor}
           isOwn={message.isOwn}
           onSelect={handleEmojiSelect}
-          onClose={() => setEmojiPickerAnchor(null)}
+          onClose={() => {
+            setEmojiPickerAnchor(null);
+            messageRef.current?.focus();
+          }}
         />
       )}
     </>

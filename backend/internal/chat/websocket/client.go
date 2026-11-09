@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	gorillaWS "github.com/gorilla/websocket"
@@ -20,7 +19,6 @@ type Client struct {
 	userID              string
 	username            string
 	send                chan []byte
-	closed              atomic.Bool
 	log                 *logger.Logger
 	authenticated       bool
 	jwtSecret           []byte
@@ -111,9 +109,8 @@ func (c *Client) Stop() {
 }
 
 func (c *Client) Close() {
-	if c.closed.CompareAndSwap(false, true) {
-		close(c.send)
-	}
+	c.cancel()
+	_ = c.conn.Close()
 }
 
 func (c *Client) WaitForShutdown(timeout time.Duration) {
@@ -142,7 +139,9 @@ func (c *Client) readPump() {
 			}).Errorf("websocket readPump panic: %v", r)
 		}
 		if c.authenticated {
-			c.hub.Unregister(c)
+			unregisterCtx, cancel := context.WithTimeout(context.Background(), c.writeWait)
+			_ = c.hub.Unregister(unregisterCtx, c)
+			cancel()
 		}
 		c.conn.Close()
 		c.cancel()
@@ -281,7 +280,9 @@ func (c *Client) readPump() {
 				}
 			}
 
-			c.hub.Register(c)
+			if err := c.hub.Register(c.ctx, c); err != nil {
+				return
+			}
 			c.log.WithFields(c.ctx, logger.Fields{
 				"user_id":  c.userID,
 				"username": c.username,

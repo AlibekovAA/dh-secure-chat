@@ -55,13 +55,13 @@ func Middleware(secret string, log *logger.Logger, checker RevokedTokenChecker) 
 				revoked, err := checker.IsRevoked(r.Context(), claims.JTI)
 				if err != nil {
 					metrics.JWTValidationsFailed.Inc()
-					log.Errorf("jwt auth failed path=%s: failed to check revoked token jti=%s: %v", r.URL.Path, claims.JTI, err)
+					log.Errorf("jwt auth failed path=%s: failed to check revoked token: %v", r.URL.Path, err)
 					commonhttp.WriteError(w, http.StatusInternalServerError, "internal error")
 					return
 				}
 				if revoked {
 					metrics.JWTValidationsFailed.Inc()
-					log.Warnf("jwt auth failed path=%s: token revoked jti=%s", r.URL.Path, claims.JTI)
+					log.Warnf("jwt auth failed path=%s: token revoked", r.URL.Path)
 					commonhttp.WriteError(w, http.StatusUnauthorized, "token revoked")
 					return
 				}
@@ -115,7 +115,7 @@ func parseToken(tokenString string, secret []byte) (Claims, error) {
 			return nil, commonerrors.ErrInvalidTokenSigningMethod
 		}
 		return secret, nil
-	})
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithExpirationRequired(), jwt.WithIssuedAt())
 	if err != nil || !parsed.Valid {
 		if err == nil {
 			err = commonerrors.ErrInvalidToken
@@ -134,7 +134,8 @@ func parseToken(tokenString string, secret []byte) (Claims, error) {
 	sub, _ := mapClaims["sub"].(string)
 	username, _ := mapClaims["usr"].(string)
 	jti, _ := mapClaims["jti"].(string)
-	if sub == "" || username == "" {
+	_, hasIssuedAt := mapClaims["iat"]
+	if sub == "" || username == "" || jti == "" || !hasIssuedAt {
 		return Claims{}, commonerrors.ErrMissingTokenClaims
 	}
 

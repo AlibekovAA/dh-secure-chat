@@ -21,16 +21,21 @@ func StartCleanup(ctx context.Context, repo ExpiredDeleter, log *logger.Logger, 
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			deleted, err := repo.DeleteExpired(ctx)
-			if err != nil {
-				log.Errorf("%s cleanup failed: %v", repoName, err)
-				continue
-			}
-			if deleted > 0 {
-				log.Infof("%s cleanup: deleted %d expired tokens", repoName, deleted)
-			}
+			RunCleanupOnce(ctx, repo, log, repoName)
 		}
 	}
+}
+
+func RunCleanupOnce(ctx context.Context, repo ExpiredDeleter, log *logger.Logger, repoName string) int64 {
+	deleted, err := repo.DeleteExpired(ctx)
+	if err != nil {
+		log.Errorf("%s cleanup failed: %v", repoName, err)
+		return 0
+	}
+	if deleted > 0 {
+		log.Infof("%s cleanup: deleted %d expired tokens", repoName, deleted)
+	}
+	return deleted
 }
 
 func StartRefreshTokenCleanup(ctx context.Context, repo authrepo.RefreshTokenRepository, log *logger.Logger) {

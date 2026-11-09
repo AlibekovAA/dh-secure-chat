@@ -3,6 +3,7 @@ import { VIDEO_MIME_TYPES, IMAGE_MIME_TYPES } from '@/shared/constants';
 import { Spinner } from '@/shared/ui/Spinner';
 import { MESSAGES } from '@/shared/messages';
 import { inspectFileContent } from '@/shared/utils/files';
+import { useDialogFocus } from '@/shared/ui/useDialogFocus';
 
 type Props = {
   filename: string;
@@ -23,6 +24,9 @@ export function FileViewerModal({
   const [verifiedMimeType, setVerifiedMimeType] = useState<string | null>(null);
   const [textContent, setTextContent] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useDialogFocus(dialogRef, onClose);
   const [videoLoading, setVideoLoading] = useState(true);
   const [videoError, setVideoError] = useState(false);
   const [videoProgress, setVideoProgress] = useState(0);
@@ -261,8 +265,7 @@ export function FileViewerModal({
             {!isProtected && (
               <button
                 onClick={handleDownload}
-                className="px-4 py-2 text-sm font-medium bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 text-black rounded-md transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg shadow-emerald-500/30"
-                style={{ willChange: 'transform' }}
+                className="px-4 py-2 text-sm font-semibold bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-md transition-colors duration-200"
               >
                 {MESSAGES.chat.fileViewerModal.labels.downloadFile}
               </button>
@@ -445,19 +448,22 @@ export function FileViewerModal({
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-[backdropEnter_0.2s_ease-out]"
       onClick={onClose}
-      style={{ willChange: 'opacity' }}
     >
       <div
-        className="w-[95vw] h-[95vh] max-w-[95vw] max-h-[95vh] flex flex-col bg-black border border-emerald-700 rounded-xl overflow-hidden shadow-lg shadow-emerald-900/20 animate-[modalEnter_0.2s_ease-out]"
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="file-viewer-dialog-title"
+        tabIndex={-1}
+        className="w-[95vw] h-[95vh] max-w-[95vw] max-h-[95dvh] flex flex-col bg-[var(--color-canvas)] border border-slate-700/80 rounded-lg overflow-hidden animate-[modalEnter_0.2s_ease-out]"
         onClick={(e) => e.stopPropagation()}
-        style={{
-          transform: 'translateZ(0)',
-          willChange: 'transform, opacity',
-        }}
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-emerald-700/60 bg-gradient-to-r from-black via-emerald-950/20 to-black">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-slate-700/80 bg-[var(--color-surface)]">
           <div className="flex-1 min-w-0">
-            <h3 className="text-lg font-semibold bg-gradient-to-r from-emerald-300 to-emerald-400 bg-clip-text text-transparent truncate">
+            <h3
+              id="file-viewer-dialog-title"
+              className="text-lg font-semibold text-slate-100 truncate"
+            >
               {filename}
             </h3>
             <p className="text-xs text-emerald-400/80 mt-1 font-medium">

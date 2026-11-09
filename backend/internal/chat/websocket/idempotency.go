@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"sync"
 	"time"
 
@@ -16,6 +17,7 @@ type idempotencyResult struct {
 	result    interface{}
 	err       error
 	expiresAt time.Time
+	done      chan struct{}
 }
 
 type IdempotencyTracker struct {
@@ -50,23 +52,27 @@ func (t *IdempotencyTracker) GenerateOperationID(userID string, msgType MessageT
 }
 
 func (t *IdempotencyTracker) Execute(operationID string, msgType MessageType, fn func() (interface{}, error)) (interface{}, error) {
-	if result, ok := t.operations.Load(operationID); ok {
-		res := result.(*idempotencyResult)
+	for {
+		candidate := &idempotencyResult{done: make(chan struct{})}
+		loadedValue, loaded := t.operations.LoadOrStore(operationID, candidate)
+		if !loaded {
+			candidate.result, candidate.err = fn()
+			candidate.expiresAt = t.clock.Now().Add(t.ttl)
+			if errors.Is(candidate.err, ErrProcessorQueueFull) || errors.Is(candidate.err, ErrProcessorClosed) {
+				t.operations.Delete(operationID)
+			}
+			close(candidate.done)
+			return candidate.result, candidate.err
+		}
+
+		res := loadedValue.(*idempotencyResult)
+		<-res.done
 		if t.clock.Now().Before(res.expiresAt) {
 			metrics.ChatWebSocketIdempotencyDuplicates.WithLabelValues(string(msgType)).Inc()
 			return res.result, res.err
 		}
-		t.operations.Delete(operationID)
+		t.operations.CompareAndDelete(operationID, res)
 	}
-
-	result, err := fn()
-	t.operations.Store(operationID, &idempotencyResult{
-		result:    result,
-		err:       err,
-		expiresAt: t.clock.Now().Add(t.ttl),
-	})
-
-	return result, err
 }
 
 func (t *IdempotencyTracker) cleanup() {
@@ -81,8 +87,13 @@ func (t *IdempotencyTracker) cleanup() {
 			now := t.clock.Now()
 			t.operations.Range(func(key, value interface{}) bool {
 				res := value.(*idempotencyResult)
+				select {
+				case <-res.done:
+				default:
+					return true
+				}
 				if now.After(res.expiresAt) {
-					t.operations.Delete(key)
+					t.operations.CompareAndDelete(key, res)
 				}
 				return true
 			})

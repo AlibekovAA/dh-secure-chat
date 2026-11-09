@@ -144,11 +144,7 @@ export function VideoCircle({ blob, filename, fileId, onClick, isOwn }: Props) {
   );
 
   return (
-    <div
-      ref={containerRef}
-      className="flex items-center justify-center"
-      style={{ willChange: 'transform' }}
-    >
+    <div ref={containerRef} className="flex items-center justify-center">
       <button
         type="button"
         onClick={handlePlayClick}
@@ -156,9 +152,10 @@ export function VideoCircle({ blob, filename, fileId, onClick, isOwn }: Props) {
           isOwn
             ? 'border-emerald-500/60 hover:border-emerald-400/80'
             : 'border-emerald-700/60 hover:border-emerald-600/80'
-        } ${isLoading ? 'opacity-70' : 'opacity-100'} hover:scale-105 active:scale-95`}
+        } ${isLoading ? 'opacity-70' : 'opacity-100'}`}
         style={{ transform: 'translateZ(0)' }}
         aria-label={MESSAGES.chat.videoCircle.aria.play(filename)}
+        aria-busy={isLoading}
       >
         {videoUrl ? (
           <>

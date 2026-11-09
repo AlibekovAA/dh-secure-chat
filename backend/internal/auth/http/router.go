@@ -2,6 +2,7 @@ package http
 
 import (
 	"encoding/base64"
+	"errors"
 	"net/http"
 	"time"
 
@@ -28,14 +29,14 @@ type tokenResponse struct {
 }
 
 type Handler struct {
-	auth service.Service
-	log  *logger.Logger
+	auth          service.Service
+	log           *logger.Logger
+	secureCookies bool
 }
 
 func NewHandler(auth service.Service, cfg config.AuthConfig, log *logger.Logger) http.Handler {
 	h := &Handler{
-		auth: auth,
-		log:  log,
+		auth: auth, log: log, secureCookies: cfg.SecureCookies,
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/auth/register", commonhttp.RequireMethod(http.MethodPost)(commonhttp.WithTimeout(cfg.RequestTimeout)(h.register)))
@@ -49,7 +50,7 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 	var req registerRequest
 	if err := commonhttp.DecodeJSON(r, &req); err != nil {
 		h.log.Warnf("register failed: invalid json: %v", err)
-		commonhttp.WriteErrorEnvelope(w, http.StatusBadRequest, commonhttp.CodeInvalidJSON, "invalid json", nil, "")
+		commonhttp.WriteDecodeJSONError(w, err)
 		return
 	}
 
@@ -76,7 +77,7 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setRefreshCookie(w, r, result.RefreshToken, result.RefreshExpiresAt)
+	h.setRefreshCookie(w, result.RefreshToken, result.RefreshExpiresAt)
 	commonhttp.WriteJSON(w, http.StatusCreated, tokenResponse{Token: result.AccessToken})
 }
 
@@ -84,7 +85,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
 	if err := commonhttp.DecodeJSON(r, &req); err != nil {
 		h.log.Warnf("login failed: invalid json: %v", err)
-		commonhttp.WriteErrorEnvelope(w, http.StatusBadRequest, commonhttp.CodeInvalidJSON, "invalid json", nil, "")
+		commonhttp.WriteDecodeJSONError(w, err)
 		return
 	}
 
@@ -99,7 +100,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setRefreshCookie(w, r, result.RefreshToken, result.RefreshExpiresAt)
+	h.setRefreshCookie(w, result.RefreshToken, result.RefreshExpiresAt)
 	commonhttp.WriteJSON(w, http.StatusOK, tokenResponse{Token: result.AccessToken})
 }
 
@@ -119,7 +120,7 @@ func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setRefreshCookie(w, r, result.RefreshToken, result.RefreshExpiresAt)
+	h.setRefreshCookie(w, result.RefreshToken, result.RefreshExpiresAt)
 	commonhttp.WriteJSON(w, http.StatusOK, tokenResponse{Token: result.AccessToken})
 }
 
@@ -138,24 +139,31 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var revokeErr error
 	if err == nil && claims.JTI != "" {
-		if err := h.auth.RevokeAccessToken(ctx, claims.JTI, claims.UserID); err != nil {
-			h.log.Errorf("logout revoke access token failed: %v", err)
+		if accessErr := h.auth.RevokeAccessToken(ctx, claims.JTI, claims.UserID); accessErr != nil {
+			h.log.Errorf("logout revoke access token failed: %v", accessErr)
+			revokeErr = errors.Join(revokeErr, accessErr)
 		}
 	}
 
 	cookie, err := r.Cookie("refresh_token")
 	if err == nil && cookie.Value != "" {
-		if err := h.auth.RevokeRefreshToken(ctx, cookie.Value); err != nil {
-			h.log.Errorf("logout revoke refresh token failed: %v", err)
+		if refreshErr := h.auth.RevokeRefreshToken(ctx, cookie.Value); refreshErr != nil {
+			h.log.Errorf("logout revoke refresh token failed: %v", refreshErr)
+			revokeErr = errors.Join(revokeErr, refreshErr)
 		}
 	}
 
-	clearRefreshCookie(w, r)
+	h.clearRefreshCookie(w)
+	if revokeErr != nil {
+		commonhttp.HandleError(w, r, revokeErr, h.log)
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func setRefreshCookie(w http.ResponseWriter, r *http.Request, token string, expiresAt time.Time) {
+func (h *Handler) setRefreshCookie(w http.ResponseWriter, token string, expiresAt time.Time) {
 	if token == "" {
 		return
 	}
@@ -167,13 +175,13 @@ func setRefreshCookie(w http.ResponseWriter, r *http.Request, token string, expi
 		Expires:  expiresAt,
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
-		Secure:   r.TLS != nil,
+		Secure:   h.secureCookies,
 	}
 
 	http.SetCookie(w, cookie)
 }
 
-func clearRefreshCookie(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) clearRefreshCookie(w http.ResponseWriter) {
 	cookie := &http.Cookie{
 		Name:     "refresh_token",
 		Value:    "",
@@ -182,7 +190,7 @@ func clearRefreshCookie(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   -1,
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
-		Secure:   r.TLS != nil,
+		Secure:   h.secureCookies,
 	}
 
 	http.SetCookie(w, cookie)

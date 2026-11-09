@@ -152,9 +152,17 @@ func (m *mockRefreshTokenRepo) TxManager() authrepo.RefreshTokenTxManagerInterfa
 
 type mockRefreshTokenTx struct {
 	findByTokenHashWithUserForUpdateFunc func(ctx context.Context, hash string) (authdomain.RefreshToken, userdomain.User, error)
+	createFunc                           func(ctx context.Context, token authdomain.RefreshToken) error
 	deleteByTokenHashFunc                func(ctx context.Context, hash string) error
 	commitFunc                           func(ctx context.Context) error
 	rollbackFunc                         func(ctx context.Context) error
+}
+
+func (m *mockRefreshTokenTx) Create(ctx context.Context, token authdomain.RefreshToken) error {
+	if m.createFunc != nil {
+		return m.createFunc(ctx, token)
+	}
+	return nil
 }
 
 func (m *mockRefreshTokenTx) FindByTokenHashWithUserForUpdate(ctx context.Context, hash string) (authdomain.RefreshToken, userdomain.User, error) {

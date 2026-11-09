@@ -56,7 +56,7 @@ func (h *Handler) handleUpdatePublicKey(w http.ResponseWriter, r *http.Request) 
 			"user_id": claims.UserID,
 			"action":  "update_public_key_invalid_json",
 		}).Warnf("update public key failed: invalid json: %v", err)
-		commonhttp.WriteErrorEnvelope(w, http.StatusBadRequest, commonhttp.CodeInvalidJSON, "invalid json", nil, "")
+		commonhttp.WriteDecodeJSONError(w, err)
 		return
 	}
 

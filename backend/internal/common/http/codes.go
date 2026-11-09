@@ -5,6 +5,7 @@ const (
 	CodeMethodNotAllowed         = "METHOD_NOT_ALLOWED"
 	CodeInvalidJSON              = "INVALID_JSON"
 	CodeBadRequest               = "BAD_REQUEST"
+	CodeRequestBodyTooLarge      = "REQUEST_BODY_TOO_LARGE"
 	CodeInvalidPath              = "INVALID_PATH"
 	CodeUserIDRequired           = "USER_ID_REQUIRED"
 	CodeInvalidUserIDFormat      = "INVALID_USER_ID_FORMAT"

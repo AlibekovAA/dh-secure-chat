@@ -59,17 +59,17 @@ export function ChatScreen({
     setCurrentPage(1);
   }, [searchQuery, searchResults.length]);
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-black via-emerald-950/10 to-black text-emerald-50">
-      <header className="flex items-center justify-between px-4 py-3 border-b border-emerald-700/60">
-        <div>
-          <h1 className="text-xl font-semibold text-emerald-400">
+    <div className="app-min-height flex flex-col bg-[var(--color-canvas)] text-slate-100">
+      <header className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-slate-700/60 bg-[var(--color-surface)]">
+        <div className="min-w-0">
+          <h1 className="text-xl font-semibold text-emerald-300 font-mono tracking-tight">
             dh-secure-chat
           </h1>
-          <p className="text-[11px] text-emerald-500/80">
+          <p className="text-xs leading-[1.4] text-slate-400">
             {MESSAGES.app.chatScreen.subtitle}
           </p>
         </div>
-        <div className="flex items-center gap-3 text-xs text-emerald-400">
+        <div className="flex flex-wrap items-center justify-end gap-3 text-xs text-emerald-300">
           {profile && (
             <div className="flex items-center gap-2">
               <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400" />
@@ -79,7 +79,7 @@ export function ChatScreen({
           <button
             type="button"
             onClick={onLogout}
-            className="text-emerald-400 hover:text-emerald-200 underline underline-offset-4 smooth-transition hover-lift press-scale rounded px-2 py-1 hover:bg-emerald-900/40"
+            className="text-emerald-300 hover:text-emerald-100 underline underline-offset-4 smooth-transition press-scale control-radius px-2 py-1 hover:bg-emerald-950/60"
           >
             {MESSAGES.app.chatScreen.actions.logout}
           </button>
@@ -88,17 +88,17 @@ export function ChatScreen({
 
       <main className="flex-1 flex items-center justify-center px-4 py-6">
         <div className="w-full max-w-4xl grid gap-6 md:grid-cols-2">
-          <section className="rounded-xl glass-effect px-5 py-4 text-sm text-emerald-200 smooth-transition hover:border-emerald-600/60 flex flex-col min-h-0">
+          <section className="glass-effect border-t-cyan-400/40 px-5 py-4 text-sm text-slate-300 smooth-transition hover:border-emerald-400/40 flex flex-col min-h-0">
             <h2 className="text-sm font-semibold text-emerald-300 mb-2">
               {MESSAGES.app.chatScreen.profile.title}
             </h2>
-            <p className="text-xs text-emerald-500/80 mb-1">
+            <p className="text-xs leading-[1.4] text-slate-400 mb-1">
               {MESSAGES.app.chatScreen.profile.name} {profile?.username ?? '…'}
             </p>
-            <p className="text-xs text-emerald-500/80 break-all font-mono mb-3">
+            <p className="text-xs leading-[1.4] text-cyan-200/70 break-all font-mono mb-3">
               ID: {profile?.id ?? '…'}
             </p>
-            <p className="text-xs text-emerald-500/70 mb-3">
+            <p className="text-xs leading-[1.4] text-slate-400 mb-3">
               {MESSAGES.app.chatScreen.profile.choosePeer}
             </p>
             <div className="flex-1 flex items-center justify-center min-h-[12em]">
@@ -172,7 +172,7 @@ export function ChatScreen({
             </div>
           </section>
 
-          <section className="rounded-xl glass-effect px-5 py-4 text-sm text-emerald-200 smooth-transition hover:border-emerald-600/60">
+          <section className="glass-effect border-t-emerald-400/40 px-5 py-4 text-sm text-slate-300 smooth-transition hover:border-emerald-400/40">
             <h2 className="text-sm font-semibold text-emerald-300 mb-2">
               {MESSAGES.app.chatScreen.search.title}
             </h2>
@@ -184,9 +184,10 @@ export function ChatScreen({
                   onChange={(e) => onSearchQueryChange(e.target.value)}
                   onKeyDown={handleKeyDown}
                   disabled={isSearching}
-                  className="w-full rounded-md bg-black border border-emerald-700 pr-24 px-3 py-2 text-sm text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed smooth-transition hover:border-emerald-600 focus:glow-emerald-hover"
+                  className="w-full control-radius bg-[var(--color-surface-raised)] border border-slate-700 pr-24 px-3 py-2 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-emerald-400/70 disabled:opacity-50 disabled:cursor-not-allowed smooth-transition hover:border-slate-500 focus:glow-emerald-hover"
                   placeholder={MESSAGES.app.chatScreen.search.placeholder}
                   autoComplete="off"
+                  aria-label={MESSAGES.app.chatScreen.search.aria}
                 />
                 <div className="absolute inset-y-0 right-0 flex items-center gap-1 pr-1 w-24">
                   {searchQuery.trim() && !isSearching && (
@@ -217,6 +218,7 @@ export function ChatScreen({
                     type="button"
                     onClick={onSearch}
                     disabled={isSearching || !searchQuery.trim()}
+                    aria-label={MESSAGES.app.chatScreen.actions.search}
                     className="ml-auto rounded-md bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-700 disabled:cursor-not-allowed text-xs font-medium px-3 py-1.5 text-black smooth-transition button-press glow-emerald-hover min-w-[60px] flex items-center justify-center"
                   >
                     {isSearching ? (
@@ -287,20 +289,20 @@ export function ChatScreen({
                           key={user.id}
                           type="button"
                           onClick={() => setSelectedPeer(user)}
-                          className="w-full text-left rounded-lg border border-emerald-700/60 px-4 py-3 bg-black/60 hover:bg-emerald-900/50 smooth-transition hover-lift press-scale hover:border-emerald-500/80 hover:shadow-lg hover:shadow-emerald-500/10 group"
+                          className="w-full text-left rounded-lg border border-slate-700/70 px-4 py-3 bg-[var(--color-surface-raised)] hover:bg-slate-800/80 smooth-transition hover-lift press-scale group"
                           style={{
                             animation: `slideUp 0.3s ease-out ${index * 50}ms both`,
                           }}
                         >
                           <div className="flex items-center gap-3">
-                            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-emerald-900/40 border border-emerald-700/60 flex items-center justify-center text-emerald-400 font-semibold text-sm group-hover:bg-emerald-800/50 group-hover:border-emerald-500/60 smooth-transition">
+                            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-slate-900 border border-cyan-700/50 flex items-center justify-center text-cyan-300 font-semibold text-sm group-hover:border-emerald-400/60 smooth-transition">
                               {user.username.charAt(0).toUpperCase()}
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="font-medium text-emerald-300 group-hover:text-emerald-200 smooth-transition truncate">
                                 {user.username}
                               </p>
-                              <p className="text-[11px] text-emerald-500/70 break-all font-mono mt-0.5 truncate">
+                              <p className="text-xs leading-[1.4] text-cyan-200/60 break-all font-mono mt-0.5 truncate">
                                 {user.id}
                               </p>
                             </div>

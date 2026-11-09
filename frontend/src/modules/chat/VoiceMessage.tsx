@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Spinner } from '@/shared/ui/Spinner';
 import { formatDuration } from '@/modules/chat/utils';
+import { MESSAGES } from '@/shared/messages';
 type Props = {
   duration: number;
   blob?: Blob;
@@ -282,6 +283,13 @@ export function VoiceMessage({
         type="button"
         onClick={handlePlayPause}
         disabled={!blob || isLoading}
+        aria-label={
+          isLoading
+            ? MESSAGES.chat.voiceMessage.aria.loading
+            : isPlaying
+              ? MESSAGES.chat.voiceMessage.aria.pause
+              : MESSAGES.chat.voiceMessage.aria.play
+        }
         className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
           isOwn
             ? 'bg-emerald-500/30 hover:bg-emerald-500/40 text-emerald-50'
@@ -319,7 +327,7 @@ export function VoiceMessage({
 
         <div className="relative h-1.5 bg-emerald-900/40 rounded-full overflow-hidden">
           <div
-            className={`absolute top-0 left-0 h-full transition-all duration-100 ${
+            className={`absolute top-0 left-0 h-full transition-[width] duration-100 ${
               isOwn ? 'bg-emerald-400' : 'bg-emerald-500'
             }`}
             style={{ width: `${progress}%` }}

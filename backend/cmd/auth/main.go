@@ -68,7 +68,8 @@ func main() {
 	handler := authhttp.NewHandler(authService, app.Config, app.Log)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/health", commonhttp.HealthHandler(app.Log))
+	mux.HandleFunc("/health", commonhttp.HealthHandler())
+	mux.HandleFunc("/ready", commonhttp.ReadyHandler(app.Log, app.Pool))
 	mux.Handle("/metrics", promhttp.Handler())
 	mux.Handle("/", handler)
 

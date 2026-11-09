@@ -5,16 +5,19 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"net/http"
+	"regexp"
 
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 )
 
 const traceIDHeader = "X-Trace-ID"
 
+var traceIDPattern = regexp.MustCompile(`^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$`)
+
 func TraceIDMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		traceID := r.Header.Get(traceIDHeader)
-		if traceID == "" {
+		if !traceIDPattern.MatchString(traceID) {
 			traceID = generateTraceID()
 		}
 

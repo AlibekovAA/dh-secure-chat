@@ -18,6 +18,7 @@ import {
   computeFloatingPosition,
   type AnchorRect,
 } from '@/modules/chat/floating-position';
+import { MESSAGES } from '@/shared/messages';
 
 const useIsomorphicLayoutEffect =
   typeof window !== 'undefined' ? useLayoutEffect : useEffect;
@@ -154,6 +155,32 @@ export function EmojiPicker({ anchorRect, isOwn, onSelect, onClose }: Props) {
     };
   }, [onClose]);
 
+  useEffect(() => {
+    const picker = pickerRef.current;
+    if (!picker) return;
+    picker.querySelector<HTMLButtonElement>('[data-emoji]')?.focus();
+
+    const handleTab = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return;
+      const buttons = Array.from(
+        picker.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')
+      );
+      if (buttons.length === 0) return;
+      const first = buttons[0];
+      const last = buttons.at(-1);
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    picker.addEventListener('keydown', handleTab);
+    return () => picker.removeEventListener('keydown', handleTab);
+  }, []);
+
   if (typeof document === 'undefined') {
     return null;
   }
@@ -161,19 +188,23 @@ export function EmojiPicker({ anchorRect, isOwn, onSelect, onClose }: Props) {
   return createPortal(
     <div
       ref={pickerRef}
-      className="z-[140] bg-black/95 border border-emerald-600/50 rounded-lg shadow-xl px-2 py-2 fixed"
+      className="z-[140] bg-[var(--color-surface-raised)] border border-slate-700 rounded-lg shadow-xl shadow-black/40 px-2 py-2 fixed"
       style={{
         left: `${position.x}px`,
         top: `${position.y}px`,
         width: `${EMOJI_PICKER_WIDTH}px`,
       }}
       onClick={(e) => e.stopPropagation()}
+      role="dialog"
+      aria-modal="false"
+      aria-label={MESSAGES.chat.emojiPicker.aria.label}
     >
       <div className="flex items-center gap-1">
         <button
           type="button"
           onClick={handlePrev}
           disabled={!canPrev}
+          aria-label={MESSAGES.chat.emojiPicker.aria.previousPage}
           className="w-8 h-9 rounded-md bg-emerald-950/40 border border-emerald-700/60 text-emerald-300 hover:bg-emerald-900/60 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center text-sm"
         >
           ←
@@ -182,6 +213,9 @@ export function EmojiPicker({ anchorRect, isOwn, onSelect, onClose }: Props) {
           {visibleEmojis.map((emoji) => (
             <button
               key={emoji}
+              type="button"
+              data-emoji
+              aria-label={MESSAGES.chat.emojiPicker.aria.select(emoji)}
               onClick={() => {
                 onSelect(emoji);
                 onClose();
@@ -196,6 +230,7 @@ export function EmojiPicker({ anchorRect, isOwn, onSelect, onClose }: Props) {
           type="button"
           onClick={handleNext}
           disabled={!canNext}
+          aria-label={MESSAGES.chat.emojiPicker.aria.nextPage}
           className="w-8 h-9 rounded-md bg-emerald-950/40 border border-emerald-700/60 text-emerald-300 hover:bg-emerald-900/60 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center text-sm"
         >
           →

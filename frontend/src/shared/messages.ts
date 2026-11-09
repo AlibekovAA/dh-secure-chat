@@ -126,6 +126,9 @@ export const MESSAGES = {
       },
     },
     contextMenu: {
+      aria: {
+        label: 'Действия с сообщением',
+      },
       actions: {
         copy: 'Копировать',
         react: 'Отреагировать',
@@ -150,6 +153,14 @@ export const MESSAGES = {
         video: 'Видео сообщение',
         file: 'Файл',
         message: 'Сообщение',
+      },
+    },
+    emojiPicker: {
+      aria: {
+        label: 'Выбор реакции',
+        previousPage: 'Предыдущие эмодзи',
+        nextPage: 'Следующие эмодзи',
+        select: (emoji: string) => `Выбрать ${emoji}`,
       },
     },
     fileAccessDialog: {
@@ -246,6 +257,7 @@ export const MESSAGES = {
         closeChat: 'Закрыть чат',
         cancelReply: 'Отменить ответ',
         scrollToLastMessage: 'Прокрутить к последнему сообщению',
+        message: 'Текст сообщения',
       },
       actions: {
         verifyIdentity: 'Проверить Identity',
@@ -351,6 +363,13 @@ export const MESSAGES = {
     videoCircle: {
       aria: {
         play: (filename: string) => `Воспроизвести видео: ${filename}`,
+      },
+    },
+    voiceMessage: {
+      aria: {
+        play: 'Воспроизвести голосовое сообщение',
+        pause: 'Приостановить голосовое сообщение',
+        loading: 'Загрузка голосового сообщения',
       },
     },
     voiceRecorder: {
@@ -473,6 +492,7 @@ export const MESSAGES = {
       },
       search: {
         title: 'Найти собеседника',
+        aria: 'Имя пользователя для поиска',
         placeholder: 'Имя пользователя...',
         userNotFound: 'Пользователь не найден',
         userNotFoundHint:

@@ -66,6 +66,12 @@ export function ToastProvider({ children }: Props) {
           <div
             key={toast.id}
             className="pointer-events-auto animate-toast-enter"
+            role={
+              toast.kind === 'error' || toast.kind === 'warning'
+                ? 'alert'
+                : 'status'
+            }
+            aria-atomic="true"
           >
             <div
               className={`w-full rounded-lg border px-4 py-3 text-sm shadow-xl backdrop-blur-md smooth-transition ${
@@ -85,6 +91,7 @@ export function ToastProvider({ children }: Props) {
                   </span>
                 </div>
                 <button
+                  type="button"
                   onClick={() => removeToast(toast.id)}
                   className="flex-shrink-0 -mt-1 -mr-1 h-6 w-6 rounded hover:bg-black/30 flex items-center justify-center transition-colors opacity-70 hover:opacity-100"
                   aria-label={MESSAGES.common.toastProvider.aria.close}

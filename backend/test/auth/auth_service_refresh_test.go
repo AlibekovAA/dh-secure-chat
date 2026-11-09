@@ -101,6 +101,35 @@ func TestAuthService_RefreshAccessToken_EmptyToken(t *testing.T) {
 	}
 }
 
+func TestAuthService_RefreshAccessToken_InsertFailureDoesNotDeleteOldToken(t *testing.T) {
+	svc, _, _, refreshRepo, _, _, _, testClock := setupAuthService(t)
+	oldRawToken := "old-refresh-token"
+	oldToken := authdomain.RefreshToken{
+		ID: "old", TokenHash: service.HashRefreshToken(oldRawToken), UserID: "user-123",
+		ExpiresAt: testClock.Now().Add(time.Hour), CreatedAt: testClock.Now(),
+	}
+	user := userdomain.User{ID: "user-123", Username: "testuser"}
+	deleteCalled := false
+	tx := &mockRefreshTokenTx{
+		findByTokenHashWithUserForUpdateFunc: func(context.Context, string) (authdomain.RefreshToken, userdomain.User, error) {
+			return oldToken, user, nil
+		},
+		createFunc:            func(context.Context, authdomain.RefreshToken) error { return errors.New("insert failed") },
+		deleteByTokenHashFunc: func(context.Context, string) error { deleteCalled = true; return nil },
+	}
+	refreshRepo.txManagerFunc = func() authrepo.RefreshTokenTxManagerInterface {
+		return newTestRefreshTokenTxManagerWithFunc(func(ctx context.Context, fn func(context.Context, authrepo.RefreshTokenTx) error) error {
+			return fn(ctx, tx)
+		})
+	}
+	if _, err := svc.RefreshAccessToken(context.Background(), oldRawToken, ""); err == nil {
+		t.Fatal("expected insert error")
+	}
+	if deleteCalled {
+		t.Fatal("old token was deleted after replacement insert failed")
+	}
+}
+
 func TestAuthService_RefreshAccessToken_Expired(t *testing.T) {
 	svc, _, _, mockRefreshTokenRepo, _, _, _, mockClock := setupAuthService(t)
 

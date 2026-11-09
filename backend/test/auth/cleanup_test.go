@@ -4,14 +4,13 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	authcleanup "github.com/AlibekovAA/dh-secure-chat/backend/internal/auth/cleanup"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/constants"
 	"github.com/AlibekovAA/dh-secure-chat/backend/internal/common/logger"
 )
 
-func TestStartCleanup_RefreshToken(t *testing.T) {
+func TestRunCleanupOnce_RefreshToken(t *testing.T) {
 	mockRefreshTokenRepo := &mockRefreshTokenRepo{}
 	deletedCount := constants.TestCleanupDeletedCount1
 
@@ -19,15 +18,14 @@ func TestStartCleanup_RefreshToken(t *testing.T) {
 		return deletedCount, nil
 	}
 
-	log, _ := logger.New("", "test", "info")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	go authcleanup.StartRefreshTokenCleanup(ctx, mockRefreshTokenRepo, log)
-
-	time.Sleep(constants.TestCleanupInitialDelay)
-	cancel()
-	time.Sleep(constants.TestCleanupWaitDelay)
+	log, err := logger.New(t.TempDir(), "test", "info")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = log.Close() })
+	if got := authcleanup.RunCleanupOnce(context.Background(), mockRefreshTokenRepo, log, "refresh token"); got != deletedCount {
+		t.Fatalf("expected %d deleted, got %d", deletedCount, got)
+	}
 }
 
 func TestStartCleanup_RevokedToken(t *testing.T) {
@@ -38,15 +36,14 @@ func TestStartCleanup_RevokedToken(t *testing.T) {
 		return deletedCount, nil
 	}
 
-	log, _ := logger.New("", "test", "info")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	go authcleanup.StartRevokedTokenCleanup(ctx, mockRevokedTokenRepo, log)
-
-	time.Sleep(constants.TestCleanupInitialDelay)
-	cancel()
-	time.Sleep(constants.TestCleanupWaitDelay)
+	log, err := logger.New(t.TempDir(), "test", "info")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = log.Close() })
+	if got := authcleanup.RunCleanupOnce(context.Background(), mockRevokedTokenRepo, log, "revoked token"); got != deletedCount {
+		t.Fatalf("expected %d deleted, got %d", deletedCount, got)
+	}
 }
 
 func TestStartCleanup_ErrorHandling(t *testing.T) {
@@ -56,15 +53,14 @@ func TestStartCleanup_ErrorHandling(t *testing.T) {
 		return 0, errors.New("cleanup error")
 	}
 
-	log, _ := logger.New("", "test", "info")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	go authcleanup.StartRefreshTokenCleanup(ctx, mockRefreshTokenRepo, log)
-
-	time.Sleep(constants.TestCleanupInitialDelay)
-	cancel()
-	time.Sleep(constants.TestCleanupWaitDelay)
+	log, err := logger.New(t.TempDir(), "test", "info")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = log.Close() })
+	if got := authcleanup.RunCleanupOnce(context.Background(), mockRefreshTokenRepo, log, "refresh token"); got != 0 {
+		t.Fatalf("expected zero after error, got %d", got)
+	}
 }
 
 func TestStartCleanup_NoExpiredTokens(t *testing.T) {
@@ -74,13 +70,12 @@ func TestStartCleanup_NoExpiredTokens(t *testing.T) {
 		return 0, nil
 	}
 
-	log, _ := logger.New("", "test", "info")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	go authcleanup.StartRefreshTokenCleanup(ctx, mockRefreshTokenRepo, log)
-
-	time.Sleep(constants.TestCleanupInitialDelay)
-	cancel()
-	time.Sleep(constants.TestCleanupWaitDelay)
+	log, err := logger.New(t.TempDir(), "test", "info")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = log.Close() })
+	if got := authcleanup.RunCleanupOnce(context.Background(), mockRefreshTokenRepo, log, "refresh token"); got != 0 {
+		t.Fatalf("expected zero, got %d", got)
+	}
 }

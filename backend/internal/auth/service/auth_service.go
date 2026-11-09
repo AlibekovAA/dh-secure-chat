@@ -287,6 +287,9 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken strin
 	var stored authdomain.RefreshToken
 	var user userdomain.User
 	var expired bool
+	var accessToken string
+	var replacement authdomain.RefreshToken
+	var tokenIssueErr error
 
 	txMgr := s.refreshTokenRepo.TxManager()
 	err := s.dbCircuitBreaker.Call(ctx, func(ctx context.Context) error {
@@ -298,6 +301,22 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken strin
 			stored = fetchedToken
 			user = fetchedUser
 			expired = s.clock.Now().After(stored.ExpiresAt)
+			if !expired {
+				var issueErr error
+				accessToken, _, issueErr = s.tokenIssuer.IssueAccessToken(user)
+				if issueErr != nil {
+					tokenIssueErr = issueErr
+					return issueErr
+				}
+				replacement, issueErr = s.refreshTokenRotator.NewRefreshToken(user)
+				if issueErr != nil {
+					tokenIssueErr = issueErr
+					return issueErr
+				}
+				if createErr := tx.Create(txCtx, replacement); createErr != nil {
+					return createErr
+				}
+			}
 
 			if delErr := tx.DeleteByTokenHash(txCtx, hash); delErr != nil {
 				return delErr
@@ -308,6 +327,9 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken strin
 	})
 
 	if err != nil {
+		if tokenIssueErr != nil && errors.Is(err, tokenIssueErr) {
+			return AuthResult{}, newInternalError("TOKEN_ISSUE_FAILED", "failed to issue tokens", tokenIssueErr)
+		}
 		if handledErr := handleCircuitBreakerError(err); handledErr != err {
 			s.log.WithFields(ctx, logger.Fields{
 				"action": "refresh_token_db_circuit_open",
@@ -346,19 +368,7 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken strin
 		}).Warn("refresh token expired")
 		return AuthResult{}, ErrRefreshTokenExpired
 	}
-
-	accessToken, refresh, err := s.issueTokens(ctx, user)
-	if err != nil {
-		s.log.WithFields(ctx, logger.Fields{
-			"user_id": stored.UserID,
-			"action":  "token_issue_failed",
-		}).Errorf("failed to issue tokens: %v", err)
-		return AuthResult{}, newInternalError(
-			"TOKEN_ISSUE_FAILED",
-			"failed to issue tokens",
-			err,
-		)
-	}
+	metrics.RefreshTokensIssued.Inc()
 
 	s.log.WithFields(ctx, logger.Fields{
 		"user_id": stored.UserID,
@@ -367,8 +377,8 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken strin
 
 	return AuthResult{
 		AccessToken:      accessToken,
-		RefreshToken:     refresh.RawToken,
-		RefreshExpiresAt: refresh.ExpiresAt,
+		RefreshToken:     replacement.RawToken,
+		RefreshExpiresAt: replacement.ExpiresAt,
 	}, nil
 }
 

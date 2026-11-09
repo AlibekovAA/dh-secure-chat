@@ -149,6 +149,34 @@ export function MessageContextMenu({
     };
   }, [onClose]);
 
+  useEffect(() => {
+    const menu = menuRef.current;
+    if (!menu) return;
+    const items = Array.from(
+      menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')
+    );
+    items[0]?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const currentIndex = items.indexOf(
+        document.activeElement as HTMLButtonElement
+      );
+      let nextIndex: number | null = null;
+      if (event.key === 'ArrowDown')
+        nextIndex = (currentIndex + 1) % items.length;
+      if (event.key === 'ArrowUp')
+        nextIndex = (currentIndex - 1 + items.length) % items.length;
+      if (event.key === 'Home') nextIndex = 0;
+      if (event.key === 'End') nextIndex = items.length - 1;
+      if (nextIndex === null) return;
+      event.preventDefault();
+      items[nextIndex]?.focus();
+    };
+
+    menu.addEventListener('keydown', handleKeyDown);
+    return () => menu.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   if (typeof document === 'undefined') {
     return null;
   }
@@ -161,15 +189,19 @@ export function MessageContextMenu({
       />
       <div
         ref={menuRef}
-        className="z-[130] bg-black/95 border border-emerald-600/50 rounded-xl shadow-2xl py-2 px-3 min-w-[200px] fixed"
+        className="z-[130] bg-[var(--color-surface-raised)] border border-slate-700 rounded-lg shadow-xl shadow-black/40 py-2 px-2 min-w-[200px] fixed"
         style={{
           left: `${position.x}px`,
           top: `${position.y}px`,
           width: `${MENU_WIDTH}px`,
         }}
         onClick={(e) => e.stopPropagation()}
+        role="menu"
+        aria-label={MESSAGES.chat.contextMenu.aria.label}
       >
         <button
+          type="button"
+          role="menuitem"
           onClick={() => {
             onCopy();
             onClose();
@@ -180,6 +212,8 @@ export function MessageContextMenu({
         </button>
 
         <button
+          type="button"
+          role="menuitem"
           onClick={() => {
             onReact();
             onClose();
@@ -191,6 +225,8 @@ export function MessageContextMenu({
 
         {onReply && (
           <button
+            type="button"
+            role="menuitem"
             onClick={() => {
               onReply();
               onClose();
@@ -203,6 +239,8 @@ export function MessageContextMenu({
 
         {canEdit && onEdit && (
           <button
+            type="button"
+            role="menuitem"
             onClick={() => {
               onEdit();
               onClose();
@@ -215,6 +253,8 @@ export function MessageContextMenu({
 
         {isOwn && onDeleteForMe && (
           <button
+            type="button"
+            role="menuitem"
             onClick={() => {
               onDeleteForMe();
               onClose();
@@ -227,6 +267,8 @@ export function MessageContextMenu({
 
         {isOwn && onDeleteForAll && (
           <button
+            type="button"
+            role="menuitem"
             onClick={() => {
               onDeleteForAll();
               onClose();

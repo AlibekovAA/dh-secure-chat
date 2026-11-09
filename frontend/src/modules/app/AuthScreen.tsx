@@ -7,13 +7,13 @@ type Props = {
 
 export function AuthScreen({ onAuthenticated }: Props) {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-black via-emerald-950/10 to-black text-emerald-50 px-4">
+    <div className="app-min-height flex items-center justify-center bg-[var(--color-canvas)] text-slate-100 px-4 py-8">
       <div className="w-full max-w-md space-y-4">
         <header className="text-center space-y-2">
-          <h1 className="text-2xl font-semibold text-emerald-400 tracking-tight">
+          <h1 className="text-2xl font-semibold text-emerald-300 tracking-tight font-mono">
             dh-secure-chat
           </h1>
-          <p className="text-sm text-emerald-500/80 leading-relaxed">
+          <p className="text-sm text-slate-400 leading-relaxed">
             {MESSAGES.app.authScreen.description}
           </p>
         </header>
